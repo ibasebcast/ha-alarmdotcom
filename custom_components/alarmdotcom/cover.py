@@ -29,6 +29,41 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def _controller_resources(controller: Any) -> list[Any]:
+    """Return a list of resources from a pyalarmdotcomajax controller.
+
+    Controllers vary across library versions:
+      - some look like dicts (values())
+      - some expose an attribute holding the resources
+      - some are iterable
+      - some only support .get(id) and have internal storage
+    This function tries common patterns and always returns a real list.
+    """
+    if controller is None:
+        return []
+
+    # Dict-like
+    if hasattr(controller, "values") and callable(getattr(controller, "values")):
+        try:
+            return list(controller.values())
+        except TypeError:
+            pass
+
+    # Common attribute patterns
+    for attr_name in ("doors", "garage_doors", "gates", "items", "resources"):
+        if hasattr(controller, attr_name):
+            try:
+                return list(getattr(controller, attr_name))
+            except TypeError:
+                pass
+
+    # Iterable controller
+    try:
+        return list(controller)
+    except TypeError:
+        return []
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -39,21 +74,26 @@ async def async_setup_entry(
 
     hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
 
+    garage_door_resources = _controller_resources(hub.api.garage_doors)
+    gate_resources = _controller_resources(hub.api.gates)
+
     # Log discovered devices for debugging
     log.debug(
         "Setting up cover platform. Found %d garage doors and %d gates.",
-        len(hub.api.garage_doors),
-        len(hub.api.gates),
+        len(garage_door_resources),
+        len(gate_resources),
     )
-    for device in hub.api.garage_doors:
-        log.debug("  - Garage door: %s (ID: %s)", device.name, device.id)
-    for device in hub.api.gates:
-        log.debug("  - Gate: %s (ID: %s)", device.name, device.id)
+    for device in garage_door_resources:
+        log.debug("  - Garage door: %s (ID: %s)", getattr(device, "name", "unknown"), getattr(device, "id", "unknown"))
+    for device in gate_resources:
+        log.debug("  - Gate: %s (ID: %s)", getattr(device, "name", "unknown"), getattr(device, "id", "unknown"))
+
+    all_resources = [*garage_door_resources, *gate_resources]
 
     entities = [
         AdcCoverEntity(hub=hub, resource_id=resource.id, description=entity_description)
         for entity_description in ENTITY_DESCRIPTIONS
-        for resource in hub.api.garage_doors + hub.api.gates
+        for resource in all_resources
         if entity_description.supported_fn(hub, resource.id)
     ]
 
@@ -67,7 +107,6 @@ async def async_setup_entry(
     await cleanup_orphaned_entities_and_devices(
         hass, config_entry, current_entity_ids, current_unique_ids, "cover"
     )
-
 
 @callback
 def garage_door_supported_fn(hub: AlarmHub, resource_id: str) -> bool:
