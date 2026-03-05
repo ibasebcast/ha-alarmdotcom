@@ -1,0 +1,20 @@
+{
+    "folders": [
+        {
+            "path": "/workspaces/alarmdotcom"
+        },
+        {
+            "path": "/workspaces/pyalarmdotcomajax"
+        }
+    ],
+    "settings": {
+        "editor.formatOnSave": true,
+        "files.associations": {
+            "*.yaml": "home-assistant"
+        },
+        "terminal.integrated.scrollback": 10000,
+        "ruff.nativeServer": "on",
+        "ruff.showSyntaxErrors": true,
+        "python.analysis.autoFormatStrings": true,
+    }
+}

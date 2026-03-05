@@ -1,0 +1,142 @@
+[tool.codespell]
+count             = ""
+ignore-words-list = "hass,alot,datas,dof,dur,farenheit,hist,iff,ines,ist,lightsensor,mut,nd,pres,referer,ser,serie,te,technik,ue,uint,visability,wan,wanna,withing,windo"
+quiet-level       = 2
+skip              = "./.*,*.csv,*.json,*.html,*.aspx,tests/test_device_extensions.py,pyalarmdotcomajax/models/jsonapi/*"
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = false
+disallow_untyped_calls = false
+disallow_untyped_defs = true
+exclude = [
+  ".mypy_cache/",
+  ".pytest_cache",
+  ".ruff_cache/",
+  "build/",
+  "old",
+  "references/",
+  "scripts/*",
+  "scripts/upgrade_dependencies.py",
+  "tests/",
+]
+ignore_missing_imports = true
+no_implicit_optional = true
+no_site_packages = false
+pretty = true
+python_version = "3.13"
+show_absolute_path = true
+show_error_codes = true
+show_error_context = true
+strict_equality = true
+warn_incomplete_stub = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unreachable = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[tool.ruff]
+exclude           = ["scripts/upgrade_dependencies.py"]
+line-length       = 120
+respect-gitignore = true
+target-version    = "py313"
+
+  [tool.ruff.format]
+  docstring-code-format     = true
+  indent-style              = "space"
+  line-ending               = "auto"
+  quote-style               = "double"
+  skip-magic-trailing-comma = false
+
+  [tool.ruff.lint]
+  extend-safe-fixes = ["UP006"]
+  ignore = [
+    "COM812",
+    "COM819",
+    "D107",
+    "D202",
+    "D203",
+    "D206",
+    "D212",
+    "D404",
+    "D406",
+    "D407",
+    "E111",
+    "E114",
+    "E117",
+    "E501",
+    "E731",
+    "ISC001",
+    "ISC002",
+    "PLR0911",
+    "PLR0912",
+    "PLR0913",
+    "PLR0915",
+    "PLR2004",
+    "Q000",
+    "Q001",
+    "Q002",
+    "Q003",
+    "S301",
+    "T201",
+    "TC002",
+    "TC003",
+    "TD002",
+    "TD003",
+    "TID252",
+    "TRY003",
+    "TRY301",
+    "TRY400",
+    "W191",
+  ]
+  select = [
+    "A",
+    "ASYNC",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "FA",
+    "FBT",
+    "G",
+    "I",
+    "ICN",
+    "ICN001",
+    "LOG",
+    "PERF",
+    "PGH004",
+    "PIE",
+    "PL",
+    "PLC0414",
+    "PT",
+    "Q",
+    "RET",
+    "RUF",
+    "S",
+    "SIM",
+    "SLF",
+    "T20",
+    "TC",
+    "TD",
+    "TID",
+    "TRY",
+    "UP",
+    "W",
+    "YTT",
+  ]
+  unfixable = ["F841"]
+
+    [tool.ruff.lint.flake8-builtins]
+    builtins-ignorelist = ["id", "type"]
+
+    [tool.ruff.lint.flake8-type-checking]
+    quote-annotations = true
+
+    [tool.ruff.lint.flake8-unused-arguments]
+    ignore-variadic-names = true
+
+    [tool.ruff.lint.mccabe]
+    max-complexity = 25
