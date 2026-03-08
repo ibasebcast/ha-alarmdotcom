@@ -1,10 +1,27 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
 ## Unreleased
 
-- None
+* No changes yet.
 
-## 4.0.1-beta.2+ibasebcast.1
+## 2026.3.6
 
-- Fixed device registry `via_device` handling to avoid referencing non existent devices, future proofing for Home Assistant 2025.12+.
-- Added fork documentation and release workflow starter.
+Initial maintained fork release.
+
+This fork is maintained by **ibasebcast** to ensure continued compatibility with modern Home Assistant releases and to support ongoing development of the Alarm.com integration.
+
+### Added
+
+* Maintained fork to continue development and compatibility support
+
+### Fixed
+
+* Restored compatibility with recent Home Assistant versions
+* Fixed light and switch entities becoming unavailable
+
+### Changed
+
+* Updated integration structure to comply with upcoming Home Assistant device registry requirements
+* Improved stability and error handling
