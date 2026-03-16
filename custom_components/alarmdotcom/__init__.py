@@ -4,8 +4,10 @@ import logging
 
 import aiohttp
 import pyalarmdotcomajax as pyadc
+import voluptuous as vol
+from homeassistant.helpers import config_validation as cv
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import Event, HomeAssistant
+from homeassistant.core import Event, HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
 from .const import (
@@ -15,10 +17,14 @@ from .const import (
     CONF_FORCE_BYPASS,
     CONF_NO_ENTRY_DELAY,
     CONF_SILENT_ARM,
+    ATTR_PARTITION_ID,
+    ATTR_RESOURCE_ID,
     DATA_HUB,
     DEBUG_REQ_EVENT,
     DOMAIN,
     PLATFORMS,
+    SERVICE_BYPASS_SENSOR,
+    SERVICE_UNBYPASS_SENSOR,
     STARTUP_MESSAGE,
 )
 from .hub import AlarmHub
@@ -68,6 +74,69 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     # Listen for debug entity requests
     hass.bus.async_listen(DEBUG_REQ_EVENT, handle_alarmdotcom_debug_request_event)
+
+    async def handle_bypass_service(call: ServiceCall) -> None:
+        """Handle a bypass or unbypass service request."""
+
+        resource_id = str(call.data[ATTR_RESOURCE_ID])
+        partition_id = call.data.get(ATTR_PARTITION_ID)
+        bypass = call.service == SERVICE_BYPASS_SENSOR
+
+        sensor = hub.api.sensors.get(resource_id)
+        if sensor is None:
+            LOGGER.warning("Alarm.com bypass request failed, no such sensor: %s", resource_id)
+            return
+
+        if not (sensor.attributes.supports_bypass or sensor.attributes.supports_immediate_bypass):
+            LOGGER.warning("Alarm.com sensor does not support bypass: %s", resource_id)
+            return
+
+        resolved_partition_id = str(partition_id) if partition_id else None
+        if resolved_partition_id is None:
+            matching_partition = next(
+                (
+                    partition
+                    for partition in hub.api.partitions.values()
+                    if partition.system_id == sensor.system_id
+                ),
+                None,
+            )
+            if matching_partition is None:
+                LOGGER.warning(
+                    "Alarm.com bypass request failed, no partition found for sensor: %s",
+                    resource_id,
+                )
+                return
+            resolved_partition_id = matching_partition.id
+
+        await hub.api.partitions.change_sensor_bypass(
+            resolved_partition_id,
+            bypass_ids=[resource_id] if bypass else None,
+            unbypass_ids=[resource_id] if not bypass else None,
+        )
+
+    service_schema = vol.Schema(
+        {
+            vol.Required(ATTR_RESOURCE_ID): cv.string,
+            vol.Optional(ATTR_PARTITION_ID): cv.string,
+        }
+    )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_BYPASS_SENSOR):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_BYPASS_SENSOR,
+            handle_bypass_service,
+            schema=service_schema,
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_UNBYPASS_SENSOR):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_UNBYPASS_SENSOR,
+            handle_bypass_service,
+            schema=service_schema,
+        )
 
     LOGGER.info("%s: Finished initializing Alarmdotcom from config entry.", __name__)
 
@@ -228,6 +297,9 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
 
     if len(hass.data[DOMAIN]) == 0:
         hass.data.pop(DOMAIN)
-        # hass.services.async_remove(DOMAIN, SERVICES)
+        if hass.services.has_service(DOMAIN, SERVICE_BYPASS_SENSOR):
+            hass.services.async_remove(DOMAIN, SERVICE_BYPASS_SENSOR)
+        if hass.services.has_service(DOMAIN, SERVICE_UNBYPASS_SENSOR):
+            hass.services.async_remove(DOMAIN, SERVICE_UNBYPASS_SENSOR)
 
     return unload_success
