@@ -22,6 +22,7 @@ from homeassistant.helpers.selector import (
     TextSelectorType,
 )
 
+from .alarm_camera_api import AlarmCameraSession
 from .const import (
     CONF_ARM_AWAY,
     CONF_ARM_CODE,
@@ -43,11 +44,15 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 LegacyArmingOptions = Literal["home", "away", "true", "false"]
 
+CONF_CAMERA_AJAX_KEY = "camera_ajax_key"
+CONF_CAMERA_MFA_COOKIE = "camera_mfa_cookie"
+CONF_CAMERA_IDENTITY_ID = "camera_identity_id"
+
 
 class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a Alarmdotcom config flow."""
 
-    VERSION = 4
+    VERSION = 5
 
     def __init__(self) -> None:
         """Initialize the Alarmdotcom flow."""
@@ -59,17 +64,15 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._existing_entry: config_entries.ConfigEntry | None = None
 
         self._otp_options: pyadc.OtpRequired | None = None
-
         self._force_generic_name: bool = False
-
         self.otp_method: pyadc.OtpType | None = None
+        self.bridge: pyadc.AlarmBridge | None = None
 
     @staticmethod
     def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> "ADCOptionsFlowHandler":
         """Tell Home Assistant that this integration supports configuration options."""
-
         return ADCOptionsFlowHandler(config_entry)
 
     async def async_step_user(
@@ -90,7 +93,7 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             self.bridge = pyadc.AlarmBridge(
                 username=self.config[CONF_USERNAME],
                 password=self.config[CONF_PASSWORD],
-                mfa_token=self.config[CONF_MFA_TOKEN],
+                mfa_token=self.config.get(CONF_MFA_TOKEN),
             )
 
             async with async_timeout.timeout(60):
@@ -108,10 +111,7 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     pyadc.UnexpectedResponse,
                     pyadc.NotAuthorized,
                 ):
-                    LOGGER.exception(
-                        "%s: user login failed to contact Alarm.com.",
-                        __name__,
-                    )
+                    LOGGER.exception("%s: user login failed to contact Alarm.com.", __name__)
                     errors["base"] = "cannot_connect"
                 except pyadc.AuthenticationFailed:
                     LOGGER.exception(
@@ -129,26 +129,30 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_USERNAME): TextSelector(
                     TextSelectorConfig(
-                        type=TextSelectorType.TEXT, autocomplete="username"
+                        type=TextSelectorType.TEXT,
+                        autocomplete="username",
                     )
                 ),
                 vol.Required(CONF_PASSWORD): TextSelector(
                     TextSelectorConfig(
-                        type=TextSelectorType.PASSWORD, autocomplete="current-password"
+                        type=TextSelectorType.PASSWORD,
+                        autocomplete="current-password",
                     )
                 ),
             }
         )
 
         return self.async_show_form(
-            step_id="user", data_schema=creds_schema, errors=errors, last_step=False
+            step_id="user",
+            data_schema=creds_schema,
+            errors=errors,
+            last_step=False,
         )
 
     async def async_step_otp_select_method(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Select OTP method when integration configured through UI."""
-
         if not self._otp_options:
             raise ConfigEntryError("No OTP options found.")
 
@@ -161,27 +165,19 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             )
             if self.otp_method in (pyadc.OtpType.email, pyadc.OtpType.sms):
-                # Ask Alarm.com to send OTP if selected method is EMAIL or SMS.
-                LOGGER.debug(
-                    "Requesting One-Time Password via %s...", self.otp_method.name
-                )
+                LOGGER.debug("Requesting One-Time Password via %s...", self.otp_method.name)
                 await self.bridge.auth_controller.request_otp(self.otp_method)
 
             return await self.async_step_otp_submit()
 
         try:
-            # Get list of enabled OTP methods.
             if len(self._otp_options.enabled_2fa_methods) == 1:
-                # If only one OTP method is enabled, use it without prompting user.
                 self.otp_method = self._otp_options.enabled_2fa_methods[0]
                 LOGGER.debug("Using %s for One-Time Password.", self.otp_method.name)
                 return await self.async_step_otp_submit()
 
         except (TimeoutError, aiohttp.ClientError, pyadc.UnexpectedResponse):
-            LOGGER.exception(
-                "%s: OTP submission failed connection exception.",
-                __name__,
-            )
+            LOGGER.exception("%s: OTP submission failed connection exception.", __name__)
             errors["base"] = "cannot_connect"
 
         otp_method_schema = vol.Schema(
@@ -238,17 +234,11 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 pyadc.UnexpectedResponse,
                 pyadc.NotAuthorized,
             ):
-                LOGGER.exception(
-                    "%s: OTP submission failed with CannotConnect exception.",
-                    __name__,
-                )
+                LOGGER.exception("%s: OTP submission failed with CannotConnect exception.", __name__)
                 errors["base"] = "cannot_connect"
 
             except pyadc.AuthenticationFailed:
-                LOGGER.exception(
-                    "%s: Incorrect OTP code entered.",
-                    __name__,
-                )
+                LOGGER.exception("%s: Incorrect OTP code entered.", __name__)
                 errors["base"] = "invalid_otp"
 
             else:
@@ -258,7 +248,8 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             {
                 vol.Required(CONF_OTP): TextSelector(
                     TextSelectorConfig(
-                        type=TextSelectorType.TEXT, autocomplete="one-time-code"
+                        type=TextSelectorType.TEXT,
+                        autocomplete="one-time-code",
                     )
                 ),
             }
@@ -271,35 +262,65 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             last_step=True,
         )
 
+    async def _populate_camera_session_data(self) -> None:
+        """Log into the camera web session and store session metadata."""
+        camera_session = AlarmCameraSession(
+            username=self.config[CONF_USERNAME],
+            password=self.config[CONF_PASSWORD],
+            mfa_cookie=self.config.get(CONF_MFA_TOKEN),
+        )
+
+        try:
+            await camera_session.login()
+            session_data = camera_session.session_data
+
+            if session_data.get("ajax_key"):
+                self.config[CONF_CAMERA_AJAX_KEY] = session_data["ajax_key"]
+            if session_data.get("mfa_cookie"):
+                self.config[CONF_CAMERA_MFA_COOKIE] = session_data["mfa_cookie"]
+            if session_data.get("identity_id"):
+                self.config[CONF_CAMERA_IDENTITY_ID] = session_data["identity_id"]
+
+            LOGGER.debug(
+                "Stored Alarm.com camera session metadata: ajax=%s identity=%s",
+                bool(self.config.get(CONF_CAMERA_AJAX_KEY)),
+                self.config.get(CONF_CAMERA_IDENTITY_ID),
+            )
+        except Exception as err:
+            LOGGER.warning("Camera session bootstrap failed during config flow: %s", err)
+        finally:
+            await camera_session.close()
+
     async def async_step_final(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Create configuration entry using entered data."""
-
-        # Fetch full state as a lazy way to get active_system_name. (Controller must be initialized.)
         await self.bridge.fetch_full_state()
+        await self._populate_camera_session_data()
 
-        self._config_title = f"{self.bridge.active_system.name} ({self.bridge.auth_controller.dealer}):{self.bridge.auth_controller.user_email}"
+        self._config_title = (
+            f"{self.bridge.active_system.name} "
+            f"({self.bridge.auth_controller.dealer}):"
+            f"{self.bridge.auth_controller.user_email}"
+        )
 
         if self._existing_entry:
             LOGGER.debug(
                 "Existing config entry found. Updating entry, then aborting config flow."
             )
             self.hass.config_entries.async_update_entry(
-                self._existing_entry, data=self.config
+                self._existing_entry,
+                data=self.config,
             )
             await self.hass.config_entries.async_reload(self._existing_entry.entry_id)
 
             return self.async_abort(reason="reauth_successful")
 
-        # Named async_ but doesn't require await!
         return self.async_create_entry(
-            title=self._config_title, data=self.config, options=CONF_OPTIONS_DEFAULT
+            title=self._config_title,
+            data=self.config,
+            options=CONF_OPTIONS_DEFAULT,
         )
-
-    # #
-    # Reauthentication Steps
-    # #
 
     async def async_step_reauth(
         self, user_input: dict[str, Any] | None = None
@@ -338,7 +359,7 @@ class ADCOptionsFlowHandler(config_entries.OptionsFlow):
             if user_input[CONF_REMOVE_ARM_CODE]:
                 user_input[CONF_ARM_CODE] = ""
             self.options.update(user_input)
-            self.options.pop(CONF_REMOVE_ARM_CODE, None)  # Remove the helper key
+            self.options.pop(CONF_REMOVE_ARM_CODE, None)
             return await self.async_step_modes()
 
         schema = vol.Schema(
@@ -368,7 +389,7 @@ class ADCOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_modes(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """First screen for configuration options. Sets arming mode profiles."""
+        """Sets arming mode profiles."""
         errors: dict = {}
 
         if user_input is not None:
@@ -380,19 +401,22 @@ class ADCOptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Required(
                     CONF_ARM_HOME,
                     default=self.options.get(
-                        CONF_ARM_HOME, CONF_OPTIONS_DEFAULT[CONF_ARM_HOME]
+                        CONF_ARM_HOME,
+                        CONF_OPTIONS_DEFAULT[CONF_ARM_HOME],
                     ),
                 ): cv.multi_select(CONF_ARM_MODE_OPTIONS),
                 vol.Required(
                     CONF_ARM_AWAY,
                     default=self.options.get(
-                        CONF_ARM_AWAY, CONF_OPTIONS_DEFAULT[CONF_ARM_AWAY]
+                        CONF_ARM_AWAY,
+                        CONF_OPTIONS_DEFAULT[CONF_ARM_AWAY],
                     ),
                 ): cv.multi_select(CONF_ARM_MODE_OPTIONS),
                 vol.Required(
                     CONF_ARM_NIGHT,
                     default=self.options.get(
-                        CONF_ARM_NIGHT, CONF_OPTIONS_DEFAULT[CONF_ARM_NIGHT]
+                        CONF_ARM_NIGHT,
+                        CONF_OPTIONS_DEFAULT[CONF_ARM_NIGHT],
                     ),
                 ): cv.multi_select(CONF_ARM_MODE_OPTIONS),
             }

@@ -1,9 +1,13 @@
 """The alarmdotcom integration."""
 
+from __future__ import annotations
+
 import logging
+from pathlib import Path
 
 import aiohttp
 import pyalarmdotcomajax as pyadc
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
@@ -25,13 +29,57 @@ from .hub import AlarmHub
 
 LOGGER = logging.getLogger(__name__)
 
+CARD_URL = "/alarmdotcom/alarm-webrtc-card.js"
+
+
+async def _register_lovelace_card(hass: HomeAssistant) -> None:
+    """Register bundled Alarm.com Lovelace WebRTC card."""
+    card_path = hass.config.path(
+        "custom_components",
+        "alarmdotcom",
+        "www",
+        "alarm-webrtc-card.js",
+    )
+
+    if not Path(card_path).exists():
+        LOGGER.warning("Alarm.com WebRTC card file not found at %s", card_path)
+        return
+
+    try:
+        await hass.http.async_register_static_paths(
+            [
+                {
+                    "url_path": CARD_URL,
+                    "path": card_path,
+                    "cache_headers": False,
+                }
+            ]
+        )
+    except Exception:
+        try:
+            hass.http.register_static_path(
+                CARD_URL,
+                card_path,
+                cache_headers=False,
+            )
+        except Exception as err:
+            LOGGER.warning("Failed to register Alarm.com WebRTC card: %s", err)
+            return
+
+    try:
+        add_extra_js_url(hass, CARD_URL)
+        LOGGER.debug("Registered Alarm.com WebRTC card at %s", CARD_URL)
+    except Exception as err:
+        LOGGER.warning("Failed to add Alarm.com WebRTC card as extra JS resource: %s", err)
+
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up alarmdotcom hub from a config entry."""
 
     LOGGER.info("%s: Initializing Alarmdotcom from config entry.", __name__)
-
     LOGGER.info(STARTUP_MESSAGE)
+
+    await _register_lovelace_card(hass)
 
     #
     # Initialize Alarm.com Connection & Data Update Coordinator

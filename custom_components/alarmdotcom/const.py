@@ -78,6 +78,7 @@ PLATFORMS = [
     Platform.BUTTON,
     Platform.CLIMATE,
     Platform.VALVE,
+    Platform.CAMERA,
     # Platform.NUMBER,
     # Platform.SWITCH,
     # Platform.SELECT,
