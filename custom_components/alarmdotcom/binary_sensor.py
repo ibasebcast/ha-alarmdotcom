@@ -43,7 +43,6 @@ SENSOR_SUBTYPE_BLACKLIST = [
     pyadc.sensor.SensorSubtype.FIXED_PANIC,  # No support yet
 ]
 
-
 async def async_setup_entry(
     hass: HomeAssistant,
     config_entry: ConfigEntry,
@@ -86,7 +85,6 @@ async def async_setup_entry(
         hass, config_entry, current_entity_ids, current_unique_ids, "binary_sensor"
     )
 
-
 #
 # MALFUNCTION SENSOR
 #
@@ -100,7 +98,6 @@ def malfunction_is_on_fn(hub: AlarmHub, resource_id: str) -> bool:
         return False
 
     return resource.attributes.is_malfunctioning
-
 
 @callback
 def malfunction_supported_fn(hub: AlarmHub, resource_id: str) -> bool:
@@ -116,7 +113,6 @@ def malfunction_supported_fn(hub: AlarmHub, resource_id: str) -> bool:
         and getattr(resource.attributes, "device_type", None) not in SENSOR_SUBTYPE_BLACKLIST
     )
 
-
 #
 # ALARM BINARY SENSORS
 #
@@ -131,7 +127,6 @@ def supported_fn(hub: AlarmHub, resource_id: str) -> bool:
 
     return resource.attributes.device_type not in SENSOR_SUBTYPE_BLACKLIST
 
-
 @callback
 def is_on_fn(hub: AlarmHub, sensor_id: str) -> bool:
     """Return the state of the binary sensor."""
@@ -142,7 +137,6 @@ def is_on_fn(hub: AlarmHub, sensor_id: str) -> bool:
         return False
 
     return (resource.attributes.state.value % 2) == 0
-
 
 @callback
 def device_class_fn(hub: AlarmHub, sensor_id: str) -> BinarySensorDeviceClass | None:
@@ -201,7 +195,6 @@ def device_class_fn(hub: AlarmHub, sensor_id: str) -> BinarySensorDeviceClass | 
 
     return None
 
-
 #
 # BYPASSED SENSOR
 #
@@ -214,7 +207,6 @@ def bypassed_is_on_fn(hub: AlarmHub, resource_id: str) -> bool:
         return False
 
     return bool(resource.attributes.is_bypassed)
-
 
 @callback
 def bypassed_supported_fn(hub: AlarmHub, resource_id: str) -> bool:
@@ -229,7 +221,6 @@ def bypassed_supported_fn(hub: AlarmHub, resource_id: str) -> bool:
 
     return bool(resource.attributes.supports_bypass or resource.attributes.supports_immediate_bypass)
 
-
 @dataclass(frozen=True, kw_only=True)
 class AdcBinarySensorEntityDescription(
     Generic[AdcManagedDeviceT, AdcControllerT],
@@ -242,7 +233,6 @@ class AdcBinarySensorEntityDescription(
     """Return whether the binary sensor is on."""
     device_class_fn: Callable[[AlarmHub, str], BinarySensorDeviceClass | None]
     """Return the device class for the binary sensor."""
-
 
 ENTITY_DESCRIPTIONS: list[AdcEntityDescription] = [
     AdcBinarySensorEntityDescription[pyadc.sensor.Sensor, pyadc.SensorController](
@@ -273,7 +263,6 @@ ENTITY_DESCRIPTIONS: list[AdcEntityDescription] = [
     ),
 ]
 
-
 class AdcBinarySensorEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], BinarySensorEntity):
     """Base Alarm.com binary sensor entity."""
 
@@ -295,9 +284,6 @@ class AdcBinarySensorEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], Binary
         if isinstance(message, pyadc.ResourceEventMessage):
             self._attr_is_on = self.entity_description.is_on_fn(self.hub, self.resource_id)
 
-
-
-
 @callback
 def _resource_id_from_trouble_condition(hub: AlarmHub, condition: pyadc.trouble_condition.TroubleCondition) -> str | None:
     """Resolve a managed device resource ID from a trouble condition."""
@@ -316,7 +302,6 @@ def _resource_id_from_trouble_condition(hub: AlarmHub, condition: pyadc.trouble_
             return resource_id
 
     return None
-
 
 @callback
 def _conditions_for_resource(
@@ -343,7 +328,6 @@ SYSTEM_TROUBLE_SENSORS: list[tuple[pyadc.trouble_condition.TroubleConditionType,
     (pyadc.trouble_condition.TroubleConditionType.BatteryCharging, "Battery Charging"),
     (pyadc.trouble_condition.TroubleConditionType.SensorNotResponding, "Sensor Not Responding"),
 ]
-
 
 class TroubleConditionBinarySensorEntity(BinarySensorEntity):
     """System-level Alarm.com trouble condition binary sensor."""
@@ -417,7 +401,6 @@ class TroubleConditionBinarySensorEntity(BinarySensorEntity):
             self._attr_available = self.hub.available
             self._attr_is_on = self._has_active_trouble()
             self.async_write_ha_state()
-
 
 class DeviceTroubleBinarySensorEntity(BinarySensorEntity):
     """Device-level Alarm.com trouble condition binary sensor."""

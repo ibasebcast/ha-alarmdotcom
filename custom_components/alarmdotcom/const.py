@@ -82,10 +82,14 @@ PLATFORMS = [
     Platform.COVER,
     Platform.LIGHT,
     Platform.BUTTON,
-    Platform.CAMERA,
     Platform.CLIMATE,
     Platform.VALVE,
-    # Platform.NUMBER,
-    # Platform.SWITCH,
-    # Platform.SELECT,
+    Platform.CAMERA,
 ]
+
+# #
+# CAMERA
+# #
+
+CONF_CAMERA_MFA_CODE = "mfa_code"
+CONF_CAMERA_MFA_COOKIE = "mfa_cookie"

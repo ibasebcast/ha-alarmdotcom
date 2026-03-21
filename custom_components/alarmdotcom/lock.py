@@ -8,11 +8,14 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic
 
 import pyalarmdotcomajax as pyadc
+import re
+
 from homeassistant.components.lock import (
     LockEntity,
     LockEntityDescription,
     LockEntityFeature,
 )
+from homeassistant.components.alarm_control_panel import CodeFormat
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -116,22 +119,15 @@ async def control_fn(
 
 
 @callback
-def code_format_fn(hub: AlarmHub) -> str | None:
-    """Return the format of the code, if any."""
+def code_format_fn(hub: AlarmHub) -> CodeFormat | None:
+    """Return the code format for the lock, consistent with the alarm control panel."""
 
-    if arm_code := hub.config_entry.options.get("arm_code"):
-        import re
+    arm_code = hub.config_entry.options.get("arm_code")
 
-        code_patterns = [
-            r"^\d+$",  # Only digits
-            r"^\w\D+$",  # Only alpha
-            r"^\w+$",  # Alphanumeric
-        ]
-        for pattern in code_patterns:
-            if re.fullmatch(pattern, arm_code):
-                return pattern
-        return "."  # All characters
-    return None
+    if arm_code in [None, ""]:
+        return None
+
+    return CodeFormat.NUMBER if re.fullmatch(r"\d+", str(arm_code)) else CodeFormat.TEXT
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -148,7 +144,7 @@ class AdcLockEntityDescription(
     """Return whether the lock is locking."""
     is_unlocking_fn: Callable[[AlarmHub, str], bool]
     """Return whether the lock is unlocking."""
-    code_format_fn: Callable[[AlarmHub], str | None]
+    code_format_fn: Callable[[AlarmHub], CodeFormat | None]
     """Return the format of the code, if any."""
     supported_features_fn: Callable[[AdcControllerT, str], LockEntityFeature]
     """Return the supported features for the lock."""

@@ -319,8 +319,12 @@ async def set_temperature_fn(
     """Set the target temperature."""
 
     if target_temp_high and target_temp_low:
-        await controller.set_state(thermostat_id, heat_setpoint=target_temp_low)
-        await controller.set_state(thermostat_id, cool_setpoint=target_temp_high)
+        # Set both setpoints in a single API call to avoid triggering two state changes
+        await controller.set_state(
+            thermostat_id,
+            heat_setpoint=target_temp_low,
+            cool_setpoint=target_temp_high,
+        )
     elif target_temp and current_hvac_mode:
         if current_hvac_mode == HVACMode.HEAT:
             await controller.set_state(thermostat_id, heat_setpoint=target_temp)
@@ -429,7 +433,7 @@ class AdcClimateEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], ClimateEnti
         self._attr_hvac_modes = self.entity_description.hvac_modes_fn(self.controller, self.resource_id)
         self._attr_temperature_unit = UnitOfTemperature.FAHRENHEIT if not self.entity_description.uses_celsius_fn(self.controller, self.resource_id) else UnitOfTemperature.CELSIUS
         self._attr_target_temperature_step = self.entity_description.target_temperature_step_fn(self.controller, self.resource_id)
-        # fmt: off
+        # fmt: on
 
         super().initiate_state()
 
@@ -475,7 +479,7 @@ class AdcClimateEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], ClimateEnti
         await self.entity_description.set_temperature_fn(
             self.controller,
             self.resource_id,
-            kwargs.get("target_temp"),
+            kwargs.get("temperature"),  # HA sends ATTR_TEMPERATURE = "temperature"
             self.hvac_mode,
             kwargs.get("target_temp_high"),
             kwargs.get("target_temp_low"),

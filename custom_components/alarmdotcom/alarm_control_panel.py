@@ -161,9 +161,6 @@ async def control_fn(
 
     user_entered_code = options.get("code")
 
-    if user_entered_code != arm_code and arm_code not in [None, ""]:
-        raise ServiceValidationError("Invalid code.")
-
     try:
         if command == DISARM:
             await controller.disarm(partition_id)

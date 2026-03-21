@@ -121,8 +121,6 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
 
     return device_info
 
-    return device_info
-
 
 @dataclass(frozen=True, kw_only=True)
 class AdcEntityDescription(

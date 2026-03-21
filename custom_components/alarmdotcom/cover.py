@@ -108,6 +108,7 @@ async def async_setup_entry(
         hass, config_entry, current_entity_ids, current_unique_ids, "cover"
     )
 
+
 @callback
 def garage_door_supported_fn(hub: AlarmHub, resource_id: str) -> bool:
     """Check if the resource is a garage door."""
@@ -156,9 +157,15 @@ def is_closed_fn(
 
 
 @callback
-def device_class_fn() -> CoverDeviceClass:
-    """Return the device class for the garage door."""
+def garage_device_class_fn() -> CoverDeviceClass:
+    """Return the device class for a garage door."""
     return CoverDeviceClass.GARAGE
+
+
+@callback
+def gate_device_class_fn() -> CoverDeviceClass:
+    """Return the device class for a gate."""
+    return CoverDeviceClass.GATE
 
 
 @callback
@@ -221,7 +228,7 @@ ENTITY_DESCRIPTIONS: list[AdcEntityDescription] = [
         controller_fn=lambda hub, _: hub.api.garage_doors,
         supported_fn=garage_door_supported_fn,
         is_closed_fn=is_closed_fn,
-        device_class_fn=device_class_fn,
+        device_class_fn=garage_device_class_fn,
         supported_features_fn=supported_features_fn,
         control_fn=control_fn,
     ),
@@ -230,7 +237,7 @@ ENTITY_DESCRIPTIONS: list[AdcEntityDescription] = [
         controller_fn=lambda hub, _: hub.api.gates,
         supported_fn=gate_supported_fn,
         is_closed_fn=is_closed_fn,
-        device_class_fn=device_class_fn,
+        device_class_fn=gate_device_class_fn,
         supported_features_fn=supported_features_fn,
         control_fn=control_fn,
     ),

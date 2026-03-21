@@ -4,7 +4,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Literal
 
 import aiohttp
-import async_timeout
+import asyncio
 import pyalarmdotcomajax as pyadc
 import voluptuous as vol
 from homeassistant import config_entries
@@ -87,7 +87,7 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 mfa_token=self.config[CONF_MFA_TOKEN],
             )
 
-            async with async_timeout.timeout(60):
+            async with asyncio.timeout(60):
                 try:
                     await self.bridge.login()
                 except pyadc.OtpRequired as exc:

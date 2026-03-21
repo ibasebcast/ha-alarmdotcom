@@ -80,6 +80,7 @@ Where possible, use **locally controlled Home Assistant integrations** for autom
 | Lock         | Lock, Unlock                          | ✔      | ✔           | ✔           |                                                                           |
 | Sensor       | None                                  | ✔      | ✔           | ✔           | Contact sensors will not report repeated changes within a 3 minute window |
 | Thermostat   | Heat, Cool, Auto, Fan                 | ✔      | ✔           | ✔           | Fan-only mode runs for the maximum duration supported by Alarm.com        |
+| Camera       | Live WebRTC stream, Snapshot          | ✔      | —           | —           | Requires the `www/alarm-webrtc-card.js` Lovelace card                    |
 
 ---
 
@@ -153,6 +154,35 @@ Some Alarm.com providers may restrict combinations of these options.
 
 ---
 
+---
+
+# Camera Support
+
+This integration includes WebRTC live-streaming support for Alarm.com cameras.
+
+## Setup
+
+1. Copy `www/alarm-webrtc-card.js` from this repository to your Home Assistant `www/` folder.
+2. Add it as a Lovelace resource:
+   - Go to **Settings → Dashboards → Resources**
+   - Click **Add Resource**
+   - URL: `/local/alarm-webrtc-card.js`
+   - Type: **JavaScript module**
+3. Add the card to any Lovelace dashboard:
+
+```yaml
+type: custom:alarm-webrtc-card
+entity: camera.your_camera_name
+```
+
+## How it works
+
+When the card loads it calls the `camera.turn_on` service which fetches a fresh set of WebRTC tokens from Alarm.com. Tokens are refreshed automatically every 45 minutes in the background so the stream is always ready. If a token expires before the next scheduled refresh the card requests new tokens automatically.
+
+Still image snapshots are also available, which means the camera will display a thumbnail in the Home Assistant media browser and picture-glance dashboard cards.
+
+---
+
 # Development Status
 
 This integration is under active maintenance.
@@ -172,7 +202,6 @@ Planned areas of development include:
 
 * Expanded device coverage across the Alarm.com ecosystem
 * Improved websocket reliability and reconnection handling
-* Camera and image sensor support
 * Expanded automation and scene support
 * Additional device diagnostics and status reporting
 * Continued compatibility updates for new Home Assistant releases

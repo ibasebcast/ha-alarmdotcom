@@ -10,11 +10,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+
 from .const import (
     CONF_ARM_AWAY,
     CONF_ARM_HOME,
     CONF_ARM_NIGHT,
     CONF_FORCE_BYPASS,
+    CONF_MFA_TOKEN,
     CONF_NO_ENTRY_DELAY,
     CONF_SILENT_ARM,
     ATTR_PARTITION_ID,
@@ -28,6 +31,7 @@ from .const import (
     STARTUP_MESSAGE,
 )
 from .hub import AlarmHub
+from .camera_api import AlarmCameraSession
 
 LOGGER = logging.getLogger(__name__)
 
@@ -51,6 +55,32 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         raise ConfigEntryAuthFailed from ex
     except (TimeoutError, pyadc.AlarmdotcomException, aiohttp.ClientError) as ex:
         raise ConfigEntryNotReady from ex
+
+    # Initialize WebRTC camera session (best-effort; cameras are optional).
+    # Prefer reusing the already-authenticated pyalarmdotcomajax session to
+    # avoid a second login. Falls back to an independent login automatically.
+    try:
+        camera_session = AlarmCameraSession.from_alarm_bridge(
+            bridge=hub.api,
+            username=config_entry.data[CONF_USERNAME],
+            password=config_entry.data[CONF_PASSWORD],
+            mfa_cookie=config_entry.data.get(CONF_MFA_TOKEN),
+        )
+        # Only call login() when from_alarm_bridge fell back to an independent
+        # session (i.e. it owns the session and no ajax_key was found).
+        if camera_session._owns_session and not camera_session.ajax_key:
+            LOGGER.debug("Camera session: performing independent login.")
+            await camera_session.login()
+        else:
+            LOGGER.debug("Camera session: reusing pyalarmdotcomajax session — no second login needed.")
+        hass.data[DOMAIN][config_entry.entry_id]["camera_session"] = camera_session
+    except Exception as err:
+        LOGGER.warning(
+            "Alarm.com camera session could not be initialized: %s. "
+            "Camera entities will be unavailable.",
+            err,
+        )
+        hass.data[DOMAIN][config_entry.entry_id]["camera_session"] = None
 
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
 
@@ -291,7 +321,11 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
 
-    hub: AlarmHub = hass.data[DOMAIN].pop(config_entry.entry_id)[DATA_HUB]
+    entry_data = hass.data[DOMAIN].pop(config_entry.entry_id)
+    hub: AlarmHub = entry_data[DATA_HUB]
+    camera_session: AlarmCameraSession | None = entry_data.get("camera_session")
+    if camera_session is not None:
+        await camera_session.close()
 
     unload_success = await hub.close()
 
