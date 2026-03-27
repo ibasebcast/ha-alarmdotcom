@@ -116,21 +116,13 @@ async def control_fn(
 
 
 @callback
-def code_format_fn(hub: AlarmHub) -> str | None:
-    """Return the format of the code, if any."""
+def code_format_fn(hub: AlarmHub) -> CodeFormat | None:
+    """Return the code format for the lock.
 
-    if arm_code := hub.config_entry.options.get("arm_code"):
-        import re
-
-        code_patterns = [
-            r"^\d+$",  # Only digits
-            r"^\w\D+$",  # Only alpha
-            r"^\w+$",  # Alphanumeric
-        ]
-        for pattern in code_patterns:
-            if re.fullmatch(pattern, arm_code):
-                return pattern
-        return "."  # All characters
+    Locks do not require a code to operate from Home Assistant by default.
+    The arm_code integration option applies to the alarm control panel only.
+    Returning None means HA will not prompt for a code on lock/unlock actions.
+    """
     return None
 
 
@@ -148,7 +140,7 @@ class AdcLockEntityDescription(
     """Return whether the lock is locking."""
     is_unlocking_fn: Callable[[AlarmHub, str], bool]
     """Return whether the lock is unlocking."""
-    code_format_fn: Callable[[AlarmHub], str | None]
+    code_format_fn: Callable[[AlarmHub], CodeFormat | None]
     """Return the format of the code, if any."""
     supported_features_fn: Callable[[AdcControllerT, str], LockEntityFeature]
     """Return the supported features for the lock."""
@@ -176,17 +168,6 @@ class AdcLockEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], LockEntity):
     """Base Alarm.com lock entity."""
 
     entity_description: AdcLockEntityDescription
-
-    def _validate_code(self, code: str | None) -> bool:
-        arm_code = (
-            self.hub.config_entry.options.get("arm_code")
-            if hasattr(self.hub, "config_entry")
-            else None
-        )
-        if arm_code in [None, ""] or code == arm_code:
-            return True
-        log.warning("Wrong code entered for lock %s.", self.resource_id)
-        return False
 
     @callback
     def initiate_state(self) -> None:
@@ -225,16 +206,12 @@ class AdcLockEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], LockEntity):
 
     async def async_lock(self, **kwargs: Any) -> None:
         """Send lock command."""
-        code = kwargs.get("code")
-        if self._validate_code(code):
-            await self.entity_description.control_fn(
-                self.controller, self.resource_id, "lock"
-            )
+        await self.entity_description.control_fn(
+            self.controller, self.resource_id, "lock"
+        )
 
     async def async_unlock(self, **kwargs: Any) -> None:
         """Send unlock command."""
-        code = kwargs.get("code")
-        if self._validate_code(code):
-            await self.entity_description.control_fn(
-                self.controller, self.resource_id, "unlock"
-            )
+        await self.entity_description.control_fn(
+            self.controller, self.resource_id, "unlock"
+        )

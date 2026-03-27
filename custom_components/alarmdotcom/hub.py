@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from datetime import timedelta
 
 import pyalarmdotcomajax as pyadc
 from homeassistant.config_entries import ConfigEntry
@@ -9,9 +10,9 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.event import async_track_time_interval
 from pyalarmdotcomajax import AlarmBridge
 
-from .alarm_camera_api import AlarmCameraSession
 from .const import (
     CONF_MFA_TOKEN,
     DATA_HUB,
@@ -21,9 +22,12 @@ from .const import (
 
 log = logging.getLogger(__name__)
 
-CONF_CAMERA_AJAX_KEY = "camera_ajax_key"
-CONF_CAMERA_MFA_COOKIE = "camera_mfa_cookie"
-CONF_CAMERA_IDENTITY_ID = "camera_identity_id"
+# How often to do a full state poll as a safety net against missed websocket events
+POLLING_INTERVAL = timedelta(minutes=5)
+
+# Reconnect backoff: wait this long before reloading after a websocket death
+WS_RECONNECT_DELAY = 30  # seconds
+WS_MAX_RECONNECT_ATTEMPTS = 5
 
 
 class AlarmHub:
@@ -41,18 +45,11 @@ class AlarmHub:
         )
 
         self.close_jobs: list[CALLBACK_TYPE] = []
-
-        self.camera_api = AlarmCameraSession(
-            username=config_entry.data[CONF_USERNAME],
-            password=config_entry.data[CONF_PASSWORD],
-            ajax_key=config_entry.data.get(CONF_CAMERA_AJAX_KEY),
-            mfa_cookie=config_entry.data.get(CONF_CAMERA_MFA_COOKIE),
-            identity_id=config_entry.data.get(CONF_CAMERA_IDENTITY_ID),
-        )
+        self.available: bool = True
+        self._reconnect_attempts: int = 0
+        self._reconnect_task: asyncio.Task | None = None
 
         hass.data.setdefault(DOMAIN, {})[self.config_entry.entry_id] = {DATA_HUB: self}
-
-        self.available: bool = True
 
     async def login(self) -> bool:
         """Log in to alarm.com."""
@@ -72,37 +69,8 @@ class AlarmHub:
 
         return True
 
-    async def _initialize_camera_session(self) -> None:
-        """Initialize camera session and persist refreshed session values."""
-        try:
-            result = await self.camera_api.login()
-            log.debug("Alarm.com camera session login result: %s", result)
-        except Exception as err:
-            log.warning("Camera session login failed during initialization: %s", err)
-            return
-
-        session_data = self.camera_api.session_data
-        updated_data = dict(self.config_entry.data)
-        changed = False
-
-        for key, value in (
-            (CONF_CAMERA_AJAX_KEY, session_data.get("ajax_key")),
-            (CONF_CAMERA_MFA_COOKIE, session_data.get("mfa_cookie")),
-            (CONF_CAMERA_IDENTITY_ID, session_data.get("identity_id")),
-        ):
-            if value and updated_data.get(key) != value:
-                updated_data[key] = value
-                changed = True
-
-        if changed:
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data=updated_data,
-            )
-            log.debug("Persisted refreshed Alarm.com camera session metadata.")
-
     async def initialize(self) -> bool:
-        """Initialize connection to Alarm.com after user-driven authentication has already taken place."""
+        """Initialize connection to Alarm.com."""
         setup_ok = False
 
         try:
@@ -123,63 +91,149 @@ class AlarmHub:
         finally:
             if not setup_ok:
                 await self.api.close()
-                await self.camera_api.close()
 
-        await self._initialize_camera_session()
+        await self.api.start_event_monitoring(self._ws_state_handler)
 
-        await self.api.start_event_monitoring(_ws_state_handler)
+        # Periodic full state refresh as a safety net for missed websocket events
+        self.close_jobs.append(
+            async_track_time_interval(
+                self.hass,
+                self._async_refresh_state,
+                POLLING_INTERVAL,
+            )
+        )
 
         self.close_jobs.append(self.config_entry.add_update_listener(_update_listener))
 
         device_registry = dr.async_get(self.hass)
-
         device_registry.async_get_or_create(
             config_entry_id=self.config_entry.entry_id,
-            identifiers={(DOMAIN, self.api.active_system.id)},
+            identifiers={(DOMAIN, str(self.api.active_system.id))},
             manufacturer="Alarm.com",
             name=self.api.active_system.name,
             entry_type=dr.DeviceEntryType.SERVICE,
+            model="Security System",
         )
 
+        self._reconnect_attempts = 0
         return True
 
-    async def close(self) -> bool:
-        """
-        Reset this bridge to default state.
+    async def _async_refresh_state(self, _now=None) -> None:
+        """Periodically poll full state as a safety net against missed websocket events."""
+        if not self.available:
+            return
+        try:
+            log.debug("Alarm.com: performing periodic full state refresh.")
+            await self.api.initialize()
+        except pyadc.AuthenticationException:
+            log.warning("Alarm.com: periodic refresh failed — auth error. Will attempt reconnect.")
+            await self._async_handle_ws_death()
+        except Exception as err:
+            log.warning("Alarm.com: periodic refresh failed: %s", err)
 
-        Will cancel any scheduled setup retry and will unload
-        the config entry.
-        """
+    async def _ws_state_handler(self, message: pyadc.EventBrokerMessage) -> None:
+        """Handle websocket state changes with automatic reconnect."""
+        if not isinstance(message, pyadc.ConnectionEvent):
+            return
+
+        if message.current_state == pyadc.WebSocketState.DEAD:
+            log.warning(
+                "Alarm.com websocket died. Will attempt reconnect in %s seconds (attempt %d/%d).",
+                WS_RECONNECT_DELAY,
+                self._reconnect_attempts + 1,
+                WS_MAX_RECONNECT_ATTEMPTS,
+            )
+            self.available = False
+            await self._async_handle_ws_death()
+
+        elif message.current_state == pyadc.WebSocketState.CONNECTED:
+            if not self.available:
+                log.info("Alarm.com websocket reconnected.")
+            self.available = True
+            self._reconnect_attempts = 0
+
+        elif message.current_state not in (
+            pyadc.WebSocketState.CONNECTED,
+            pyadc.WebSocketState.CONNECTING,
+        ):
+            log.info("Alarm.com websocket state: %s", message.current_state)
+
+        log.debug("Alarm.com websocket state: %s", message.current_state)
+
+    async def _async_handle_ws_death(self) -> None:
+        """Schedule a reconnect attempt with backoff. Reloads the entry if all attempts fail."""
+        if self._reconnect_task and not self._reconnect_task.done():
+            return  # Already a reconnect in progress
+
+        self._reconnect_task = self.hass.async_create_task(
+            self._async_reconnect_with_backoff()
+        )
+
+    async def _async_reconnect_with_backoff(self) -> None:
+        """Attempt to reconnect with exponential backoff, then reload entry if exhausted."""
+        while self._reconnect_attempts < WS_MAX_RECONNECT_ATTEMPTS:
+            self._reconnect_attempts += 1
+            delay = WS_RECONNECT_DELAY * self._reconnect_attempts
+            log.info(
+                "Alarm.com: reconnect attempt %d/%d in %d seconds...",
+                self._reconnect_attempts,
+                WS_MAX_RECONNECT_ATTEMPTS,
+                delay,
+            )
+            await asyncio.sleep(delay)
+
+            try:
+                await self.api.close()
+                async with asyncio.timeout(15):
+                    await self.api.initialize()
+                await self.api.start_event_monitoring(self._ws_state_handler)
+                self.available = True
+                self._reconnect_attempts = 0
+                log.info("Alarm.com: reconnect successful.")
+                return
+            except pyadc.AuthenticationException:
+                log.error("Alarm.com: reconnect failed — authentication error. Triggering reauth.")
+                self.hass.async_create_task(
+                    self.hass.config_entries.async_reload(self.config_entry.entry_id)
+                )
+                return
+            except Exception as err:
+                log.warning(
+                    "Alarm.com: reconnect attempt %d failed: %s",
+                    self._reconnect_attempts,
+                    err,
+                )
+
+        # All attempts exhausted — schedule a full entry reload
+        log.error(
+            "Alarm.com: all %d reconnect attempts failed. Scheduling integration reload.",
+            WS_MAX_RECONNECT_ATTEMPTS,
+        )
+        self.hass.async_create_task(
+            self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
+        )
+
+    async def close(self) -> bool:
+        """Close the hub and unload platforms."""
+        # Cancel any in-progress reconnect
+        if self._reconnect_task and not self._reconnect_task.done():
+            self._reconnect_task.cancel()
+            try:
+                await self._reconnect_task
+            except asyncio.CancelledError:
+                pass
+
         while self.close_jobs:
             self.close_jobs.pop()()
 
         await self.api.close()
-        await self.camera_api.close()
 
         unload_success: bool = await self.hass.config_entries.async_unload_platforms(
-            self.config_entry, PLATFORMS
+            self.config_entry,
+            PLATFORMS,
         )
 
         return unload_success
-
-
-async def _ws_state_handler(message: pyadc.EventBrokerMessage) -> None:
-    """Handle changes to websocket state for ConfigEntry and logging."""
-    if not isinstance(message, pyadc.ConnectionEvent):
-        return
-
-    if message.current_state == pyadc.WebSocketState.DEAD:
-        log.error("Alarm.com websocket state message: %s", message)
-        raise ConfigEntryNotReady("Alarm.com websocket connection died.")
-
-    if message.current_state not in [
-        pyadc.WebSocketState.CONNECTED,
-        pyadc.WebSocketState.CONNECTING,
-    ]:
-        log.info("Alarm.com websocket state message: %s", message)
-        return
-
-    log.debug("Alarm.com websocket state: %s", message.current_state)
 
 
 async def _update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:

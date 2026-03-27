@@ -1,0 +1,36 @@
+bypass_sensor:
+  name: Bypass sensor
+  description: Bypass a supported Alarm.com sensor.
+  fields:
+    resource_id:
+      name: Resource ID
+      description: Alarm.com resource ID for the sensor to bypass.
+      required: true
+      example: "110353471-11"
+      selector:
+        text:
+    partition_id:
+      name: Partition ID
+      description: Optional Alarm.com partition resource ID. If omitted, the first partition on the same system is used.
+      required: false
+      example: "20392030"
+      selector:
+        text:
+unbypass_sensor:
+  name: Unbypass sensor
+  description: Remove bypass from a supported Alarm.com sensor.
+  fields:
+    resource_id:
+      name: Resource ID
+      description: Alarm.com resource ID for the sensor to unbypass.
+      required: true
+      example: "110353471-11"
+      selector:
+        text:
+    partition_id:
+      name: Partition ID
+      description: Optional Alarm.com partition resource ID. If omitted, the first partition on the same system is used.
+      required: false
+      example: "20392030"
+      selector:
+        text:

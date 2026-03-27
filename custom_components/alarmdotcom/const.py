@@ -20,6 +20,11 @@ STATE_MALFUNCTION = "Malfunction"
 
 DEBUG_REQ_EVENT = "alarmdotcom_debug_request"
 
+SERVICE_BYPASS_SENSOR = "bypass_sensor"
+SERVICE_UNBYPASS_SENSOR = "unbypass_sensor"
+ATTR_RESOURCE_ID = "resource_id"
+ATTR_PARTITION_ID = "partition_id"
+
 MIGRATE_MSG_ALERT = (
     "The Alarm.com integration is now configured exclusively via Home Assistant's"
     " integrations page. Please delete the Alarm.com entry from configuration.yaml."
@@ -72,6 +77,7 @@ ATTRIB_MANUFACTURER = "Alarm.com"
 PLATFORMS = [
     Platform.ALARM_CONTROL_PANEL,
     Platform.BINARY_SENSOR,
+    Platform.SENSOR,
     Platform.LOCK,
     Platform.COVER,
     Platform.LIGHT,
@@ -79,7 +85,11 @@ PLATFORMS = [
     Platform.CLIMATE,
     Platform.VALVE,
     Platform.CAMERA,
-    # Platform.NUMBER,
-    # Platform.SWITCH,
-    # Platform.SELECT,
 ]
+
+# #
+# CAMERA
+# #
+
+CONF_CAMERA_MFA_CODE = "mfa_code"
+CONF_CAMERA_MFA_COOKIE = "mfa_cookie"

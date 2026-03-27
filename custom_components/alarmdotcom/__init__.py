@@ -1,85 +1,47 @@
 """The alarmdotcom integration."""
 
-from __future__ import annotations
-
 import logging
-from pathlib import Path
 
 import aiohttp
 import pyalarmdotcomajax as pyadc
-from homeassistant.components.frontend import add_extra_js_url
+import voluptuous as vol
+from homeassistant.helpers import config_validation as cv
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import Event, HomeAssistant
+from homeassistant.core import Event, HomeAssistant, ServiceCall
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
 from .const import (
     CONF_ARM_AWAY,
     CONF_ARM_HOME,
     CONF_ARM_NIGHT,
     CONF_FORCE_BYPASS,
+    CONF_MFA_TOKEN,
     CONF_NO_ENTRY_DELAY,
     CONF_SILENT_ARM,
+    ATTR_PARTITION_ID,
+    ATTR_RESOURCE_ID,
     DATA_HUB,
     DEBUG_REQ_EVENT,
     DOMAIN,
     PLATFORMS,
+    SERVICE_BYPASS_SENSOR,
+    SERVICE_UNBYPASS_SENSOR,
     STARTUP_MESSAGE,
 )
 from .hub import AlarmHub
+from .camera_api import AlarmCameraSession
 
 LOGGER = logging.getLogger(__name__)
-
-CARD_URL = "/alarmdotcom/alarm-webrtc-card.js"
-
-
-async def _register_lovelace_card(hass: HomeAssistant) -> None:
-    """Register bundled Alarm.com Lovelace WebRTC card."""
-    card_path = hass.config.path(
-        "custom_components",
-        "alarmdotcom",
-        "www",
-        "alarm-webrtc-card.js",
-    )
-
-    if not Path(card_path).exists():
-        LOGGER.warning("Alarm.com WebRTC card file not found at %s", card_path)
-        return
-
-    try:
-        await hass.http.async_register_static_paths(
-            [
-                {
-                    "url_path": CARD_URL,
-                    "path": card_path,
-                    "cache_headers": False,
-                }
-            ]
-        )
-    except Exception:
-        try:
-            hass.http.register_static_path(
-                CARD_URL,
-                card_path,
-                cache_headers=False,
-            )
-        except Exception as err:
-            LOGGER.warning("Failed to register Alarm.com WebRTC card: %s", err)
-            return
-
-    try:
-        add_extra_js_url(hass, CARD_URL)
-        LOGGER.debug("Registered Alarm.com WebRTC card at %s", CARD_URL)
-    except Exception as err:
-        LOGGER.warning("Failed to add Alarm.com WebRTC card as extra JS resource: %s", err)
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up alarmdotcom hub from a config entry."""
 
     LOGGER.info("%s: Initializing Alarmdotcom from config entry.", __name__)
-    LOGGER.info(STARTUP_MESSAGE)
 
-    await _register_lovelace_card(hass)
+    LOGGER.info(STARTUP_MESSAGE)
 
     #
     # Initialize Alarm.com Connection & Data Update Coordinator
@@ -93,6 +55,32 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         raise ConfigEntryAuthFailed from ex
     except (TimeoutError, pyadc.AlarmdotcomException, aiohttp.ClientError) as ex:
         raise ConfigEntryNotReady from ex
+
+    # Initialize WebRTC camera session (best-effort; cameras are optional).
+    # Prefer reusing the already-authenticated pyalarmdotcomajax session to
+    # avoid a second login. Falls back to an independent login automatically.
+    try:
+        camera_session = AlarmCameraSession.from_alarm_bridge(
+            bridge=hub.api,
+            username=config_entry.data[CONF_USERNAME],
+            password=config_entry.data[CONF_PASSWORD],
+            mfa_cookie=config_entry.data.get(CONF_MFA_TOKEN),
+        )
+        # Only call login() when from_alarm_bridge fell back to an independent
+        # session (i.e. it owns the session and no ajax_key was found).
+        if camera_session._owns_session and not camera_session.ajax_key:
+            LOGGER.debug("Camera session: performing independent login.")
+            await camera_session.login()
+        else:
+            LOGGER.debug("Camera session: reusing pyalarmdotcomajax session — no second login needed.")
+        hass.data[DOMAIN][config_entry.entry_id]["camera_session"] = camera_session
+    except Exception as err:
+        LOGGER.warning(
+            "Alarm.com camera session could not be initialized: %s. "
+            "Camera entities will be unavailable.",
+            err,
+        )
+        hass.data[DOMAIN][config_entry.entry_id]["camera_session"] = None
 
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
 
@@ -116,6 +104,69 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     # Listen for debug entity requests
     hass.bus.async_listen(DEBUG_REQ_EVENT, handle_alarmdotcom_debug_request_event)
+
+    async def handle_bypass_service(call: ServiceCall) -> None:
+        """Handle a bypass or unbypass service request."""
+
+        resource_id = str(call.data[ATTR_RESOURCE_ID])
+        partition_id = call.data.get(ATTR_PARTITION_ID)
+        bypass = call.service == SERVICE_BYPASS_SENSOR
+
+        sensor = hub.api.sensors.get(resource_id)
+        if sensor is None:
+            LOGGER.warning("Alarm.com bypass request failed, no such sensor: %s", resource_id)
+            return
+
+        if not (sensor.attributes.supports_bypass or sensor.attributes.supports_immediate_bypass):
+            LOGGER.warning("Alarm.com sensor does not support bypass: %s", resource_id)
+            return
+
+        resolved_partition_id = str(partition_id) if partition_id else None
+        if resolved_partition_id is None:
+            matching_partition = next(
+                (
+                    partition
+                    for partition in hub.api.partitions.values()
+                    if partition.system_id == sensor.system_id
+                ),
+                None,
+            )
+            if matching_partition is None:
+                LOGGER.warning(
+                    "Alarm.com bypass request failed, no partition found for sensor: %s",
+                    resource_id,
+                )
+                return
+            resolved_partition_id = matching_partition.id
+
+        await hub.api.partitions.change_sensor_bypass(
+            resolved_partition_id,
+            bypass_ids=[resource_id] if bypass else None,
+            unbypass_ids=[resource_id] if not bypass else None,
+        )
+
+    service_schema = vol.Schema(
+        {
+            vol.Required(ATTR_RESOURCE_ID): cv.string,
+            vol.Optional(ATTR_PARTITION_ID): cv.string,
+        }
+    )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_BYPASS_SENSOR):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_BYPASS_SENSOR,
+            handle_bypass_service,
+            schema=service_schema,
+        )
+
+    if not hass.services.has_service(DOMAIN, SERVICE_UNBYPASS_SENSOR):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_UNBYPASS_SENSOR,
+            handle_bypass_service,
+            schema=service_schema,
+        )
 
     LOGGER.info("%s: Finished initializing Alarmdotcom from config entry.", __name__)
 
@@ -270,12 +321,19 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
 
-    hub: AlarmHub = hass.data[DOMAIN].pop(config_entry.entry_id)[DATA_HUB]
+    entry_data = hass.data[DOMAIN].pop(config_entry.entry_id)
+    hub: AlarmHub = entry_data[DATA_HUB]
+    camera_session: AlarmCameraSession | None = entry_data.get("camera_session")
+    if camera_session is not None:
+        await camera_session.close()
 
     unload_success = await hub.close()
 
     if len(hass.data[DOMAIN]) == 0:
         hass.data.pop(DOMAIN)
-        # hass.services.async_remove(DOMAIN, SERVICES)
+        if hass.services.has_service(DOMAIN, SERVICE_BYPASS_SENSOR):
+            hass.services.async_remove(DOMAIN, SERVICE_BYPASS_SENSOR)
+        if hass.services.has_service(DOMAIN, SERVICE_UNBYPASS_SENSOR):
+            hass.services.async_remove(DOMAIN, SERVICE_UNBYPASS_SENSOR)
 
     return unload_success

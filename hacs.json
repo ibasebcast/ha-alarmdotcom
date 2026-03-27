@@ -2,5 +2,6 @@
   "name": "Alarm.com",
   "render_readme": true,
   "homeassistant": "2025.5.0",
-  "content_in_root": false
+  "content_in_root": false,
+  "filename": "alarmdotcom.zip"
 }
