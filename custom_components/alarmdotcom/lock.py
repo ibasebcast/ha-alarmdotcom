@@ -8,14 +8,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic
 
 import pyalarmdotcomajax as pyadc
-import re
-
 from homeassistant.components.lock import (
     LockEntity,
     LockEntityDescription,
     LockEntityFeature,
 )
-from homeassistant.components.alarm_control_panel import CodeFormat
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -120,14 +117,13 @@ async def control_fn(
 
 @callback
 def code_format_fn(hub: AlarmHub) -> CodeFormat | None:
-    """Return the code format for the lock, consistent with the alarm control panel."""
+    """Return the code format for the lock.
 
-    arm_code = hub.config_entry.options.get("arm_code")
-
-    if arm_code in [None, ""]:
-        return None
-
-    return CodeFormat.NUMBER if re.fullmatch(r"\d+", str(arm_code)) else CodeFormat.TEXT
+    Locks do not require a code to operate from Home Assistant by default.
+    The arm_code integration option applies to the alarm control panel only.
+    Returning None means HA will not prompt for a code on lock/unlock actions.
+    """
+    return None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -173,17 +169,6 @@ class AdcLockEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], LockEntity):
 
     entity_description: AdcLockEntityDescription
 
-    def _validate_code(self, code: str | None) -> bool:
-        arm_code = (
-            self.hub.config_entry.options.get("arm_code")
-            if hasattr(self.hub, "config_entry")
-            else None
-        )
-        if arm_code in [None, ""] or code == arm_code:
-            return True
-        log.warning("Wrong code entered for lock %s.", self.resource_id)
-        return False
-
     @callback
     def initiate_state(self) -> None:
         """Initiate entity state."""
@@ -221,16 +206,12 @@ class AdcLockEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], LockEntity):
 
     async def async_lock(self, **kwargs: Any) -> None:
         """Send lock command."""
-        code = kwargs.get("code")
-        if self._validate_code(code):
-            await self.entity_description.control_fn(
-                self.controller, self.resource_id, "lock"
-            )
+        await self.entity_description.control_fn(
+            self.controller, self.resource_id, "lock"
+        )
 
     async def async_unlock(self, **kwargs: Any) -> None:
         """Send unlock command."""
-        code = kwargs.get("code")
-        if self._validate_code(code):
-            await self.entity_description.control_fn(
-                self.controller, self.resource_id, "unlock"
-            )
+        await self.entity_description.control_fn(
+            self.controller, self.resource_id, "unlock"
+        )
