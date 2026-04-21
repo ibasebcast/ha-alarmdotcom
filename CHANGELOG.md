@@ -1,4 +1,4 @@
-## 2026.4.21
+## 2026.4.22
 
 ### Fixed
 - Fixed thermostat entity writes so heat and cool setpoints can be updated together
@@ -10,13 +10,14 @@
 
 ### Improved
 - Improved partition command errors so they report the command that failed
-- Updated Home Assistant dependency pin to `pyalarmdotcomajax` `2026.4.21`
+- Updated Home Assistant dependency pin to `pyalarmdotcomajax` `2026.4.22`
 
 # Changelog
 
 All notable changes to the Alarm.com Home Assistant integration will be documented in this file.
 
 ---
+## 2026.3.30
 
 ### Added
 - **Janus proxy camera support**: Cameras that use the Alarm.com Janus WebRTC gateway are now fully supported. The backend resolves the Janus mountpoint ID from the API response — first trying the HD quality stream entry, falling back to SD, and finally deriving it from the camera ID suffix for cameras that don't include quality message entries. The Lovelace card supports a `janusStreamId` override in card config for cases where the API does not expose the correct mountpoint.
