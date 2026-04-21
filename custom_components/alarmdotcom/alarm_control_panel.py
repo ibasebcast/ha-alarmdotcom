@@ -195,8 +195,8 @@ async def control_fn(
         else:
             raise ServiceValidationError("Unsupported command.")
 
-    except (pyadc.ServiceUnavailable, pyadc.UnexpectedResponse) as err:
-        raise InvalidStateError("Failed to disarm partition.") from err
+    except (pyadc.ServiceUnavailable, pyadc.UnexpectedResponse, pyadc.UnsupportedOperation) as err:
+        raise InvalidStateError(f"Failed to execute partition command '{command}'.") from err
 
 
 @dataclass(frozen=True, kw_only=True)

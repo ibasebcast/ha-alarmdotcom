@@ -177,7 +177,7 @@ entity: camera.your_camera_name
 
 ## How it works
 
-When the card loads it calls the `camera.turn_on` service which fetches a fresh set of WebRTC tokens from Alarm.com. Tokens are refreshed automatically every 45 minutes in the background so the stream is always ready. If a token expires before the next scheduled refresh the card requests new tokens automatically.
+When the card loads it calls the `camera.turn_on` service which fetches a fresh set of WebRTC tokens from Alarm.com. Tokens are refreshed automatically every 30 minutes in the background so the stream is always ready. If a token expires before the next scheduled refresh the card requests new tokens automatically.
 
 Still image snapshots are also available, which means the camera will display a thumbnail in the Home Assistant media browser and picture-glance dashboard cards.
 

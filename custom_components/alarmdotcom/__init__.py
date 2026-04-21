@@ -40,12 +40,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     """Set up alarmdotcom hub from a config entry."""
 
     LOGGER.info("%s: Initializing Alarmdotcom from config entry.", __name__)
-
     LOGGER.info(STARTUP_MESSAGE)
-
-    #
-    # Initialize Alarm.com Connection & Data Update Coordinator
-    #
 
     hub = AlarmHub(hass, config_entry)
 
@@ -56,7 +51,14 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     except (TimeoutError, pyadc.AlarmdotcomException, aiohttp.ClientError) as ex:
         raise ConfigEntryNotReady from ex
 
-    # Initialize WebRTC camera session (best-effort; cameras are optional).
+    if DOMAIN not in hass.data:
+        hass.data[DOMAIN] = {}
+    if config_entry.entry_id not in hass.data[DOMAIN]:
+        hass.data[DOMAIN][config_entry.entry_id] = {}
+
+    hass.data[DOMAIN][config_entry.entry_id][DATA_HUB] = hub
+
+    # Initialize WebRTC camera session, best effort.
     # Prefer reusing the already-authenticated pyalarmdotcomajax session to
     # avoid a second login. Falls back to an independent login automatically.
     try:
@@ -66,13 +68,17 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             password=config_entry.data[CONF_PASSWORD],
             mfa_cookie=config_entry.data.get(CONF_MFA_TOKEN),
         )
-        # Only call login() when from_alarm_bridge fell back to an independent
-        # session (i.e. it owns the session and no ajax_key was found).
+
+        # Only log in when we had to create our own independent session and
+        # still do not have an ajax key.
         if camera_session._owns_session and not camera_session.ajax_key:
             LOGGER.debug("Camera session: performing independent login.")
             await camera_session.login()
         else:
-            LOGGER.debug("Camera session: reusing pyalarmdotcomajax session — no second login needed.")
+            LOGGER.debug(
+                "Camera session: reusing pyalarmdotcomajax session, no second login needed."
+            )
+
         hass.data[DOMAIN][config_entry.entry_id]["camera_session"] = camera_session
     except Exception as err:
         LOGGER.warning(
@@ -102,7 +108,6 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             event_resource.api_resource.to_json(),
         )
 
-    # Listen for debug entity requests
     hass.bus.async_listen(DEBUG_REQ_EVENT, handle_alarmdotcom_debug_request_event)
 
     async def handle_bypass_service(call: ServiceCall) -> None:
@@ -169,24 +174,17 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         )
 
     LOGGER.info("%s: Finished initializing Alarmdotcom from config entry.", __name__)
-
     return True
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Migrate old entry."""
 
-    #
-    # To v2
-    #
-
     if config_entry.version == 1:
         LOGGER.debug("Migrating from version %s", config_entry.version)
 
         v2_options = {**config_entry.options}
-
         v2_options["use_arm_code"] = bool(config_entry.options.get("arm_code"))
-
         v2_options["arm_code"] = (
             str(arm_code) if (arm_code := config_entry.options.get("arm_code")) else ""
         )
@@ -194,12 +192,7 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         hass.config_entries.async_update_entry(
             config_entry, data={**config_entry.data}, options=v2_options, version=2
         )
-
         LOGGER.info("Migration to version %s successful", 2)
-
-    #
-    # To v3
-    #
 
     if config_entry.version == 2:
         LOGGER.debug("Migrating from version %s", config_entry.version)
@@ -209,43 +202,32 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         if not v3_options.get("use_arm_code"):
             v3_options["arm_code"] = None
 
-        # Populate Arm Home
         new_arm_home: list[str] = []
-
         if v3_options.get("force_bypass") in ["Stay Only", "Always"]:
             new_arm_home.append("bypass")
         if v3_options.get("silent_arming") in ["Stay Only", "Always"]:
             new_arm_home.append("silent")
         if v3_options.get("no_entry_delay") not in ["Stay Only", "Always"]:
             new_arm_home.append("delay")
-
         v3_options[CONF_ARM_HOME] = new_arm_home
 
-        # Populate Arm Away
         new_arm_away: list[str] = []
-
         if v3_options.get("force_bypass") in ["Away Only", "Always"]:
             new_arm_away.append("bypass")
         if v3_options.get("silent_arming") in ["Away Only", "Always"]:
             new_arm_away.append("silent")
         if v3_options.get("no_entry_delay") not in ["Away Only", "Always"]:
             new_arm_away.append("delay")
-
         v3_options[CONF_ARM_AWAY] = new_arm_away
 
-        # Populate Arm Night
         new_arm_night: list[str] = []
-
         if v3_options.get("force_bypass") == "Always":
             new_arm_night.append("bypass")
         if v3_options.get("silent_arming") == "Always":
             new_arm_night.append("silent")
         if v3_options.get("no_entry_delay") != "Always":
             new_arm_night.append("delay")
-
         v3_options[CONF_ARM_NIGHT] = new_arm_night
-
-        # Purge deprecated config options.
 
         if v3_options.get("use_arm_code"):
             v3_options["use_arm_code"] = None
@@ -259,25 +241,18 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         hass.config_entries.async_update_entry(
             config_entry, data={**config_entry.data}, options=v3_options, version=3
         )
-
         LOGGER.info("Migration to version %s successful", 3)
-
-    #
-    # To v4
-    #
 
     if config_entry.version == 3:
         LOGGER.debug("Migrating from version %s", config_entry.version)
 
         v4_options: dict = {**config_entry.options}
 
-        # Purge config options deprecated and set to None in v3 migration.
         v4_options.pop("use_arm_code", None)
         v4_options.pop("force_bypass", None)
         v4_options.pop("silent_arming", None)
         v4_options.pop("no_entry_delay", None)
 
-        # Make config option names more explicit. This allows for future rollout of selective bypass when arming.
         for arm_mode in (CONF_ARM_HOME, CONF_ARM_AWAY, CONF_ARM_NIGHT):
             if arm_mode in v4_options:
                 if "bypass" in v4_options[arm_mode]:
@@ -293,26 +268,18 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
         hass.config_entries.async_update_entry(
             config_entry, data={**config_entry.data}, options=v4_options, version=4
         )
-
         LOGGER.info("Migration to version %s successful", 4)
-
-    #
-    # To v5
-    #
 
     if config_entry.version == 4:
         LOGGER.debug("Migrating from version %s", config_entry.version)
 
         v5_options: dict = {**config_entry.options}
-
-        # Remove deprecated config options for v5.
         v5_options.pop("update_interval", None)
         v5_options.pop("ws_reconnect_timeout", None)
 
         hass.config_entries.async_update_entry(
             config_entry, data={**config_entry.data}, options=v5_options, version=5
         )
-
         LOGGER.info("Migration to version %s successful", 5)
 
     return True
@@ -324,6 +291,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
     entry_data = hass.data[DOMAIN].pop(config_entry.entry_id)
     hub: AlarmHub = entry_data[DATA_HUB]
     camera_session: AlarmCameraSession | None = entry_data.get("camera_session")
+
     if camera_session is not None:
         await camera_session.close()
 

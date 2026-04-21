@@ -1,249 +1,760 @@
+console.error("ALARM WEBRTC CARD LOADED v2023.3.30");
+
 class AlarmWebRTCCard extends HTMLElement {
-
-  // -------------------------------------------------------------------------
-  // Token helpers
-  // -------------------------------------------------------------------------
-
-  isTokenValid(token) {
-    if (!token) return false;
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1]));
-      const now = Math.floor(Date.now() / 1000);
-      return payload.exp > (now + 30); // 30-second buffer
-    } catch (e) {
-      console.error('[AlarmWebRTC] Invalid token format', e);
-      return false;
-    }
+  constructor() {
+    super();
+    this._connected = false;
+    this._connecting = false;
+    this._requesting = false;
+    this._currentConfig = null;
+    this._requestTimeout = null;
+    this._retryTimer = null;
+    this._retryCount = 0;
+    this._maxRetries = 5;
+    this._retryDelayMs = 4000;
+    this.pc = null;
+    this.ws = null;
+    this.remoteId = null;
+    this._janusKeepalive = null;
+    this._entityId = null;
   }
 
-  // -------------------------------------------------------------------------
-  // HA state updates
-  // -------------------------------------------------------------------------
+  _log(...args) {
+    console.error(`[AlarmWebRTC ${this._entityId || "unknown"}]`, ...args);
+  }
+
+  setConfig(config) {
+    if (!config.entity) throw new Error("Entity required");
+    this.config = config;
+    this._entityId = config.entity;
+    this._log("setConfig", config);
+  }
 
   set hass(hass) {
     this._hass = hass;
+    const entityId = this.config?.entity;
+    if (!entityId) return;
 
-    const entityId = this.config.entity;
+    this._entityId = entityId;
+
     const stateObj = hass.states[entityId];
-
     if (!stateObj) {
-      this.innerHTML = `
-        <ha-card>
-          <div style="padding:16px;color:red">Entity not found: ${entityId}</div>
-        </ha-card>`;
+      this._log("Entity not found");
       return;
     }
 
-    const attrs  = stateObj.attributes;
-    const config = attrs.webrtc_config;
-    const isValid = config && this.isTokenValid(config.signallingServerToken);
-
-    // --- Need fresh tokens ---
-    if (!isValid && !this._requesting) {
-      const reason = !config ? 'Missing config' : 'Expired token';
-      console.log(`[AlarmWebRTC] Requesting tokens (${reason})...`);
-      this._requesting = true;
-
-      // Safety timeout: if HA never responds, unblock after 15 s
-      clearTimeout(this._requestTimeout);
-      this._requestTimeout = setTimeout(() => {
-        console.warn('[AlarmWebRTC] Token request timed out — resetting.');
-        this._requesting = false;
-      }, 15000);
-
-      this._hass.callService('camera', 'turn_on', { entity_id: entityId })
-        .catch(err => {
-          console.error('[AlarmWebRTC] turn_on failed:', err);
-          this._requesting = false;
-        });
-
-      this.renderPlaceholder('Refreshing session...');
-      return;
+    let config = stateObj.attributes?.webrtc_config;
+    // Allow card config to override the Janus stream ID (useful for cameras
+    // where the API doesn't expose the correct mountpoint ID).
+    if (config && this.config?.janusStreamId != null) {
+      config = { ...config, janusStreamId: this.config.janusStreamId };
     }
+    const isValid = this.isConfigValid(config);
 
-    // --- Have valid tokens, not yet streaming ---
-    if (isValid && !this._connected && !this._connecting) {
-      clearTimeout(this._requestTimeout);
-      this._requesting = false;
+    this._log(
+      "hass update",
+      "streamType=",
+      config?.streamType,
+      "valid=",
+      isValid,
+      "connected=",
+      this._connected,
+      "connecting=",
+      this._connecting,
+      "requesting=",
+      this._requesting
+    );
 
-      // Restart stream only if config actually changed
-      if (JSON.stringify(config) !== JSON.stringify(this._currentConfig)) {
-        this._retried = false;
-        this.renderVideo();
-        this.startStream(config);
+    if (!isValid) {
+      if (!this._requesting && !this._connecting) {
+        this._requestTokens("No valid config");
       }
+      return;
+    }
+
+    const hasNoCurrentConfig = !this._currentConfig;
+    const isNewConfig =
+      JSON.stringify(config) !== JSON.stringify(this._currentConfig);
+    const streamTypeChanged =
+      config?.streamType !== this._currentConfig?.streamType;
+
+    // Only restart for structural changes (URL/stream type), not token rotation.
+    const isStructuralChange = streamTypeChanged ||
+      config?.signallingServerUrl !== this._currentConfig?.signallingServerUrl ||
+      config?.janusGatewayUrl !== this._currentConfig?.janusGatewayUrl ||
+      config?.janusStreamId !== this._currentConfig?.janusStreamId;
+
+    const shouldStartFresh =
+      !this._connected &&
+      !this._connecting &&
+      (hasNoCurrentConfig || isNewConfig || streamTypeChanged);
+
+    const shouldRestart =
+      isStructuralChange &&
+      (this._connected || this._connecting);
+
+    if (shouldRestart) {
+      this._log("Config changed, restarting stream");
+      this._teardownStream(false);
+      this.renderVideo();
+      this.startStream(config);
+      return;
+    }
+
+    if (shouldStartFresh) {
+      this._log("Valid config present, starting fresh stream");
+      this.renderVideo();
+      this.startStream(config);
+      return;
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Config
-  // -------------------------------------------------------------------------
+  isConfigValid(config) {
+    if (!config) return false;
 
-  setConfig(config) {
-    if (!config.entity) throw new Error('You need to define an entity');
-    this.config = config;
+    if (config.streamType === "janus" || config.janusGatewayUrl) {
+      return !!(config.janusGatewayUrl && config.janusToken);
+    }
+
+    return !!(
+      config.signallingServerUrl &&
+      config.signallingServerToken &&
+      config.cameraAuthToken
+    );
   }
-
-  // -------------------------------------------------------------------------
-  // Rendering
-  // -------------------------------------------------------------------------
 
   renderPlaceholder(msg) {
     if (this._connected) return;
-    this.innerHTML = `
-      <ha-card>
-        <div style="padding:16px;text-align:center">${msg}</div>
-      </ha-card>`;
+    this.innerHTML = `<ha-card><div style="padding:16px;text-align:center">${msg}</div></ha-card>`;
   }
 
   renderVideo() {
-    if (this.querySelector('video')) return;
     this.innerHTML = `
       <ha-card>
-        <div style="position:relative;padding-bottom:56.25%;height:0;overflow:hidden;background:#000">
-          <video id="video" autoplay playsinline muted
-            style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none">
-          </video>
-        </div>
-      </ha-card>`;
+        <video autoplay playsinline muted style="width:100%;height:auto;background:#000"></video>
+      </ha-card>
+    `;
   }
 
-  // -------------------------------------------------------------------------
-  // WebRTC stream
-  // -------------------------------------------------------------------------
+  _showReconnectButton(message = "Stream unavailable") {
+    this.innerHTML = `
+      <ha-card>
+        <div style="padding:16px;text-align:center">
+          <div style="margin-bottom:12px;color:#888">${message}</div>
+          <button id="reconnect-btn" style="padding:8px 20px;background:var(--primary-color,#03a9f4);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px">Reconnect</button>
+        </div>
+      </ha-card>`;
+
+    this.querySelector("#reconnect-btn").addEventListener("click", () => {
+      this._log("Manual reconnect");
+      this._retryCount = 0;
+      this._requesting = false;
+      this._connecting = false;
+      this._connected = false;
+      this._currentConfig = null;
+
+      if (this._retryTimer) {
+        clearTimeout(this._retryTimer);
+        this._retryTimer = null;
+      }
+
+      this._requestTokens("Manual reconnect");
+    });
+  }
+
+  _scheduleRetry(reason) {
+    if (this._retryTimer) return;
+
+    if (this._retryCount >= this._maxRetries) {
+      this._log("Max retries reached", reason);
+      this._showReconnectButton(`Stream unavailable (${reason})`);
+      return;
+    }
+
+    this._retryCount += 1;
+    this._log(
+      `Scheduling retry ${this._retryCount}/${this._maxRetries} in ${this._retryDelayMs}ms`,
+      reason
+    );
+
+    this.renderPlaceholder(`Reconnecting... (${this._retryCount}/${this._maxRetries})`);
+
+    this._retryTimer = setTimeout(() => {
+      this._retryTimer = null;
+      this._requestTokens(reason);
+    }, this._retryDelayMs);
+  }
+
+  _requestTokens(reason) {
+    if (this._requesting) return;
+
+    this._log("Requesting tokens", reason);
+    this._requesting = true;
+
+    clearTimeout(this._requestTimeout);
+    this._requestTimeout = setTimeout(() => {
+      this._log("Token request timed out");
+      this._requesting = false;
+      this._scheduleRetry("Token timeout");
+    }, 15000);
+
+    this._hass
+      .callService("camera", "turn_on", {
+        entity_id: this.config.entity,
+      })
+      .catch((err) => {
+        this._log("turn_on failed", err);
+        this._requesting = false;
+        this._scheduleRetry("turn_on failed");
+      });
+
+    this.renderPlaceholder("Refreshing session...");
+  }
+
+  _teardownStream(resetConfig = true) {
+    if (this._janusKeepalive) {
+      clearInterval(this._janusKeepalive);
+      this._janusKeepalive = null;
+    }
+
+    if (this.pc) {
+      try {
+        this.pc.close();
+      } catch (e) {}
+      this.pc = null;
+    }
+
+    if (this.ws) {
+      try {
+        this.ws.close();
+      } catch (e) {}
+      this.ws = null;
+    }
+
+    this._connected = false;
+    this._connecting = false;
+    this.remoteId = null;
+
+    if (resetConfig) {
+      this._currentConfig = null;
+    }
+  }
+
+  _markConnected() {
+    this._connected = true;
+    this._connecting = false;
+    this._requesting = false;
+    this._retryCount = 0;
+
+    clearTimeout(this._requestTimeout);
+
+    if (this._retryTimer) {
+      clearTimeout(this._retryTimer);
+      this._retryTimer = null;
+    }
+  }
 
   async startStream(config) {
+    if (this._connecting) return;
+
     this._connecting = true;
     this._currentConfig = config;
-    console.log('[AlarmWebRTC] Starting stream', config);
 
-    const pc = new RTCPeerConnection({ iceServers: config.iceServers || [] });
+    this._log("Starting stream", config);
+
+    try {
+      if (config.streamType === "janus" || config.janusGatewayUrl) {
+        this._log(">>> USING JANUS <<<");
+        await this._startJanus(config);
+      } else {
+        this._log(">>> USING LEGACY <<<");
+        await this._startLegacy(config);
+      }
+    } catch (err) {
+      this._log("startStream failed", err);
+      this._teardownStream(false);
+      this._requesting = false;
+      this._scheduleRetry("startStream failed");
+    }
+  }
+
+  async _startLegacy(config) {
+    const pc = new RTCPeerConnection({
+      iceServers: config.iceServers || [],
+    });
     this.pc = pc;
 
-    const videoEl = this.querySelector('#video');
+    const video = this.querySelector("video");
 
-    // Robust play with retry loop
     const attemptPlay = async () => {
-      if (videoEl && (videoEl.paused || videoEl.ended)) {
+      if (video && (video.paused || video.ended)) {
         try {
-          videoEl.muted = true;
-          await videoEl.play();
-          console.log('[AlarmWebRTC] Play success');
+          video.muted = true;
+          await video.play();
+          this._log("Legacy play success");
         } catch (e) {
-          console.warn('[AlarmWebRTC] Play failed:', e);
+          this._log("Legacy play failed", e);
         }
       }
     };
 
-    const startPlayLoop = () => {
-      let attempts = 0;
-      const interval = setInterval(() => {
-        if (!this._connected) { clearInterval(interval); return; }
-        if (!videoEl.paused && videoEl.currentTime > 0 && videoEl.videoWidth > 0) {
-          clearInterval(interval); return;
-        }
-        attempts++;
-        attemptPlay();
-        if (attempts > 10) clearInterval(interval);
-      }, 1000);
+    pc.ontrack = (e) => {
+      if (!video.srcObject) {
+        video.srcObject = e.streams[0];
+        this._markConnected();
+      }
+      this._log("Legacy track received");
+      attemptPlay();
     };
 
-    pc.ontrack = (event) => {
-      console.log('[AlarmWebRTC] Track received');
-      videoEl.srcObject = event.streams[0];
-      startPlayLoop();
-      this._connected  = true;
-      this._connecting = false;
-    };
-
-    pc.onicecandidate = (event) => {
-      if (event.candidate && this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ to: this.remoteId, ice: event.candidate }));
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      this._log("Legacy ICE state", s);
+      if (s === "disconnected" || s === "failed" || s === "closed") {
+        this._teardownStream(false);
+        this._scheduleRetry(`Legacy ICE ${s}`);
       }
     };
 
-    // Visibility handler — stored so we can remove it later
-    this._visibilityHandler = () => {
-      if (document.visibilityState === 'visible' && this._connected) attemptPlay();
-    };
-    document.addEventListener('visibilitychange', this._visibilityHandler);
+    const ws = new WebSocket(
+      `${config.signallingServerUrl}/${config.signallingServerToken}`
+    );
+    this.ws = ws;
 
-    // WebSocket signalling
-    const wsUrl = `${config.signallingServerUrl}/${config.signallingServerToken}`;
-    this.ws = new WebSocket(wsUrl);
-
-    this.ws.onopen = () => {
-      console.log('[AlarmWebRTC] WS connected');
-      this.ws.send('HELLO 2.0.1');
+    ws.onopen = () => {
+      this._log("Legacy WS connected");
+      ws.send("HELLO 2.0.1");
     };
 
-    this.ws.onmessage = async (event) => {
-      const msg = event.data;
+    ws.onerror = (err) => {
+      this._log("Legacy WS error", err);
+    };
 
-      if (msg.startsWith('HELLO')) {
-        this.ws.send(`START_SESSION ${config.cameraAuthToken}`);
+    ws.onmessage = async (msg) => {
+      if (msg.data.startsWith("HELLO")) {
+        ws.send(`START_SESSION ${config.cameraAuthToken}`);
         return;
       }
-      if (msg.startsWith('SESSION_STARTED')) return;
+
+      if (msg.data.startsWith("SESSION_STARTED")) {
+        return;
+      }
 
       let data;
-      try { data = JSON.parse(msg); } catch { return; }
+      try {
+        data = JSON.parse(msg.data);
+      } catch {
+        return;
+      }
 
-      if (data.sdp?.type === 'offer') {
-        this.remoteId = data.from;
+      if (data.sdp?.type === "offer") {
         await pc.setRemoteDescription(data.sdp);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        this.ws.send(JSON.stringify({
-          to: this.remoteId,
-          from: data.to,
-          sdp: pc.localDescription,
-        }));
+
+        // Wait for ICE gathering to complete before sending answer,
+        // so the SDP includes TURN relay candidates.
+        await new Promise((resolve) => {
+          if (pc.iceGatheringState === "complete") {
+            resolve();
+          } else {
+            const onStateChange = () => {
+              if (pc.iceGatheringState === "complete") {
+                pc.removeEventListener("icegatheringstatechange", onStateChange);
+                resolve();
+              }
+            };
+            pc.addEventListener("icegatheringstatechange", onStateChange);
+            // Safety timeout: don't wait more than 5s
+            setTimeout(resolve, 5000);
+          }
+        });
+
+        ws.send(
+          JSON.stringify({
+            to: data.from,
+            sdp: pc.localDescription,
+          })
+        );
       }
 
-      if (data.ice) await pc.addIceCandidate(data.ice);
+      if (data.ice) {
+        try {
+          await pc.addIceCandidate(data.ice);
+        } catch (e) {
+          this._log("Failed to add ICE candidate", e);
+        }
+      }
     };
 
-    this.ws.onclose = () => {
-      if (this._connected) {
-        console.log('[AlarmWebRTC] WS closed after connection');
-      } else if (!this._retried) {
-        // One automatic retry with fresh tokens
-        console.log('[AlarmWebRTC] WS closed before connection — retrying with fresh tokens');
-        this._retried     = true;
-        this._connecting  = false;
-        this._currentConfig = null;
-        this._requesting  = false; // allow turn_on to be called again
-        clearTimeout(this._requestTimeout);
-        this._hass.callService('camera', 'turn_on', { entity_id: this.config.entity })
-          .catch(err => console.error('[AlarmWebRTC] Retry turn_on failed:', err));
-      }
-      this._connected  = false;
+    ws.onclose = () => {
+      const wasConnected = this._connected;
+      this._log("Legacy WS closed");
+      this._connected = false;
       this._connecting = false;
-    };
-
-    this.ws.onerror = (err) => {
-      console.error('[AlarmWebRTC] WS error:', err);
-      // onclose will fire after onerror, so let that handle reset
+      this._requesting = false;
+      this._teardownStream(false);
+      this._scheduleRetry(
+        wasConnected ? "Legacy stream ended" : "Legacy WS closed before connection"
+      );
     };
   }
 
-  // -------------------------------------------------------------------------
-  // Cleanup
-  // -------------------------------------------------------------------------
+  _startJanusKeepalive(ws, sessionId, send) {
+    // Janus kills sessions after 60s without a keepalive. Ping every 25s.
+    const interval = setInterval(() => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        clearInterval(interval);
+        return;
+      }
+      send({ janus: "keepalive", session_id: sessionId });
+    }, 25000);
+    return interval;
+  }
+
+
+  _buildJanusUrlCandidates(config) {
+    return config.janusGatewayUrl ? [config.janusGatewayUrl] : [];
+  }
+
+  _connectJanusWebSocket(url) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let ws;
+
+      try {
+        ws = new WebSocket(url, ["janus-protocol"]);
+      } catch (err) {
+        reject(err);
+        return;
+      }
+
+      const cleanup = () => {
+        ws.onopen = null;
+        ws.onerror = null;
+        ws.onclose = null;
+      };
+
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        try {
+          ws.close();
+        } catch (e) {}
+        reject(err);
+      };
+
+      ws.onopen = () => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve(ws);
+      };
+
+      ws.onerror = (err) => {
+        fail(err || new Error("WebSocket error"));
+      };
+
+      ws.onclose = () => {
+        fail(new Error(`WebSocket closed before open for ${url}`));
+      };
+
+      setTimeout(() => {
+        fail(new Error(`WebSocket open timeout for ${url}`));
+      }, 5000);
+    });
+  }
+
+  async _openJanusWebSocket(config) {
+    const candidates = this._buildJanusUrlCandidates(config);
+    let lastError = null;
+
+    for (const url of candidates) {
+      this._log("Trying Janus WS URL", url);
+      try {
+        const ws = await this._connectJanusWebSocket(url);
+        this._log("Janus WS opened", url);
+        return ws;
+      } catch (err) {
+        lastError = err;
+        this._log("Janus WS candidate failed", url, err);
+      }
+    }
+
+    throw lastError || new Error("No Janus WebSocket URL could be opened");
+  }
+
+  async _startJanus(config) {
+    const pc = new RTCPeerConnection({
+      iceServers: config.iceServers || [],
+    });
+    this.pc = pc;
+
+    const video = this.querySelector("video");
+
+    const attemptPlay = async () => {
+      if (video && (video.paused || video.ended)) {
+        try {
+          video.muted = true;
+          await video.play();
+          this._log("Janus play success");
+        } catch (e) {
+          this._log("Janus play failed", e);
+        }
+      }
+    };
+
+    pc.ontrack = (e) => {
+      if (!video.srcObject) {
+        video.srcObject = e.streams[0];
+        this._markConnected();
+      }
+      this._log("Janus track received");
+      attemptPlay();
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      this._log("Janus ICE state", s);
+      if (s === "disconnected" || s === "failed" || s === "closed") {
+        this._teardownStream(false);
+        this._scheduleRetry(`Janus ICE ${s}`);
+      }
+    };
+
+    const ws = await this._openJanusWebSocket(config);
+    this.ws = ws;
+
+    let sessionId = null;
+    let handleId = null;
+    let streamId = config.janusStreamId ?? null;
+    // For proxy streams, we need to create the mountpoint first before watching.
+    // proxyUrl is the media_uri Janus uses to pull the stream from the camera.
+    // Always create the mountpoint for proxy streams — the Janus stream ID is dynamic per session.
+    const needsCreate = !!(config.proxyUrl);
+    let mountpointCreated = false;
+
+    const send = (msg) => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      const payload = {
+        ...msg,
+        token: config.janusToken,
+        transaction: Math.random().toString(36).slice(2),
+      };
+      this._log("Janus send", payload);
+      ws.send(JSON.stringify(payload));
+    };
+
+    this._log("Janus WS connected");
+
+    send({ janus: "create" });
+
+    ws.onerror = (err) => {
+      this._log("Janus WS error", err);
+    };
+
+    ws.onmessage = async (event) => {
+      let msg;
+      try {
+        msg = JSON.parse(event.data);
+      } catch (err) {
+        this._log("Janus parse failed", event.data, err);
+        return;
+      }
+
+      this._log("Janus message", msg);
+
+      if (msg.janus === "success" && !sessionId) {
+        sessionId = msg.data?.id;
+        this._log("Janus session created", sessionId);
+        this._janusKeepalive = this._startJanusKeepalive(ws, sessionId, send);
+
+        send({
+          janus: "attach",
+          session_id: sessionId,
+          plugin: "janus.plugin.streaming",
+        });
+        return;
+      }
+
+      if (msg.janus === "success" && sessionId && !handleId) {
+        handleId = msg.data?.id;
+        this._log("Janus handle attached", handleId);
+
+        if (needsCreate) {
+          // Step 1: create the mountpoint so Janus pulls the stream from the camera.
+          // The response will contain the assigned stream ID which we then use to watch.
+          this._log("Janus creating proxy mountpoint", config.proxyUrl);
+          send({
+            janus: "message",
+            session_id: sessionId,
+            handle_id: handleId,
+            body: {
+              request: "create",
+              type: "rtp",
+              media_uri: config.proxyUrl,
+              name: `${config.janusToken?.split(",")[0] ?? "stream"}_Live`,
+              is_private: true,
+              streaming_type: "Live",
+              video: true,
+              videoport: 0,
+              videopt: 126,
+              videortpmap: "H264/90000",
+              timeout_seconds: 180,
+              max_timeout_seconds: 900,
+            },
+          });
+        } else {
+          send({
+            janus: "message",
+            session_id: sessionId,
+            handle_id: handleId,
+            body: {
+              request: "watch",
+              id: streamId,
+              token: config.janusToken,
+              audio: true,
+              video: true,
+            },
+          });
+        }
+        return;
+      }
+
+      // Handle the "create" mountpoint response — extract the assigned stream ID
+      // then immediately send the "watch" request with it.
+      if (msg.janus === "success" && sessionId && handleId && needsCreate && !mountpointCreated) {
+        const createdId = msg.plugindata?.data?.stream?.id ?? msg.data?.id ?? msg.plugindata?.data?.id;
+        if (createdId) {
+          mountpointCreated = true;
+          streamId = createdId;
+          this._log("Janus mountpoint created, streamId", streamId);
+          send({
+            janus: "message",
+            session_id: sessionId,
+            handle_id: handleId,
+            body: {
+              request: "watch",
+              id: streamId,
+              token: config.janusToken,
+              audio: true,
+              video: true,
+            },
+          });
+          return;
+        }
+      }
+
+      if (msg.janus === "ack") {
+        return;
+      }
+
+      if (msg.janus === "event") {
+        const pluginData = msg.plugindata?.data;
+        if (pluginData?.error) {
+          this._log("Janus plugin error", pluginData.error_code, pluginData.error);
+          this._teardownStream(false);
+          this._scheduleRetry(`Plugin error ${pluginData.error_code}`);
+          return;
+        }
+        // Non-error events (e.g. status updates) — fall through to JSEP check below
+      }
+
+      if (msg.jsep) {
+        this._log("Janus JSEP received");
+        await pc.setRemoteDescription(msg.jsep);
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        send({
+          janus: "message",
+          session_id: sessionId,
+          handle_id: handleId,
+          body: { request: "start" },
+          jsep: pc.localDescription,
+        });
+        return;
+      }
+
+      if (msg.candidate) {
+        try {
+          await pc.addIceCandidate(msg.candidate);
+        } catch (err) {
+          this._log("Failed to add Janus candidate", err);
+        }
+        return;
+      }
+
+      if (msg.janus === "webrtcup") {
+        this._log("Janus WebRTC up");
+        return;
+      }
+
+      if (msg.janus === "media") {
+        this._log("Janus media event", msg);
+        return;
+      }
+
+      if (msg.janus === "hangup") {
+        this._log("Janus hangup", msg);
+        this._teardownStream(false);
+        this._scheduleRetry("Janus hangup");
+        return;
+      }
+
+      if (msg.janus === "detached") {
+        this._log("Janus detached", msg);
+        this._teardownStream(false);
+        this._scheduleRetry("Janus detached");
+        return;
+      }
+
+      if (msg.janus === "error") {
+        this._log("Janus error", msg);
+        this._teardownStream(false);
+        this._scheduleRetry("Janus error");
+        return;
+      }
+    };
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate && sessionId && handleId) {
+        send({
+          janus: "trickle",
+          session_id: sessionId,
+          handle_id: handleId,
+          candidate: e.candidate,
+        });
+      }
+    };
+
+    ws.onclose = () => {
+      const wasConnected = this._connected;
+      this._log("Janus WS closed");
+      this._connected = false;
+      this._connecting = false;
+      this._requesting = false;
+      this._teardownStream(false);
+      this._scheduleRetry(
+        wasConnected ? "Janus stream ended" : "Janus WS closed before connection"
+      );
+    };
+  }
 
   disconnectedCallback() {
     clearTimeout(this._requestTimeout);
-    if (this._visibilityHandler) {
-      document.removeEventListener('visibilitychange', this._visibilityHandler);
-      this._visibilityHandler = null;
+
+    if (this._retryTimer) {
+      clearTimeout(this._retryTimer);
+      this._retryTimer = null;
     }
-    if (this.pc)  { this.pc.close();  this.pc  = null; }
-    if (this.ws)  { this.ws.close();  this.ws  = null; }
-    this._connected  = false;
-    this._connecting = false;
+
+    this._teardownStream();
     this._requesting = false;
+    this._connecting = false;
   }
 }
 
-customElements.define('alarm-webrtc-card', AlarmWebRTCCard);
+customElements.define("alarm-webrtc-card", AlarmWebRTCCard);

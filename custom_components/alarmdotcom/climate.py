@@ -325,7 +325,7 @@ async def set_temperature_fn(
             heat_setpoint=target_temp_low,
             cool_setpoint=target_temp_high,
         )
-    elif target_temp and current_hvac_mode:
+    elif target_temp is not None and current_hvac_mode is not None:
         if current_hvac_mode == HVACMode.HEAT:
             await controller.set_state(thermostat_id, heat_setpoint=target_temp)
         elif current_hvac_mode == HVACMode.COOL:
