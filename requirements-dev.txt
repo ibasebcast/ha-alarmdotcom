@@ -6,5 +6,5 @@ pre-commit>=4.6.0
 mypy>=1.15.0
 wheel>=0.45.1
 pathspec >= 1.0.4
-gitpython >= 3.1.44
+gitpython >= 3.1.49
 homeassistant >= 2026.4.3
