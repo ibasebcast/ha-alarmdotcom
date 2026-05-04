@@ -1,3 +1,17 @@
+## 2026.5.3
+
+### Fixed
+- **Alarm panel state not updating on push events** (#20, #23): The alarm control panel entity was writing state updates to `self.alarm_state` — a plain instance attribute that Home Assistant never reads — instead of `self._attr_alarm_state`. Every websocket push event was silently discarded, so state only ever updated via the 5-minute polling fallback. Users would see delays of 10+ minutes or no update at all after arming/disarming at the keypad. Fix: corrected the attribute name in `update_state()`.
+- **Thermostat shows only one temperature bar in auto mode** (#22): The `target_temperature_high_fn` and `target_temperature_low_fn` callbacks returned the cool and heat setpoints in all non-OFF states. Because both values were always non-`None`, Home Assistant rendered a range control even in HEAT/COOL mode — but with both bars collapsed to a single point, producing the "one yellow bar" symptom. Fix: high/low callbacks now return `None` unless the thermostat is in `AUTO` state, so HA renders a single-target slider in HEAT/COOL and a proper range control in AUTO/HEAT_COOL.
+- **`supported_features` stale after mode change** (#22): `update_state()` was not refreshing `_attr_supported_features` on websocket events. If a thermostat switched from AUTO to HEAT/COOL at the panel, the `TARGET_TEMPERATURE_RANGE` flag would remain set in HA indefinitely. Fix: `supported_features` is now refreshed on every state update event.
+- **OTP "Failed to Connect" on SMS and email** (#21): Handled by updated `pyalarmdotcomajax` dependency. The MFA cookie was being checked after the device-trust registration step rather than immediately after OTP verification, causing a spurious failure when Alarm.com set the cookie on the verify response.
+- **`Task exception was never retrieved` log spam from imageSensors** (#23): On every websocket reconnect, the image sensor controller attempted a refresh and received a 423 (Not Authorized) from Alarm.com for accounts without that feature. The unhandled exception produced repeated errors in the HA log. Fixed in updated `pyalarmdotcomajax` — the base controller now catches 423 on reconnect refresh and logs it at DEBUG level only.
+
+### Dependency
+- Updated `pyalarmdotcomajax` to `2026.5.3`, which fixes OTP submission failures, makes device-trust registration best-effort, and silences repeated 423 log errors from unsupported resource types on reconnect.
+
+---
+
 ## 2026.4.22
 
 ### Fixed

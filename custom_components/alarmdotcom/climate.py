@@ -216,9 +216,9 @@ def target_temperature_fn(controller: pyadc.ThermostatController, thermostat_id:
 
 @callback
 def target_temperature_high_fn(controller: pyadc.ThermostatController, thermostat_id: str) -> float | None:
-    """Return the target high temperature."""
+    """Return the target high temperature (only in AUTO/HEAT_COOL mode)."""
     resource = controller.get(thermostat_id)
-    if resource is None or resource.attributes.state == pyadc.thermostat.ThermostatState.OFF:
+    if resource is None or resource.attributes.state != pyadc.thermostat.ThermostatState.AUTO:
         return None
 
     return resource.attributes.cool_setpoint
@@ -226,9 +226,9 @@ def target_temperature_high_fn(controller: pyadc.ThermostatController, thermosta
 
 @callback
 def target_temperature_low_fn(controller: pyadc.ThermostatController, thermostat_id: str) -> float | None:
-    """Return the target low temperature."""
+    """Return the target low temperature (only in AUTO/HEAT_COOL mode)."""
     resource = controller.get(thermostat_id)
-    if resource is None or resource.attributes.state == pyadc.thermostat.ThermostatState.OFF:
+    if resource is None or resource.attributes.state != pyadc.thermostat.ThermostatState.AUTO:
         return None
 
     return resource.attributes.heat_setpoint
@@ -448,6 +448,7 @@ class AdcClimateEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], ClimateEnti
             self._attr_fan_mode = self.entity_description.fan_mode_fn(self.controller, self.resource_id)
             self._attr_fan_modes = self.entity_description.fan_modes_fn(self.controller, self.resource_id)
             self._attr_current_humidity = self.entity_description.current_humidity_fn(self.controller, self.resource_id)
+            self._attr_supported_features = self.entity_description.supported_features_fn(self.controller, self.resource_id)
             self._attr_target_temperature_high = self.entity_description.target_temperature_high_fn(self.controller, self.resource_id)
             self._attr_target_temperature_low = self.entity_description.target_temperature_low_fn(self.controller, self.resource_id)
             self._attr_target_temperature = self.entity_description.target_temperature_fn(self.controller, self.resource_id)
