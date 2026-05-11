@@ -120,8 +120,6 @@ class AlarmHub:
 
     async def _async_refresh_state(self, _now=None) -> None:
         """Periodically poll full state as a safety net against missed websocket events."""
-        if not self.available:
-            return
         try:
             log.debug("Alarm.com: performing periodic full state refresh.")
             await self.api.initialize()
