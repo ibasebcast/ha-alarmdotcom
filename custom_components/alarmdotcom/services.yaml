@@ -34,3 +34,8 @@ unbypass_sensor:
       example: "20392030"
       selector:
         text:
+refresh_connection:
+  name: Refresh Connection
+  description: >
+    Force a health check and full state refresh of the Alarm.com connection.
+    If the connection is stale or dead, triggers a reconnect.
