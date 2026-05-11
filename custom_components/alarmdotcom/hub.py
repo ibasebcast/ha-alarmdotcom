@@ -1,6 +1,7 @@
 """Controller interfaces with the Alarm.com API via pyalarmdotcomajax."""
 
 import asyncio
+import contextlib
 import logging
 from datetime import timedelta
 
@@ -29,6 +30,28 @@ POLLING_INTERVAL = timedelta(minutes=5)
 WS_RECONNECT_DELAY = 30  # seconds
 WS_MAX_RECONNECT_ATTEMPTS = 5
 
+WS_HEARTBEAT_INTERVAL = 60  # seconds
+
+
+class _AlarmBridgeWithHeartbeat(AlarmBridge):
+    """AlarmBridge subclass that injects a WebSocket heartbeat.
+
+    aiohttp sends a PING frame every WS_HEARTBEAT_INTERVAL seconds and closes
+    the connection if no PONG is received, triggering the existing reconnect
+    logic. This catches silent drops (no TCP close frame) that the library's
+    HTTP-based keep-alive misses, e.g. NAT/proxy idle timeouts after ~3 hours.
+    """
+
+    @contextlib.asynccontextmanager
+    async def ws_connect(self, url, **kwargs):
+        if self._websession is None:
+            raise pyadc.NotInitialized(
+                "Cannot initiate WebSocket connection without an existing session."
+            )
+        kwargs.setdefault("heartbeat", WS_HEARTBEAT_INTERVAL)
+        async with self._websession.ws_connect(url, **kwargs) as res:
+            yield res
+
 
 class AlarmHub:
     """Config-entry initiated Alarm Hub."""
@@ -38,7 +61,7 @@ class AlarmHub:
         self.hass: HomeAssistant = hass
         self.config_entry: ConfigEntry = config_entry
 
-        self.api = AlarmBridge(
+        self.api = _AlarmBridgeWithHeartbeat(
             username=config_entry.data[CONF_USERNAME],
             password=config_entry.data[CONF_PASSWORD],
             mfa_token=config_entry.data.get(CONF_MFA_TOKEN),
