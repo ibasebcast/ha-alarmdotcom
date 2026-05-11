@@ -22,6 +22,7 @@ DEBUG_REQ_EVENT = "alarmdotcom_debug_request"
 
 SERVICE_BYPASS_SENSOR = "bypass_sensor"
 SERVICE_UNBYPASS_SENSOR = "unbypass_sensor"
+SERVICE_REFRESH_CONNECTION = "refresh_connection"
 ATTR_RESOURCE_ID = "resource_id"
 ATTR_PARTITION_ID = "partition_id"
 

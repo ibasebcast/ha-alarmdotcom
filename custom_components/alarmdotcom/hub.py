@@ -118,6 +118,24 @@ class AlarmHub:
         self._reconnect_attempts = 0
         return True
 
+    async def async_refresh_connection(self) -> None:
+        """Force a state refresh or reconnect. Callable via the alarmdotcom.refresh_connection service."""
+        if not self.available:
+            log.info("Alarm.com: refresh_connection called while unavailable, triggering reconnect.")
+            await self._async_handle_ws_death()
+            return
+
+        try:
+            log.debug("Alarm.com: refresh_connection — fetching full state.")
+            await self.api.initialize()
+        except pyadc.AuthenticationException:
+            log.warning("Alarm.com: refresh_connection failed — auth error, triggering reconnect.")
+            await self._async_handle_ws_death()
+        except Exception as err:
+            log.warning("Alarm.com: refresh_connection failed: %s. Marking unavailable and reconnecting.", err)
+            self.available = False
+            await self._async_handle_ws_death()
+
     async def _async_refresh_state(self, _now=None) -> None:
         """Periodically poll full state as a safety net against missed websocket events."""
         if not self.available:

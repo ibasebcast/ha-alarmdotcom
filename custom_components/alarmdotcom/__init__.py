@@ -27,6 +27,7 @@ from .const import (
     DOMAIN,
     PLATFORMS,
     SERVICE_BYPASS_SENSOR,
+    SERVICE_REFRESH_CONNECTION,
     SERVICE_UNBYPASS_SENSOR,
     STARTUP_MESSAGE,
 )
@@ -173,6 +174,17 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             schema=service_schema,
         )
 
+    async def handle_refresh_connection_service(call: ServiceCall) -> None:
+        """Handle the alarmdotcom.refresh_connection service call."""
+        await hub.async_refresh_connection()
+
+    if not hass.services.has_service(DOMAIN, SERVICE_REFRESH_CONNECTION):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_REFRESH_CONNECTION,
+            handle_refresh_connection_service,
+        )
+
     LOGGER.info("%s: Finished initializing Alarmdotcom from config entry.", __name__)
     return True
 
@@ -303,5 +315,7 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
             hass.services.async_remove(DOMAIN, SERVICE_BYPASS_SENSOR)
         if hass.services.has_service(DOMAIN, SERVICE_UNBYPASS_SENSOR):
             hass.services.async_remove(DOMAIN, SERVICE_UNBYPASS_SENSOR)
+        if hass.services.has_service(DOMAIN, SERVICE_REFRESH_CONNECTION):
+            hass.services.async_remove(DOMAIN, SERVICE_REFRESH_CONNECTION)
 
     return unload_success
