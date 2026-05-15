@@ -1,5 +1,5 @@
 colorlog==6.10.1
-ruff >= 0.15.12
+ruff >= 0.15.13
 # codespell>=2.4.1
 # yamllint>=1.37.0
 pre-commit>=4.6.0
