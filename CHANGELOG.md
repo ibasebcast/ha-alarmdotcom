@@ -1,3 +1,16 @@
+## 2026.7.6.1b0 (beta)
+
+### Changed
+- **`pyalarmdotcomajax` is now vendored directly in this repo** (`custom_components/alarmdotcom/pyalarmdotcomajax/`) instead of installed via a `git+` dependency in `manifest.json`. This eliminates the `git+` URL that blocked full HACS/hassfest compliance, and removes the need to coordinate version bumps across two separate repos for every fix. The library's own runtime dependencies (`mashumaro`, `phonenumbers`, `pyhumps`, `typer`) are now declared directly in this integration's `manifest.json`.
+- No functional/behavioral changes from `2026.7.6` — this release is purely a packaging change. If you notice anything different at runtime (not just on first install/restart), please open an issue.
+
+### Beta notice
+This is a **pre-release** for testing the vendoring change specifically. Please report:
+- Any errors on first startup after updating (check **Settings → System → Logs** for anything mentioning `alarmdotcom` or `pyalarmdotcomajax`)
+- Anything that previously worked and now doesn't
+
+If you don't need to help test this, wait for the next stable release instead.
+
 ## 2026.7.6
 
 ### Fixed

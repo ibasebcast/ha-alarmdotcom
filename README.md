@@ -193,6 +193,25 @@ Recent improvements include:
 * Fixed entities becoming unavailable
 * Updated device registry usage to comply with upcoming Home Assistant requirements
 * Improved websocket connection reliability
+* Vendored the `pyalarmdotcomajax` API client directly into this repository (see "Architecture Note" below)
+
+---
+
+# Architecture Note: Vendored `pyalarmdotcomajax`
+
+As of `2026.7.6.1b0`, the `pyalarmdotcomajax` Alarm.com API client lives directly in this repository at `custom_components/alarmdotcom/pyalarmdotcomajax/`, instead of being installed separately via a `git+` URL in `manifest.json`.
+
+**Why:** `pyalarmdotcomajax` was previously a separate repository ([ibasebcast/pyalarmdotcomajax](https://github.com/ibasebcast/pyalarmdotcomajax)) that this integration depended on via a `git+` dependency. In practice, the two repos were never really independent — nearly every bug fix required a version bump in `pyalarmdotcomajax`, then a matching dependency-pin bump here, then a release of both. Bugs also frequently got reported in both repos as duplicates, since from a user's perspective it's one integration. On top of the coordination overhead, a `git+` dependency in `manifest.json` is a HACS/hassfest compliance issue, since HACS/hassfest strongly prefer plain PyPI-resolvable requirements.
+
+**What changed:**
+- The library's code (and its git history) now lives under `custom_components/alarmdotcom/pyalarmdotcomajax/`.
+- `manifest.json` no longer has a `git+` requirement; it now lists the library's actual runtime dependencies directly (`mashumaro`, `phonenumbers`, `pyhumps`, `typer`, `beautifulsoup4`), which were previously pulled in transitively.
+- The library's internal code is unchanged and still uses its original absolute imports (e.g. `from pyalarmdotcomajax.controllers.users import ...`). This integration's `__init__.py` adds the vendored directory to `sys.path` before anything imports it, so those imports keep resolving without needing every file in the library rewritten to relative imports.
+- No functional/runtime behavior changes are intended by this move — it's a packaging change only.
+
+**What this means going forward:**
+- Bug reports and contributions related to the Alarm.com API client now belong in this repository, not a separate one.
+- The standalone `pyalarmdotcomajax` repository is no longer the source of truth for this integration; see that repository's own README for its current status.
 
 ---
 
