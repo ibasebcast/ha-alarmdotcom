@@ -1,5 +1,20 @@
 """The alarmdotcom integration."""
 
+import os
+import sys
+
+# pyalarmdotcomajax is vendored directly in this directory (see
+# custom_components/alarmdotcom/pyalarmdotcomajax/) rather than installed as a
+# separate pip package, to avoid the git+ dependency in manifest.json that
+# blocked full HACS/hassfest compliance and required lockstep version bumps
+# across two repos for every fix. Its internal modules still use absolute
+# imports (e.g. `from pyalarmdotcomajax.controllers.users import ...`), so this
+# directory is added to sys.path here, before anything imports
+# pyalarmdotcomajax, so those imports keep resolving unchanged.
+_VENDOR_PATH = os.path.dirname(__file__)
+if _VENDOR_PATH not in sys.path:
+    sys.path.insert(0, _VENDOR_PATH)
+
 import logging
 
 import aiohttp
