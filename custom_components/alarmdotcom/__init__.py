@@ -8,7 +8,7 @@ import voluptuous as vol
 from homeassistant.helpers import config_validation as cv
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import Event, HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError, ServiceValidationError
 
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 
@@ -119,12 +119,16 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
         sensor = hub.api.sensors.get(resource_id)
         if sensor is None:
-            LOGGER.warning("Alarm.com bypass request failed, no such sensor: %s", resource_id)
-            return
+            raise ServiceValidationError(
+                f"No such Alarm.com sensor: {resource_id}. Check that the resource ID is correct "
+                "(see the 'resource_id' attribute on the sensor entity)."
+            )
 
         if not (sensor.attributes.supports_bypass or sensor.attributes.supports_immediate_bypass):
-            LOGGER.warning("Alarm.com sensor does not support bypass: %s", resource_id)
-            return
+            raise ServiceValidationError(
+                f"Alarm.com sensor does not support bypass: {resource_id}. Some panels do not expose "
+                "bypass capabilities via the Alarm.com API for this sensor type."
+            )
 
         resolved_partition_id = str(partition_id) if partition_id else None
         if resolved_partition_id is None:
@@ -137,18 +141,21 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
                 None,
             )
             if matching_partition is None:
-                LOGGER.warning(
-                    "Alarm.com bypass request failed, no partition found for sensor: %s",
-                    resource_id,
+                raise ServiceValidationError(
+                    f"No partition found for sensor: {resource_id}. Provide partition_id explicitly."
                 )
-                return
             resolved_partition_id = matching_partition.id
 
-        await hub.api.partitions.change_sensor_bypass(
-            resolved_partition_id,
-            bypass_ids=[resource_id] if bypass else None,
-            unbypass_ids=[resource_id] if not bypass else None,
-        )
+        try:
+            await hub.api.partitions.change_sensor_bypass(
+                resolved_partition_id,
+                bypass_ids=[resource_id] if bypass else None,
+                unbypass_ids=[resource_id] if not bypass else None,
+            )
+        except Exception as err:
+            raise HomeAssistantError(
+                f"Failed to {'bypass' if bypass else 'unbypass'} Alarm.com sensor {resource_id}: {err}"
+            ) from err
 
     service_schema = vol.Schema(
         {

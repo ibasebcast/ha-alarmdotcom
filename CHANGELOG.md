@@ -1,3 +1,19 @@
+## 2026.7.6
+
+### Fixed
+- **Black screen on iPhone/iPad/Safari with alarm-webrtc-card** (#38): The SDP offer from Alarm.com's WebRTC signaling can carry an H.264 `profile-level-id` that Apple's hardware decoder accepts without error but never actually renders — video stayed black with nothing surfaced anywhere in the pipeline, while Chrome and Android were unaffected. Root cause and initial fix identified by @Raul-7-7; the version shipped here generalizes it further based on mixed results reported in the thread: it matches *any* `profile-level-id` value (not just the one literal value seen on one test camera, which silently did nothing for other camera models), covers macOS Safari in addition to iOS (some users only saw the failure in Safari on Mac, not iOS), and patches both the legacy and Janus/proxy SDP code paths (the original fix only covered the legacy path). The offer is patched to `profile-level-id=42e01f` (Baseline Profile, Level 3.1) before `setRemoteDescription()`, which is the profile most consistently supported by Apple's decoders.
+- **"Smart arming" seems to break the integration / state stops updating until reload** (#42): Not actually related to Smart Arming specifically — any state change could go unreflected in Home Assistant indefinitely (arm/disarm from the Alarm.com app, from HA itself, or from automations), correcting only after a full integration reload. Root cause was in `pyalarmdotcomajax`: the periodic 5-minute "safety net" poll (meant to catch state missed by a dropped WebSocket event) called `fetch_full_state()`, which silently did nothing on every call after the first — no error, no log line. Fixed in `pyalarmdotcomajax` 2026.7.6 with a new `refresh_all_resources()` method that actually re-fetches and re-publishes state every time it runs. Bumped dependency pin accordingly.
+
+## 2026.7.5
+
+### Fixed
+- **OTP "Failed to Connect" still occurring after 2026.5.3 (reopened #21)**: The 2026.5.3 fix in `pyalarmdotcomajax` turned out to be a regression, not a fix — it checked for the MFA cookie before `trustTwoFactorDevice` ran, but Alarm.com reliably sets that cookie on the *trust* response, not the verify response. Since HA's config flow always provides a device name, this made the failure happen on every login. There was also a second, independent bug: aiohttp only exposes cookies from the last response in a redirect chain, so the cookie could be invisible even when present in the redirect history. Both fixed upstream in `pyalarmdotcomajax` 2026.7.5 (contributed by @jsight, confirmed independently by @lwimble). Bumped dependency pin accordingly.
+- **Thermostat still shows only one temperature bar in auto mode** (#22): The 2026.5.3 fix corrected `target_temperature_high_fn`/`target_temperature_low_fn`, but `target_temperature_fn` (the single-setpoint attribute) was still inferring and returning a heat or cool setpoint while in `AUTO` state. Home Assistant's climate entity model treats `temperature` and the `target_temperature_high`/`target_temperature_low` pair as mutually exclusive — populating both at once caused the frontend to keep falling back to a single-setpoint control instead of the dual-bar range control. Fix: `target_temperature_fn` now returns `None` while in `AUTO` state, matching the high/low callbacks.
+- **Bypassing sensors, resource ID undiscoverable** (#14): Bypass/unbypass services worked but required finding the Alarm.com resource ID via a Developer Tools -> Template lookup. The sensor entity now exposes `resource_id` as a plain attribute, and the bypass/unbypass service handlers now raise `ServiceValidationError`/`HomeAssistantError` instead of silently logging a warning and returning on failure.
+
+### Dependency
+- Updated `pyalarmdotcomajax` to `2026.7.5`, which fixes the OTP device-trust ordering regression and MFA/AFG cookie capture across redirects.
+
 ## 2026.5.3
 
 ### Fixed

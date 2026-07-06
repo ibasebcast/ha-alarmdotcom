@@ -1,4 +1,4 @@
-console.error("ALARM WEBRTC CARD LOADED v2023.3.30");
+console.error("ALARM WEBRTC CARD LOADED v2026.7.6");
 
 class AlarmWebRTCCard extends HTMLElement {
   constructor() {
@@ -21,6 +21,37 @@ class AlarmWebRTCCard extends HTMLElement {
 
   _log(...args) {
     console.error(`[AlarmWebRTC ${this._entityId || "unknown"}]`, ...args);
+  }
+
+  // Several Alarm.com camera models offer H.264 at a profile-level-id (e.g. 4d4028,
+  // Main Profile Level 4.0) that iOS/Safari's hardware decoder either rejects outright
+  // or accepts without ever actually rendering frames, producing a black video element
+  // with no error anywhere in the pipeline. Chrome/Android are unaffected. Forcing the
+  // offer to 42e01f (Constrained Baseline Profile, Level 3.1) is the profile most
+  // consistently supported across Apple's decoders and resolves this for the majority
+  // of camera models. See #38.
+  //
+  // Detection intentionally covers Safari on both iOS and macOS, not just iOS: some
+  // users only saw the black screen on macOS Safari while Chrome on the same Mac worked
+  // fine, so gating on iOS alone misses real cases.
+  _isAppleClient() {
+    const ua = navigator.userAgent.toLowerCase();
+    const isIOS =
+      /ipad|iphone|ipod/.test(ua) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    const isSafari = ua.includes("safari") && !ua.includes("chrome") && !ua.includes("chromium");
+    const isMac = navigator.platform.toLowerCase().includes("mac");
+    return isIOS || isSafari || isMac;
+  }
+
+  // Match any profile-level-id, not just the specific 4d4028 value one camera model was
+  // observed sending. Different Alarm.com camera models encode at different profiles, and
+  // matching only the literal value seen on one test camera silently does nothing for
+  // every other model - matching the mixed results reported in #38, where the original
+  // fix worked for some users' cameras but not others'.
+  _patchAppleOfferSdp(sdp) {
+    if (!sdp) return sdp;
+    return sdp.replace(/profile-level-id=[0-9a-fA-F]{6}/g, "profile-level-id=42e01f");
   }
 
   setConfig(config) {
@@ -348,7 +379,17 @@ class AlarmWebRTCCard extends HTMLElement {
       }
 
       if (data.sdp?.type === "offer") {
-        await pc.setRemoteDescription(data.sdp);
+        let remoteOffer = data.sdp;
+
+        if (this._isAppleClient() && remoteOffer?.sdp) {
+          this._log("Patching legacy offer SDP for Apple client");
+          remoteOffer = {
+            type: remoteOffer.type,
+            sdp: this._patchAppleOfferSdp(remoteOffer.sdp),
+          };
+        }
+
+        await pc.setRemoteDescription(remoteOffer);
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
@@ -663,7 +704,14 @@ class AlarmWebRTCCard extends HTMLElement {
 
       if (msg.jsep) {
         this._log("Janus JSEP received");
-        await pc.setRemoteDescription(msg.jsep);
+
+        let remoteJsep = msg.jsep;
+        if (this._isAppleClient() && remoteJsep?.sdp) {
+          this._log("Patching Janus offer SDP for Apple client");
+          remoteJsep = { type: remoteJsep.type, sdp: this._patchAppleOfferSdp(remoteJsep.sdp) };
+        }
+
+        await pc.setRemoteDescription(remoteJsep);
 
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);

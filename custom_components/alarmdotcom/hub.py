@@ -144,7 +144,13 @@ class AlarmHub:
         """Periodically poll full state as a safety net against missed websocket events."""
         try:
             log.debug("Alarm.com: performing periodic full state refresh.")
-            await self.api.fetch_full_state()
+            # NOTE: fetch_full_state() routes through each resource controller's initialize(),
+            # which no-ops after the very first call (see pyalarmdotcomajax#22 discussion / hub
+            # bug found while investigating ha-alarmdotcom#42). refresh_all_resources() instead
+            # calls each controller's _refresh() directly, the same mechanism used when the
+            # WebSocket reconnects, so it actually re-fetches and re-publishes state every time
+            # this runs instead of being a silent no-op.
+            await self.api.refresh_all_resources()
         except pyadc.AuthenticationException:
             log.warning("Alarm.com: periodic refresh failed — auth error. Will attempt reconnect.")
             await self._async_handle_ws_death()

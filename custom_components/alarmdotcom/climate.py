@@ -189,26 +189,30 @@ def hvac_modes_fn(controller: pyadc.ThermostatController, thermostat_id: str) ->
 
 @callback
 def target_temperature_fn(controller: pyadc.ThermostatController, thermostat_id: str) -> float | None:
-    """Return the target heat and cool temperatures."""
+    """Return the target heat and cool temperatures.
+
+    Must stay None while in AUTO mode: Home Assistant's climate entity model
+    treats `temperature` and the `target_temperature_high`/`target_temperature_low`
+    pair as mutually exclusive. Populating both at once (as this previously did by
+    inferring a single setpoint from the AUTO state) causes the frontend to fall
+    back to rendering a single setpoint control instead of the dual-setpoint range
+    control. See #22.
+    """
     resource = controller.get(thermostat_id)
-    if resource is None or resource.attributes.state == pyadc.thermostat.ThermostatState.OFF:
+    if resource is None or resource.attributes.state in [
+        pyadc.thermostat.ThermostatState.OFF,
+        pyadc.thermostat.ThermostatState.AUTO,
+    ]:
         return None
 
     # If the temperature is in HEAT mode, return the heat setpoint.
     # If it's in COOL mode, return the cool setpoint.
-    # If it's in AUTO mode, use inferred state to determine which setpoint to return.
     if resource.attributes.state in [
         pyadc.thermostat.ThermostatState.HEAT,
         pyadc.thermostat.ThermostatState.AUXHEAT,
-    ] or (
-        resource.attributes.state == pyadc.thermostat.ThermostatState.AUTO
-        and resource.attributes.inferred_state == pyadc.thermostat.ThermostatState.HEAT
-    ):
+    ]:
         return resource.attributes.heat_setpoint
-    if resource.attributes.state == pyadc.thermostat.ThermostatState.COOL or (
-        resource.attributes.state == pyadc.thermostat.ThermostatState.AUTO
-        and resource.attributes.inferred_state == pyadc.thermostat.ThermostatState.COOL
-    ):
+    if resource.attributes.state == pyadc.thermostat.ThermostatState.COOL:
         return resource.attributes.cool_setpoint
 
     return None

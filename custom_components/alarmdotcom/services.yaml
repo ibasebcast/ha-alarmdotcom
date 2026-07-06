@@ -4,7 +4,10 @@ bypass_sensor:
   fields:
     resource_id:
       name: Resource ID
-      description: Alarm.com resource ID for the sensor to bypass.
+      description: >-
+        Alarm.com resource ID for the sensor to bypass. Find this in the
+        "resource_id" attribute on the sensor's entity (Settings -> Devices &
+        Services -> Alarm.com -> your device -> the sensor entity -> Attributes).
       required: true
       example: "110353471-11"
       selector:
@@ -22,7 +25,10 @@ unbypass_sensor:
   fields:
     resource_id:
       name: Resource ID
-      description: Alarm.com resource ID for the sensor to unbypass.
+      description: >-
+        Alarm.com resource ID for the sensor to unbypass. Find this in the
+        "resource_id" attribute on the sensor's entity (Settings -> Devices &
+        Services -> Alarm.com -> your device -> the sensor entity -> Attributes).
       required: true
       example: "110353471-11"
       selector:

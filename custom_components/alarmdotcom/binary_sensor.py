@@ -234,6 +234,18 @@ class AdcBinarySensorEntityDescription(
     device_class_fn: Callable[[AlarmHub, str], BinarySensorDeviceClass | None]
     """Return the device class for the binary sensor."""
 
+@callback
+def sensor_extra_attrib_fn(device: pyadc.base.AdcDeviceResource) -> dict[str, str]:
+    """Expose the Alarm.com resource ID as an entity attribute.
+
+    This is the identifier required by the alarmdotcom.bypass_sensor /
+    alarmdotcom.unbypass_sensor services. Without this, finding it requires a
+    Developer Tools -> Template lookup against the device's `identifiers`
+    (see #14) -- surfacing it directly on the entity avoids that step.
+    """
+
+    return {"resource_id": device.id}
+
 ENTITY_DESCRIPTIONS: list[AdcEntityDescription] = [
     AdcBinarySensorEntityDescription[pyadc.sensor.Sensor, pyadc.SensorController](
         key="sensor",
@@ -241,6 +253,7 @@ ENTITY_DESCRIPTIONS: list[AdcEntityDescription] = [
         is_on_fn=is_on_fn,
         device_class_fn=device_class_fn,
         supported_fn=supported_fn,
+        extra_attrib_fn=sensor_extra_attrib_fn,
     ),
     AdcBinarySensorEntityDescription[pyadc.sensor.Sensor, pyadc.SensorController](
         key="is_bypassed",
@@ -250,6 +263,7 @@ ENTITY_DESCRIPTIONS: list[AdcEntityDescription] = [
         entity_category=EntityCategory.DIAGNOSTIC,
         device_class_fn=lambda hub, resource_id: None,
         is_on_fn=bypassed_is_on_fn,
+        extra_attrib_fn=sensor_extra_attrib_fn,
     ),
     AdcBinarySensorEntityDescription[pyadc.base.AdcDeviceResource, pyadc.BaseController](
         key="malfunction",
