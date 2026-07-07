@@ -9,18 +9,19 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 
 @pytest.fixture(autouse=True)
 def auto_enable_custom_integrations(enable_custom_integrations):
-    """Enable custom integrations for every test in this suite.
+    """
+    Enable custom integrations for every test in this suite.
 
     Without this, Home Assistant's test harness ignores custom_components
     entirely (it only loads core integrations by default), so config flow
     and setup tests would silently no-op instead of exercising real code.
     """
-    yield
+    return
 
 
 @pytest.fixture
 def mock_system():
-    """A minimal mock of the active Alarm.com system returned after login."""
+    """Build a minimal mock of the active Alarm.com system returned after login."""
     system = MagicMock()
     system.id = "12345"
     system.name = "Test System"
@@ -29,7 +30,8 @@ def mock_system():
 
 @pytest.fixture
 def mock_bridge(mock_system):
-    """A mock AlarmBridge representing a successful, no-OTP login.
+    """
+    Build a mock AlarmBridge representing a successful, no-OTP login.
 
     login() succeeds without raising, fetch_full_state() succeeds, and
     active_system / auth_controller.user_email are populated so
@@ -49,7 +51,8 @@ def mock_bridge(mock_system):
 
 @pytest.fixture
 def mock_bridge_class(mock_bridge):
-    """Patch AlarmBridge, as referenced in config_flow.py, to return mock_bridge.
+    """
+    Patch AlarmBridge, as referenced in config_flow.py, to return mock_bridge.
 
     Patched where config_flow.py looks it up (its own `pyadc` alias), not
     where AlarmBridge is originally defined - this is the standard
@@ -64,7 +67,8 @@ def mock_bridge_class(mock_bridge):
 
 @pytest.fixture
 def mock_setup_entry():
-    """Prevent real integration setup (hub.py creates its own real AlarmBridge).
+    """
+    Prevent real integration setup (hub.py creates its own real AlarmBridge).
 
     Config flow tests should verify what the flow itself produces (form,
     errors, the created entry's data/unique_id) - not exercise the full

@@ -1,4 +1,5 @@
-"""Tests for the alarmdotcom config flow.
+"""
+Tests for the alarmdotcom config flow.
 
 Covers the Bronze quality-scale "config-flow-test-coverage" requirement:
 the initial login step, all three login failure modes shown to the user
@@ -14,6 +15,7 @@ import pytest
 from homeassistant import config_entries, data_entry_flow
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.alarmdotcom._pyalarmdotcomajax as pyadc
 from custom_components.alarmdotcom.const import (
@@ -82,7 +84,8 @@ async def test_full_flow_success_no_otp(
 async def test_login_failure_modes(
     hass: HomeAssistant, mock_bridge_class, mock_bridge, login_side_effect, expected_error
 ) -> None:
-    """Every distinct login failure should surface its own specific error to the user.
+    """
+    Every distinct login failure should surface its own specific error to the user.
 
     This matters because #21 (OTP "Failed to Connect") existed specifically
     because a different failure was being reported as cannot_connect -
@@ -149,7 +152,8 @@ async def test_otp_flow_with_method_selection(
 async def test_otp_flow_auto_skips_method_selection_for_app_only(
     hass: HomeAssistant, mock_bridge_class, mock_bridge
 ) -> None:
-    """If authenticator-app is the ONLY enabled method, skip straight to the OTP prompt.
+    """
+    If authenticator-app is the ONLY enabled method, skip straight to the OTP prompt.
 
     There's nothing to request for the app method (no SMS/email to trigger),
     so making the user pick from a list of one option is pure friction.
@@ -192,8 +196,6 @@ async def test_invalid_otp_code_shows_error(
 
 async def test_duplicate_system_aborts(hass: HomeAssistant, mock_bridge_class, mock_bridge) -> None:
     """Logging into a system that's already configured should abort, not duplicate."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
     MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_CREDS).add_to_hass(hass)
 
     result = await _start_user_flow(hass)
@@ -207,8 +209,6 @@ async def test_duplicate_system_aborts(hass: HomeAssistant, mock_bridge_class, m
 
 async def test_options_flow_full_walkthrough(hass: HomeAssistant) -> None:
     """The options flow's two steps (arm code, then arm mode profiles) both work."""
-    from pytest_homeassistant_custom_component.common import MockConfigEntry
-
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_CREDS)
     entry.add_to_hass(hass)
 

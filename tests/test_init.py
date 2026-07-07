@@ -1,4 +1,5 @@
-"""Tests for alarmdotcom's __init__.py: entry setup, auth-failure handling, and unload.
+"""
+Tests for alarmdotcom's __init__.py: entry setup, auth-failure handling, and unload.
 
 Contributes toward the Silver quality-scale "test-coverage" requirement.
 This isn't full coverage of every code path in __init__.py (the camera
@@ -21,7 +22,7 @@ VALID_DATA = {"username": "test@example.com", "password": "hunter2"}
 
 @pytest.fixture
 def mock_hub():
-    """A mock AlarmHub that initializes successfully with no real network calls."""
+    """Build a mock AlarmHub that initializes successfully with no real network calls."""
     hub = MagicMock()
     hub.initialize = AsyncMock(return_value=True)
     hub.close = AsyncMock(return_value=True)
@@ -31,7 +32,7 @@ def mock_hub():
 
 @pytest.fixture
 def mock_camera_session():
-    """A mock camera session that skips real login."""
+    """Build a mock camera session that skips real login."""
     session = MagicMock()
     session._owns_session = False
     session.ajax_key = "mock-ajax-key"
@@ -69,7 +70,8 @@ async def test_setup_entry_success(
 async def test_setup_entry_auth_failure_triggers_reauth(
     hass: HomeAssistant, mock_hub
 ) -> None:
-    """If the hub can't authenticate, the entry should end up needing reauth.
+    """
+    If the hub can't authenticate, the entry should end up needing reauth.
 
     hub.initialize() raising an AuthenticationException should map to
     ConfigEntryAuthFailed, which HA surfaces as SETUP_ERROR with a reauth
@@ -91,7 +93,8 @@ async def test_setup_entry_auth_failure_triggers_reauth(
 async def test_setup_entry_connection_failure_retries(
     hass: HomeAssistant, mock_hub
 ) -> None:
-    """A transient connection failure should be retryable, not a hard failure.
+    """
+    A transient connection failure should be retryable, not a hard failure.
 
     This maps to ConfigEntryNotReady, which HA retries automatically -
     important for e.g. Alarm.com being briefly unreachable at HA startup,
