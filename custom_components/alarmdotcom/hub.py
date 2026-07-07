@@ -5,14 +5,14 @@ import contextlib
 import logging
 from datetime import timedelta
 
-import pyalarmdotcomajax as pyadc
+import _pyalarmdotcomajax as pyadc
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.event import async_track_time_interval
-from pyalarmdotcomajax import AlarmBridge
+from _pyalarmdotcomajax import AlarmBridge
 
 from .const import (
     CONF_MFA_TOKEN,

@@ -8,7 +8,7 @@ from collections.abc import Callable, Coroutine, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic
 
-import pyalarmdotcomajax as pyadc
+import _pyalarmdotcomajax as pyadc
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelEntityDescription,
@@ -21,7 +21,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import InvalidStateError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
-from pyalarmdotcomajax.controllers.partitions import PartitionController
+from _pyalarmdotcomajax.controllers.partitions import PartitionController
 
 from .const import (
     CONF_ARM_AWAY,

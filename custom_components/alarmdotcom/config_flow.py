@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import aiohttp
 import asyncio
-import pyalarmdotcomajax as pyadc
+import _pyalarmdotcomajax as pyadc
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult

@@ -11,7 +11,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 if TYPE_CHECKING:
-    from pyalarmdotcomajax import AlarmBridge
+    from _pyalarmdotcomajax import AlarmBridge
 
 URL_BASE = "https://www.alarm.com/"
 API_URL_BASE = URL_BASE + "web/api/"
@@ -33,6 +33,73 @@ PREVIOUSPAGE_FIELD = "__PREVIOUSPAGE"
 TWO_FACTOR_PATH = "engines/twoFactorAuthentication/twoFactorAuthentications"
 
 _LOGGER = logging.getLogger(__name__)
+# Raw camera stream responses contain live, unexpired session credentials
+# (janusToken, cameraAuthToken, signallingServerToken, TURN credentials) and
+# are extremely verbose (fire on every WebRTC token refresh, roughly every
+# 20-30 seconds per camera). Logged through a separate child logger so they
+# don't show up just because someone enabled debug logging for
+# custom_components.alarmdotcom generally - see get_stream_info() below.
+_RAW_RESPONSE_LOGGER = logging.getLogger(f"{__name__}.raw_responses")
+# Default this child logger to WARNING so it does NOT inherit DEBUG just
+# because someone enabled Home Assistant's standard "Enable debug logging"
+# toggle for the integration (which sets custom_components.alarmdotcom to
+# DEBUG, and child loggers inherit their effective level from the nearest
+# ancestor with an explicit level). Only set the default if nothing more
+# specific has already been configured for this exact logger name (e.g. via
+# configuration.yaml's `logger:` integration) - checking .level (not
+# .getEffectiveLevel()) distinguishes "explicitly set on this logger" from
+# "inherited," so this never overwrites a user's own explicit choice
+# regardless of which runs first at startup.
+if _RAW_RESPONSE_LOGGER.level == logging.NOTSET:
+    _RAW_RESPONSE_LOGGER.setLevel(logging.WARNING)
+
+_REDACTED = "[REDACTED]"
+_SENSITIVE_ATTRIBUTE_KEYS = {
+    "proxyUrl",
+    "janusToken",
+    "signallingServerToken",
+    "cameraAuthToken",
+}
+
+
+def _redact_stream_info(body: dict) -> dict:
+    """Return a deep copy of a get_stream_info response with credentials masked.
+
+    Safe to log at normal debug level. Masks the known sensitive attribute
+    keys plus iceServers TURN credentials/usernames (which are themselves
+    time-limited but still live access credentials while valid).
+    """
+
+    redacted = json.loads(json.dumps(body))  # cheap deep copy via round-trip
+
+    def _redact_attributes(attributes: dict) -> None:
+        for key in _SENSITIVE_ATTRIBUTE_KEYS:
+            if key in attributes:
+                attributes[key] = _REDACTED
+        ice_servers_s = attributes.get("iceServers")
+        if ice_servers_s:
+            try:
+                ice_servers = json.loads(ice_servers_s)
+                for server in ice_servers:
+                    if "credential" in server:
+                        server["credential"] = _REDACTED
+                    if "username" in server:
+                        server["username"] = _REDACTED
+                attributes["iceServers"] = json.dumps(ice_servers)
+            except Exception:
+                attributes["iceServers"] = _REDACTED
+
+    data_attrs = redacted.get("data", {}).get("attributes")
+    if isinstance(data_attrs, dict):
+        _redact_attributes(data_attrs)
+
+    for item in redacted.get("included", []):
+        item_attrs = item.get("attributes")
+        if isinstance(item_attrs, dict):
+            _redact_attributes(item_attrs)
+
+    return redacted
+
 
 
 class OtpType(Enum):
@@ -362,11 +429,26 @@ class AlarmCameraSession:
         )
         body = await resp.json()
 
-        _LOGGER.debug(
-            "get_stream_info raw response for camera %s: %s",
-            camera_id,
-            body,
-        )
+        # Off by default, regardless of the main camera_api logger's level -
+        # this fires on every WebRTC token refresh (roughly every 20-30
+        # seconds per camera) and the raw response contains live session
+        # credentials. Enable via configuration.yaml:
+        #   logger:
+        #     logs:
+        #       custom_components.alarmdotcom.camera_api.raw_responses: debug   # full, unredacted
+        #       custom_components.alarmdotcom.camera_api.raw_responses: info    # redacted summary
+        if _RAW_RESPONSE_LOGGER.isEnabledFor(logging.DEBUG):
+            _RAW_RESPONSE_LOGGER.debug(
+                "get_stream_info raw response for camera %s: %s",
+                camera_id,
+                body,
+            )
+        elif _RAW_RESPONSE_LOGGER.isEnabledFor(logging.INFO):
+            _RAW_RESPONSE_LOGGER.info(
+                "get_stream_info response for camera %s (redacted): %s",
+                camera_id,
+                _redact_stream_info(body),
+            )
 
         top_attrs = body.get("data", {}).get("attributes", {})
         ice_servers_s = top_attrs.get("iceServers")

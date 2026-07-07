@@ -3,14 +3,27 @@
 import os
 import sys
 
-# pyalarmdotcomajax is vendored directly in this directory (see
-# custom_components/alarmdotcom/pyalarmdotcomajax/) rather than installed as a
-# separate pip package, to avoid the git+ dependency in manifest.json that
-# blocked full HACS/hassfest compliance and required lockstep version bumps
-# across two repos for every fix. Its internal modules still use absolute
-# imports (e.g. `from pyalarmdotcomajax.controllers.users import ...`), so this
-# directory is added to sys.path here, before anything imports
-# pyalarmdotcomajax, so those imports keep resolving unchanged.
+# pyalarmdotcomajax is vendored directly in this directory, as the
+# _pyalarmdotcomajax package (custom_components/alarmdotcom/_pyalarmdotcomajax/),
+# rather than installed as a separate pip package. This avoids the git+
+# dependency in manifest.json that blocked full HACS/hassfest compliance and
+# required lockstep version bumps across two repos for every fix.
+#
+# It's imported and referenced everywhere as _pyalarmdotcomajax (leading
+# underscore), not pyalarmdotcomajax, deliberately: no legitimate PyPI package
+# can use a leading underscore, so this name can never collide with a stray
+# pip-installed pyalarmdotcomajax left over from before this vendoring change
+# (or from anything else). A collision like that previously meant a missing
+# or broken vendored copy could silently fall back to a stale pip-installed
+# copy instead of failing - this rename makes that fall-back impossible: if
+# _pyalarmdotcomajax isn't on sys.path, importing it can only ever raise
+# ModuleNotFoundError, never silently resolve to the wrong thing.
+#
+# The vendored package's internal modules still use absolute imports (e.g.
+# `from _pyalarmdotcomajax.controllers.users import ...`), so this directory
+# is added to sys.path here, before anything imports _pyalarmdotcomajax, so
+# those imports resolve without needing every internal file rewritten to
+# relative imports.
 _VENDOR_PATH = os.path.dirname(__file__)
 if _VENDOR_PATH not in sys.path:
     sys.path.insert(0, _VENDOR_PATH)
@@ -18,7 +31,7 @@ if _VENDOR_PATH not in sys.path:
 import logging
 
 import aiohttp
-import pyalarmdotcomajax as pyadc
+import _pyalarmdotcomajax as pyadc
 import voluptuous as vol
 from homeassistant.helpers import config_validation as cv
 from homeassistant.config_entries import ConfigEntry
@@ -56,6 +69,23 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     LOGGER.info("%s: Initializing Alarmdotcom from config entry.", __name__)
     LOGGER.info(STARTUP_MESSAGE)
+
+    _pyadc_version = getattr(pyadc, "__version__", "unknown")
+    _expected_pyadc_path = os.path.join(_VENDOR_PATH, "_pyalarmdotcomajax", "__init__.py")
+    _resolved_pyadc_path = os.path.normcase(os.path.abspath(pyadc.__file__))
+    if _resolved_pyadc_path != os.path.normcase(os.path.abspath(_expected_pyadc_path)):
+        LOGGER.warning(
+            "pyalarmdotcomajax %s loaded from an UNEXPECTED location: %s "
+            "(expected the bundled copy at: %s). This usually means a leftover "
+            "pip-installed pyalarmdotcomajax from before this integration vendored "
+            "it directly (harmless on its own, but worth cleaning up with "
+            "'pip uninstall pyalarmdotcomajax' - see the CHANGELOG for details).",
+            _pyadc_version,
+            pyadc.__file__,
+            _expected_pyadc_path,
+        )
+    else:
+        LOGGER.info("pyalarmdotcomajax %s loaded from the bundled copy: %s", _pyadc_version, pyadc.__file__)
 
     hub = AlarmHub(hass, config_entry)
 

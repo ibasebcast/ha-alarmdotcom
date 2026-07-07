@@ -1,3 +1,20 @@
+## 2026.7.7.1b0 (beta)
+
+### Changed
+- **Vendored `pyalarmdotcomajax` renamed to `_pyalarmdotcomajax`** (`custom_components/alarmdotcom/_pyalarmdotcomajax/`), and every import updated to match. This is a deliberate, collision-proof name: no legitimate PyPI package can use a leading underscore, so this can never again share a name with any pip-installed package - including the leftover pip-installed `pyalarmdotcomajax` some of you will have from before `2026.7.6.1b0`. Previously, if the vendored copy were ever missing or misconfigured, Python could silently fall back to a stale pip-installed copy of the same name instead of failing - this is exactly what surfaced during beta testing of `2026.7.6.1b0`, where a leftover `2026.5.3` copy silently satisfied the import when the vendored folder was renamed away for testing. With the rename, that fallback is no longer possible: if `_pyalarmdotcomajax` isn't on the path, importing it can only raise `ModuleNotFoundError`, never silently resolve to the wrong thing.
+- No functional/behavioral changes beyond the rename itself and the fixes below, carried over from unreleased work on top of `2026.7.6.1b0`:
+  - Startup now logs which copy of the library loaded (version + file path), and warns (rather than silently continuing) if it's not the expected bundled copy.
+  - Camera `get_stream_info` raw-response logging - which included live, unexpired session credentials (`janusToken`, `cameraAuthToken`, `signallingServerToken`, TURN credentials) and fired every 20-30 seconds per camera - is now off by default regardless of the integration's general debug-logging state. Opt in via `configuration.yaml`:
+    ```yaml
+    logger:
+      logs:
+        custom_components.alarmdotcom.camera_api.raw_responses: info    # redacted summary
+        custom_components.alarmdotcom.camera_api.raw_responses: debug   # full raw response
+    ```
+
+### Beta notice
+Continuing beta testing of the vendoring change from `2026.7.6.1b0`. Please report any errors on first startup (check **Settings → System → Logs** for anything mentioning `alarmdotcom` or `_pyalarmdotcomajax`) or anything that previously worked and now doesn't.
+
 ## 2026.7.6.1b0 (beta)
 
 ### Changed
@@ -10,6 +27,11 @@ This is a **pre-release** for testing the vendoring change specifically. Please 
 - Anything that previously worked and now doesn't
 
 If you don't need to help test this, wait for the next stable release instead.
+
+### Known issue: leftover pip-installed `pyalarmdotcomajax`
+Updating to this release does **not** remove the previous `pyalarmdotcomajax` package that was installed via the old `git+` dependency — Home Assistant's dependency installer only adds packages a `manifest.json` currently requires, it doesn't remove ones that used to be required. This leftover is harmless (the integration's own `sys.path` handling ensures the bundled copy is what actually loads), but if you want to confirm this or clean it up:
+- On startup, check **Settings → System → Logs** for a line like `pyalarmdotcomajax <version> loaded from the bundled copy: ...`. If you instead see a **warning** saying it loaded from an unexpected location, something's wrong — please open an issue with that log line.
+- To remove the leftover package (optional, cosmetic only): `pip uninstall pyalarmdotcomajax` from a shell with access to Home Assistant's Python environment.
 
 ## 2026.7.6
 
