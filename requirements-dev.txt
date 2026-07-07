@@ -8,3 +8,10 @@ wheel>=0.47.0
 pathspec >= 1.1.1
 gitpython >= 3.1.50
 homeassistant >= 2026.7.1
+pytest >= 8.3.0
+pytest-asyncio >= 0.24.0
+# pytest-homeassistant-custom-component's version tracks Home Assistant core
+# closely - when bumping the homeassistant pin above, check this package's
+# releases for a matching version, or tests may break due to API drift
+# between the pinned core version and what this test helper expects.
+pytest-homeassistant-custom-component >= 0.13.200

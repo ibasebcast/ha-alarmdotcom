@@ -292,6 +292,12 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             )
             return self.async_abort(reason="reauth_successful")
 
+        # Only enforced for a brand-new entry, not reauth: during reauth the
+        # unique_id is expected to match the entry currently being
+        # reauthenticated (handled above), so aborting here would incorrectly
+        # block a legitimate reauth.
+        self._abort_if_unique_id_configured()
+
         return self.async_create_entry(
             title=self._config_title,
             data=self.config,

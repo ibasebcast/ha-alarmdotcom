@@ -1,3 +1,14 @@
+## 2026.7.7.2b0 (beta)
+
+### Fixed
+- **Duplicate config entries were not prevented** (found while adding test coverage, not previously reported): `config_flow.py` set the unique ID for a system via `async_set_unique_id()`, but never actually called `_abort_if_unique_id_configured()` afterward. In practice this meant nothing stopped the same Alarm.com system from being added as a second, separate config entry - the unique ID was being set but never enforced. Fixed: adding a system that's already configured now correctly aborts with `already_configured`, the same as any other Home Assistant integration. Does not affect reauth (a matching unique ID during reauth is expected and still works normally).
+
+### Added
+- **First real automated test suite** (`tests/`), wired into CI via `.github/workflows/tests.yaml`:
+  - `test_config_flow.py` - the initial login step, all three login failure modes (`cannot_connect`/`invalid_auth`/`unknown`), the `must_enable_2fa` abort, OTP method selection (including the auto-skip-when-only-authenticator-app-is-enabled case), OTP submission (including invalid code), the duplicate-system abort (see Fixed above), and both steps of the options flow.
+  - `test_init.py` - the setup/unload lifecycle: successful setup, auth failure correctly triggering reauth, connection failure correctly triggering a retry (not a hard failure), and unload correctly closing both the hub and the camera session.
+  - 17 tests, currently covering config flow comprehensively and the core setup/teardown lifecycle. Platform files (climate, sensors, camera, etc.), the bypass/unbypass services, and hub.py's websocket reconnect logic aren't covered yet.
+
 ## 2026.7.7.1b0 (beta)
 
 ### Changed

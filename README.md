@@ -194,6 +194,7 @@ Recent improvements include:
 * Updated device registry usage to comply with upcoming Home Assistant requirements
 * Improved websocket connection reliability
 * Vendored the `pyalarmdotcomajax` API client directly into this repository (see "Architecture Note" below)
+* Added a real automated test suite (config flow, setup/unload lifecycle), run in CI on every push and pull request
 
 ---
 
