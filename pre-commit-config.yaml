@@ -15,6 +15,7 @@ repos:
           - id: mypy
             name: MyPy
             description: Run static type checking
+            exclude: ^tests/
             args:
                 - --config-file
                 - pyproject.toml
