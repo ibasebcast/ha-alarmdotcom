@@ -6,7 +6,6 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
-
 from _pyalarmdotcomajax.adc.util import Param_Id, cli_action
 from _pyalarmdotcomajax.const import ATTR_DESIRED_STATE, ATTR_STATE
 from _pyalarmdotcomajax.controllers.base import BaseController, device_controller

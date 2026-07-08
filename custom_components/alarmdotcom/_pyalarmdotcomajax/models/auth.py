@@ -3,13 +3,12 @@
 from dataclasses import dataclass, field
 from enum import Enum
 
-from mashumaro import field_options
-
 from _pyalarmdotcomajax.models.base import (
     AdcResource,
     AdcResourceAttributes,
     ResourceType,
 )
+from mashumaro import field_options
 
 
 class OtpType(Enum):

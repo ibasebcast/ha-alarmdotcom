@@ -1,11 +1,11 @@
 """Config flow to configure Alarmdotcom."""
 
-import logging
-from typing import TYPE_CHECKING, Any, Literal
-
-import aiohttp
 import asyncio
+import logging
+from typing import Any, Literal
+
 import _pyalarmdotcomajax as pyadc
+import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
@@ -35,9 +35,6 @@ from .const import (
     CONF_REMOVE_ARM_CODE,
     DOMAIN,
 )
-
-if TYPE_CHECKING:
-    from .hub import AlarmHub
 
 LOGGER = logging.getLogger(__name__)
 LegacyArmingOptions = Literal["home", "away", "true", "false"]

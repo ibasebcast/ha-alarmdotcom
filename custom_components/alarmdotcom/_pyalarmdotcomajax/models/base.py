@@ -8,10 +8,9 @@ from dataclasses import dataclass, field
 from enum import Enum, StrEnum
 from typing import ClassVar, Generic, TypeVar
 
-from mashumaro import field_options
-
 from _pyalarmdotcomajax.models.jsonapi import JsonApiBaseElement, Resource
 from _pyalarmdotcomajax.util import get_related_entity_id_by_key
+from mashumaro import field_options
 
 log = logging.getLogger(__name__)
 

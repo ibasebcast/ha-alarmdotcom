@@ -1,6 +1,5 @@
 """Alarm.com controller for garage doors."""
 
-# ruff: noqa: UP007
 
 import logging
 from enum import StrEnum

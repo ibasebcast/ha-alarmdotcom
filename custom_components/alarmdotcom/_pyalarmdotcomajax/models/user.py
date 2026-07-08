@@ -3,14 +3,13 @@
 import logging
 from dataclasses import dataclass, field
 
-from mashumaro import field_options
-
 from _pyalarmdotcomajax.models.base import (
     AdcResource,
     AdcResourceAttributes,
     ResourceType,
 )
 from _pyalarmdotcomajax.util import get_related_entity_id_by_key
+from mashumaro import field_options
 
 #
 # API IDENTITY RESPONSE

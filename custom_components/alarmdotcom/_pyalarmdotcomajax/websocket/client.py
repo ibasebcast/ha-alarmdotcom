@@ -12,7 +12,6 @@ from enum import Enum
 from typing import TYPE_CHECKING, Literal, NoReturn
 
 import aiohttp
-
 from _pyalarmdotcomajax.const import API_URL_BASE
 from _pyalarmdotcomajax.events import EventBrokerMessage, EventBrokerTopic
 from _pyalarmdotcomajax.exceptions import (

@@ -8,13 +8,12 @@ from dataclasses import asdict
 from enum import Enum
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
+from _pyalarmdotcomajax.models.jsonapi import Resource, ResourceIdentifier
 from rich.columns import Columns
 from rich.console import Group
 from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
-
-from _pyalarmdotcomajax.models.jsonapi import Resource, ResourceIdentifier
 
 if TYPE_CHECKING:
     from _pyalarmdotcomajax.models.base import AdcResource

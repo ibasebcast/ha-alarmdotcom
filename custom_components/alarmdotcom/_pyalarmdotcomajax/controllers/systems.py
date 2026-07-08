@@ -4,7 +4,6 @@ import logging
 from typing import Annotated
 
 import typer
-
 from _pyalarmdotcomajax.adc.util import Param_Id, cli_action
 from _pyalarmdotcomajax.controllers.base import BaseController
 from _pyalarmdotcomajax.models.base import ResourceType

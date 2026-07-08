@@ -13,11 +13,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
 
 import aiohttp
 import humps
-from mashumaro.exceptions import MissingField
-from rich.console import Group
-
 from _pyalarmdotcomajax._version import __version__
-
 from _pyalarmdotcomajax.const import (
     API_URL_BASE,
     DEBUG_REQUEST_DUMP_MAX_LEN,
@@ -112,6 +108,8 @@ from _pyalarmdotcomajax.websocket.client import (
     WebSocketClient,
     WebSocketState,
 )
+from mashumaro.exceptions import MissingField
+from rich.console import Group
 
 if TYPE_CHECKING:
     from _pyalarmdotcomajax.models.system import System
@@ -337,7 +335,8 @@ class AlarmBridge:
             await asyncio.gather(*init_tasks)
 
     async def refresh_all_resources(self) -> None:
-        """Force a re-fetch and re-publish of state for every already-initialized resource controller.
+        """
+        Force a re-fetch and re-publish of state for every already-initialized resource controller.
 
         fetch_full_state() (and the controller.initialize() calls it makes) is a one-time
         setup path: each controller's initialize() returns immediately if it has already run

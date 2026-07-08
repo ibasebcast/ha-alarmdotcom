@@ -12,9 +12,6 @@ from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
-
-from rich.console import Group
-
 from _pyalarmdotcomajax.const import ATTR_DESIRED_STATE, ATTR_STATE
 from _pyalarmdotcomajax.events import (
     EventBrokerMessage,
@@ -35,6 +32,7 @@ from _pyalarmdotcomajax.websocket.messages import (
     EventWSMessage,
     ResourceEventType,
 )
+from rich.console import Group
 
 if TYPE_CHECKING:
     from _pyalarmdotcomajax import AlarmBridge

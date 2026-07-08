@@ -5,14 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TypeVar
 
-from mashumaro import field_options
-
 from _pyalarmdotcomajax.models.base import (
     AdcDeviceResource,
     AdcResource,
     BaseManagedDeviceAttributes,
 )
 from _pyalarmdotcomajax.models.jsonapi import Error, JsonApiBaseElement
+from mashumaro import field_options
 
 AdcResourceT = TypeVar("AdcResourceT", bound=AdcResource)
 AdcManagedDeviceT = TypeVar(

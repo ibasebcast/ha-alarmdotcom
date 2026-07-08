@@ -1,19 +1,14 @@
 """Common commands for the adc CLI."""
 
-# ruff: noqa: T201 C901 UP007 FBT002 FBT001
+# ruff: noqa: FBT002
 
 import asyncio
 import logging
 from functools import partial
-from typing import Annotated, Optional
+from typing import Annotated
 
 import aiohttp
 import typer
-from rich import print
-from rich.panel import Panel
-from rich.prompt import InvalidResponse, Prompt, PromptBase
-from rich.table import Table
-
 from _pyalarmdotcomajax import AlarmBridge
 from _pyalarmdotcomajax.adc.util import ValueEnum
 from _pyalarmdotcomajax.exceptions import (
@@ -24,6 +19,10 @@ from _pyalarmdotcomajax.exceptions import (
     UnexpectedResponse,
 )
 from _pyalarmdotcomajax.models.auth import OtpType
+from rich import print
+from rich.panel import Panel
+from rich.prompt import InvalidResponse, Prompt, PromptBase
+from rich.table import Table
 
 # RICH OUTPUT PANELS
 MAIN_MFA = "Multi-factor Authentication Options"
@@ -179,7 +178,7 @@ async def collect_params(
         ),
     ],
     cookie: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--cookie",
             "-c",
@@ -193,7 +192,7 @@ async def collect_params(
     # MFA OPTIONS
     #
     otp_method: Annotated[
-        Optional[OtpType],
+        OtpType | None,
         typer.Option(
             "--otp-method",
             "-m",
@@ -206,7 +205,7 @@ async def collect_params(
         ),
     ] = None,
     otp: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--otp",
             "-o",
@@ -216,7 +215,7 @@ async def collect_params(
         ),
     ] = None,
     device_name: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--device-name",
             "-n",

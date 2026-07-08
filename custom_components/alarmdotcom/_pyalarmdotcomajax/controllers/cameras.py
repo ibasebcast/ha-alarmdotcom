@@ -6,9 +6,7 @@ import json
 import logging
 from typing import Any
 
-
 import aiohttp
-
 from _pyalarmdotcomajax.const import API_URL_BASE, ResponseTypes
 from _pyalarmdotcomajax.controllers.base import BaseController
 from _pyalarmdotcomajax.exceptions import (

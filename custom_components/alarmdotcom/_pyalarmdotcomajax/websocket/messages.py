@@ -5,9 +5,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from mashumaro import field_options
-
 from _pyalarmdotcomajax.models.jsonapi import JsonApiBaseElement
+from mashumaro import field_options
 
 UNDEFINED = "**UNDEFINED**"
 

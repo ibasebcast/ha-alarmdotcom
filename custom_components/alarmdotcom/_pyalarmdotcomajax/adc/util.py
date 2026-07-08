@@ -1,6 +1,5 @@
 """Helpers for adc CLI."""
 
-# ruff: noqa: T201 C901 UP007
 
 import asyncio
 import inspect
@@ -9,7 +8,7 @@ from enum import Enum
 from functools import wraps
 from itertools import chain, compress, groupby
 from operator import attrgetter
-from typing import Annotated, Any, Optional, TypeVar, get_type_hints
+from typing import Annotated, Any, TypeVar, get_type_hints
 
 import click
 import typer
@@ -326,7 +325,7 @@ class ValueEnum(click.Choice):
     name = "value_enum"
 
     def __init__(
-        self, target_type: type[Enum], exclude: Optional[list[str]] = None
+        self, target_type: type[Enum], exclude: list[str] | None = None
     ) -> None:
         """Initialize the OtpParamType class."""
 
@@ -340,8 +339,8 @@ class ValueEnum(click.Choice):
     def convert(
         self,
         value: Any,
-        param: Optional[click.Parameter],
-        ctx: Optional[click.Context],
+        param: click.Parameter | None,
+        ctx: click.Context | None,
     ) -> Any:
         """Convert the selection to the enum member's value to meet Typer conventions."""
 

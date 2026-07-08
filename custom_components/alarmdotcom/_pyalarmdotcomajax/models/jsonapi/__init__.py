@@ -6,11 +6,10 @@ import contextlib
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from _pyalarmdotcomajax.models.jsonapi.utils import CamelizerMixin
 from mashumaro.config import BaseConfig
 from mashumaro.mixins.json import DataClassJSONMixin
 from mashumaro.types import Discriminator
-
-from _pyalarmdotcomajax.models.jsonapi.utils import CamelizerMixin
 
 if TYPE_CHECKING:
     from _pyalarmdotcomajax.models.jsonapi.jsonapi_types import URI

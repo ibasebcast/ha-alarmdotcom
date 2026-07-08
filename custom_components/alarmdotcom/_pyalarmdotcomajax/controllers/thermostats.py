@@ -1,13 +1,10 @@
 """Alarm.com controller for thermostats."""
 
-# ruff: noqa: UP007
 
 import logging
-from typing import TYPE_CHECKING, Annotated, Any, Optional
+from typing import TYPE_CHECKING, Annotated, Any
 
 import typer
-
-
 from _pyalarmdotcomajax.adc.util import ValueEnum, cli_action
 from _pyalarmdotcomajax.const import ATTR_DESIRED_STATE, ATTR_STATE
 from _pyalarmdotcomajax.controllers.base import BaseController, device_controller
@@ -82,7 +79,7 @@ class ThermostatController(BaseController[Thermostat]):
         self,
         id: Annotated[str, typer.Option(help="The ID of the thermostat.", show_default=False)],
         state: Annotated[
-            Optional[ThermostatState],
+            ThermostatState | None,
             typer.Option(
                 click_type=ValueEnum(ThermostatState, "UNKNOWN"),
                 case_sensitive=False,
@@ -91,7 +88,7 @@ class ThermostatController(BaseController[Thermostat]):
             ),
         ] = None,
         fan_mode: Annotated[
-            Optional[ThermostatFanMode],
+            ThermostatFanMode | None,
             typer.Option(
                 click_type=ValueEnum(ThermostatFanMode, ["UNKNOWN"]),
                 case_sensitive=False,
@@ -100,22 +97,22 @@ class ThermostatController(BaseController[Thermostat]):
             ),
         ] = None,
         fan_mode_duration: Annotated[
-            Optional[int],
+            int | None,
             typer.Option(
                 help="The duration for which the desired fan mode should run. Fan duration must be in device's list of supported durations.",
                 show_default=False,
             ),
         ] = None,
         cool_setpoint: Annotated[
-            Optional[float],
+            float | None,
             typer.Option(help="The desired cool setpoint.", show_default=False),
         ] = None,
         heat_setpoint: Annotated[
-            Optional[float],
+            float | None,
             typer.Option(help="The desired heat setpoint.", show_default=False),
         ] = None,
         schedule_mode: Annotated[
-            Optional[ThermostatScheduleMode],
+            ThermostatScheduleMode | None,
             typer.Option(
                 click_type=ValueEnum(ThermostatScheduleMode),
                 case_sensitive=False,

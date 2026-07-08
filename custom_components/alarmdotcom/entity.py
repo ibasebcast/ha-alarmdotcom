@@ -70,7 +70,8 @@ def available_fn(hub: AlarmHub, resource_id: str) -> bool:
 
 @callback
 def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> DeviceInfo:
-    """Return device information.
+    """
+    Return device information.
 
     Home Assistant 2025.12 will enforce that via_device must reference an existing device.
     Historically this integration sometimes set via_device to (DOMAIN, None) or to ids that

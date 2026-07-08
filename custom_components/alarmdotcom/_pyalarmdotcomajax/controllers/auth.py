@@ -3,13 +3,9 @@
 import asyncio
 import logging
 import re
-import socket
 from typing import TYPE_CHECKING
 
 import aiohttp
-from bs4 import BeautifulSoup
-from rich.console import Group
-
 from _pyalarmdotcomajax import const
 from _pyalarmdotcomajax.controllers.users import (
     DealersController,
@@ -29,6 +25,8 @@ from _pyalarmdotcomajax.models.auth import (
 )
 from _pyalarmdotcomajax.models.jsonapi import Resource
 from _pyalarmdotcomajax.util import resources_pretty, resources_raw
+from bs4 import BeautifulSoup
+from rich.console import Group
 
 if TYPE_CHECKING:
     from _pyalarmdotcomajax import AlarmBridge

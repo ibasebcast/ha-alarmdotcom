@@ -1,15 +1,13 @@
 """Alarm.com controller for partitions."""
 
-# ruff: noqa: UP007 FBT002 FBT001
+# ruff: noqa: FBT002
 
 import logging
 from enum import StrEnum
 from types import MappingProxyType
-from typing import Annotated, Any, Optional
-
+from typing import Annotated, Any
 
 import typer
-
 from _pyalarmdotcomajax.adc.util import Param_Id, cli_action
 from _pyalarmdotcomajax.controllers.base import BaseController, device_controller
 from _pyalarmdotcomajax.exceptions import UnsupportedOperation
@@ -223,7 +221,7 @@ class PartitionController(BaseController[Partition]):
         self,
         id: str,
         state: PartitionState,
-        extended_arming_options: Optional[list[ExtendedArmingOptionItems]] = None,
+        extended_arming_options: list[ExtendedArmingOptionItems] | None = None,
     ) -> None:
         """Change partition state."""
 
@@ -265,11 +263,11 @@ class PartitionController(BaseController[Partition]):
         self,
         partition_id: Param_Id,
         bypass_ids: Annotated[
-            Optional[list[str]],
+            list[str] | None,
             typer.Option(help="List of sensors to bypass.", show_default=True),
         ] = None,
         unbypass_ids: Annotated[
-            Optional[list[str]],
+            list[str] | None,
             typer.Option(help="List of sensors to unbypass.", show_default=True),
         ] = None,
     ) -> None:
