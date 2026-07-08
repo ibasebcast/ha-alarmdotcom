@@ -82,8 +82,6 @@ target-version    = "py313"
     # against a live environment, not as a blind mechanical rewrite bundled
     # into an unrelated change. Tracked as a deliberate future PR, not left
     # as unexplained lint noise.
-    "UP046",
-    "UP047",
     "PLR0912",
     "PLR0913",
     "PLR0915",
@@ -102,6 +100,8 @@ target-version    = "py313"
     "TRY003",
     "TRY301",
     "TRY400",
+    "UP046",
+    "UP047",
     "W191",
   ]
   select = [
@@ -142,7 +142,7 @@ target-version    = "py313"
   ]
   unfixable = ["F841"]
 
-  [tool.ruff.lint.per-file-ignores]
+    [tool.ruff.lint.per-file-ignores]
     # assert is how pytest tests are written - not a security concern in test
     # code. SLF001 (private-member access) fires on setting attributes like
     # `mock._owns_session` to configure a MagicMock's state, which isn't a
