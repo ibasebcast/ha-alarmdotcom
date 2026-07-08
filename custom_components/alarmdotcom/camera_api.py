@@ -71,7 +71,7 @@ def _redact_stream_info(body: dict) -> dict:
     time-limited but still live access credentials while valid).
     """
 
-    redacted = json.loads(json.dumps(body))  # cheap deep copy via round-trip
+    redacted: dict = json.loads(json.dumps(body))  # cheap deep copy via round-trip
 
     def _redact_attributes(attributes: dict) -> None:
         for key in _SENSITIVE_ATTRIBUTE_KEYS:

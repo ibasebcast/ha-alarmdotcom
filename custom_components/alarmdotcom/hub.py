@@ -3,9 +3,12 @@
 import asyncio
 import contextlib
 import logging
-from datetime import timedelta
+from collections.abc import AsyncIterator
+from datetime import datetime, timedelta
+from typing import Any
 
 import _pyalarmdotcomajax as pyadc
+import aiohttp
 from _pyalarmdotcomajax import AlarmBridge
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -43,7 +46,7 @@ class _AlarmBridgeWithHeartbeat(AlarmBridge):
     """
 
     @contextlib.asynccontextmanager
-    async def ws_connect(self, url, **kwargs):
+    async def ws_connect(self, url: str, **kwargs: Any) -> AsyncIterator[aiohttp.ClientWebSocketResponse]:
         if self._websession is None:
             raise pyadc.NotInitialized(
                 "Cannot initiate WebSocket connection without an existing session."
@@ -141,7 +144,7 @@ class AlarmHub:
         self._reconnect_attempts = 0
         return True
 
-    async def _async_refresh_state(self, _now=None) -> None:
+    async def _async_refresh_state(self, _now: datetime | None = None) -> None:
         """Periodically poll full state as a safety net against missed websocket events."""
         try:
             log.debug("Alarm.com: performing periodic full state refresh.")
@@ -232,14 +235,17 @@ class AlarmHub:
                 log.info("Alarm.com: reconnect successful.")
                 return
 
-        # All attempts exhausted — schedule a full entry reload
+        # All attempts exhausted — schedule a full entry reload.
+        # async_schedule_reload is a sync @callback that already schedules its
+        # own task internally (it returns None) - wrapping it in
+        # async_create_task() would pass None where a coroutine is expected,
+        # raising TypeError immediately after the reload had already fired as
+        # a side effect. Call it directly.
         log.error(
             "Alarm.com: all %d reconnect attempts failed. Scheduling integration reload.",
             WS_MAX_RECONNECT_ATTEMPTS,
         )
-        self.hass.async_create_task(
-            self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
-        )
+        self.hass.config_entries.async_schedule_reload(self.config_entry.entry_id)
 
     async def close(self) -> bool:
         """Close the hub and unload platforms."""
