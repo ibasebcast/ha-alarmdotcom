@@ -63,7 +63,8 @@ _SENSITIVE_ATTRIBUTE_KEYS = {
 
 
 def _redact_stream_info(body: dict) -> dict:
-    """Return a deep copy of a get_stream_info response with credentials masked.
+    """
+    Return a deep copy of a get_stream_info response with credentials masked.
 
     Safe to log at normal debug level. Masks the known sensitive attribute
     keys plus iceServers TURN credentials/usernames (which are themselves
@@ -166,6 +167,18 @@ class AlarmCameraSession:
         self.cookie_jar = cookie_jar or aiohttp.CookieJar(unsafe=True)
         self.session = session or aiohttp.ClientSession(cookie_jar=self.cookie_jar)
 
+    @property
+    def owns_session(self) -> bool:
+        """
+        Return whether this instance created its own aiohttp session.
+
+        True unless a session was passed in externally (e.g. reusing the
+        vendored library's own session) - determines whether close() should
+        actually close the underlying session, and whether a fresh login is
+        needed versus reusing credentials already established elsewhere.
+        """
+        return self._owns_session
+
     @classmethod
     def from_alarm_bridge(
         cls,
@@ -210,7 +223,8 @@ class AlarmCameraSession:
                         "Camera session: reusing pyalarmdotcomajax internal session."
                     )
                     break
-            except Exception:
+            except Exception as err:
+                _LOGGER.debug("Camera session: session candidate %s failed: %s", fn, err)
                 continue
 
         for fn in ajax_key_candidates:
@@ -220,7 +234,8 @@ class AlarmCameraSession:
                     extracted_ajax_key = val
                     _LOGGER.debug("Camera session: reusing pyalarmdotcomajax ajax key.")
                     break
-            except Exception:
+            except Exception as err:
+                _LOGGER.debug("Camera session: ajax key candidate %s failed: %s", fn, err)
                 continue
 
         for fn in mfa_candidates:
@@ -229,7 +244,8 @@ class AlarmCameraSession:
                 if isinstance(val, str) and val:
                     extracted_mfa_cookie = val
                     break
-            except Exception:
+            except Exception as err:
+                _LOGGER.debug("Camera session: MFA cookie candidate %s failed: %s", fn, err)
                 continue
 
         if extracted_session is not None:
@@ -270,13 +286,20 @@ class AlarmCameraSession:
         if mfa and mfa.value != self.mfa_cookie:
             self.mfa_cookie = mfa.value
 
-    async def _get(
+    async def get(
         self,
         url: str,
         *,
         accept: dict[str, str] | None = None,
         use_ajax: bool = True,
     ) -> aiohttp.ClientResponse:
+        """
+        Perform an authenticated GET request against the Alarm.com API.
+
+        Public because camera.py (a sibling module, not just internal callers)
+        also needs this for fetching snapshot images - it was never actually
+        private in practice, just named as if it were.
+        """
         resp = await self.session.get(
             url,
             headers=_build_headers(accept or ACCEPT_JSONAPI, self.ajax_key if use_ajax else None),
@@ -320,7 +343,7 @@ class AlarmCameraSession:
             raise ValueError("Password required for independent login")
 
         _LOGGER.debug("Loading login page...")
-        resp = await self._get(f"{URL_BASE}login", accept=ACCEPT_HTML, use_ajax=False)
+        resp = await self.get(f"{URL_BASE}login", accept=ACCEPT_HTML, use_ajax=False)
         html = await resp.text()
         soup = BeautifulSoup(html, "html.parser")
 
@@ -366,7 +389,7 @@ class AlarmCameraSession:
 
     async def _load_identity(self) -> None:
         _LOGGER.debug("Loading user identity...")
-        resp = await self._get(f"{API_URL_BASE}identities")
+        resp = await self.get(f"{API_URL_BASE}identities")
         body = await resp.json()
         data = body.get("data")
 
@@ -380,7 +403,7 @@ class AlarmCameraSession:
     async def _check_mfa(self) -> AuthResult:
         """Check MFA requirement."""
         _LOGGER.debug("Checking MFA requirements...")
-        resp = await self._get(f"{API_URL_BASE}{TWO_FACTOR_PATH}/{self.identity_id}")
+        resp = await self.get(f"{API_URL_BASE}{TWO_FACTOR_PATH}/{self.identity_id}")
         body = await resp.json()
         attrs = body.get("data", {}).get("attributes", {})
 
@@ -402,7 +425,7 @@ class AlarmCameraSession:
 
     async def get_camera_list(self) -> list[dict]:
         """Return list of camera summary dicts."""
-        resp = await self._get(f"{API_URL_BASE}video/devices/cameras")
+        resp = await self.get(f"{API_URL_BASE}video/devices/cameras")
         body = await resp.json()
         data = body.get("data", [])
 
@@ -419,12 +442,13 @@ class AlarmCameraSession:
         return cameras
 
     async def get_stream_info(self, camera_id: str) -> dict | None:
-        """Fetch WebRTC config for a camera.
+        """
+        Fetch WebRTC config for a camera.
 
         Important: do not swallow ClientResponseError here.
         camera.py needs 401/403 to bubble up so it can retry auth.
         """
-        resp = await self._get(
+        resp = await self.get(
             f"{API_URL_BASE}video/videoSources/liveVideoHighestResSources/{camera_id}"
         )
         body = await resp.json()

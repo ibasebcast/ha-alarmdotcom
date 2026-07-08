@@ -34,7 +34,7 @@ def mock_hub():
 def mock_camera_session():
     """Build a mock camera session that skips real login."""
     session = MagicMock()
-    session._owns_session = False
+    session.owns_session = False
     session.ajax_key = "mock-ajax-key"
     session.login = AsyncMock(return_value=None)
     session.close = AsyncMock(return_value=None)

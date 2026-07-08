@@ -1,3 +1,26 @@
+## 2026.7.7.3b0 (beta)
+
+### Fixed
+- **Arm/disarm code was never actually validated** (found while clearing a pre-commit lint backlog, not previously reported - this is the most important fix in this release): `alarm_control_panel.py`'s `control_fn` computed both the configured arm code and the user-entered code, but never compared them. Home Assistant core's `_attr_code_arm_required`/`_attr_code_format` mechanism only validates that an entered code matches the expected *format* (numeric vs. text) before this function is even called - it does not check the code against what's actually configured. Net effect: **anyone could arm or disarm by entering any correctly-formatted code, not necessarily the one you configured** - the "require a code" option looked like it was enforcing something it wasn't. Fixed: entering the wrong (or no) code now raises a validation error instead of silently succeeding. Covered by 4 new tests in `tests/test_alarm_control_panel.py`, including a regression test that specifically fails against the old (unfixed) behavior.
+- **`lock.py` referenced an undefined name** (`CodeFormat`, `F821`): never imported, only survived because `from __future__ import annotations` makes type annotations lazy. `alarm_control_panel.py` already imports this correctly from `homeassistant.components.alarm_control_panel`; `lock.py` was just missing the same import. Not a live runtime bug (annotations are never evaluated), but a real static-analysis gap - fixed.
+
+### Changed
+- **`camera_api.py`: `_get` renamed to `get`, and a proper `owns_session` property added.** Both were being accessed from outside `AlarmCameraSession` already (by `__init__.py` and `camera.py`), so the leading underscore was misleading rather than enforcing real encapsulation. No behavior change, just properly public names for what were already effectively public interfaces.
+- **`camera_api.py`: the three silent `except Exception: continue` blocks in session/ajax-key/MFA-cookie candidate extraction now log at debug level** instead of swallowing failures with zero trace. Still tries the next candidate on any failure (unchanged behavior) - just no longer invisible when everything fails.
+- **`__init__.py`: extracted the pyalarmdotcomajax-location diagnostic check into its own sync function**, since it's pure path-string manipulation with no real async/await need - was flagged as doing blocking-style calls inside an async function.
+- Minor control-flow clarity fixes in `hub.py` (moving a success-path `return` into an `else` block; `contextlib.suppress` instead of `try/except/pass` for a cancellation) - no behavior change.
+- Removed one genuinely unused variable in `binary_sensor.py`.
+
+### CI / tooling
+- **This is the release where `pre-commit` actually completes a full run for the first time** - every previous run died at a Python-interpreter-discovery error before ever reaching the linters. Everything below was invisible until now, not new debt:
+  - Fixed a real mypy config gap: `explicit_package_bases`/`mypy_path` were never set, causing "source file found twice under different module names" once mypy could actually run against the vendored package.
+  - Fixed mypy's `python_version` setting (still `3.13`, causing a hard parse failure against Home Assistant's own 3.14-only syntax) and removed a stale external `pyalarmdotcomajax` dependency from the mypy hook's config, left over from before vendoring.
+  - Fixed `codespell`'s exclusion path for vendored JSON:API files, silently broken by the `_pyalarmdotcomajax` rename.
+  - Standardized on Python 3.14 throughout `.pre-commit-config.yaml` and its workflow, matching what `homeassistant>=2026.7.1` actually requires - previously mixed 3.13/3.14 pins were fighting each other.
+  - Added scoped `ruff` ignores with documented reasoning: `S101`/`SLF001` for test files (assert and mock-attribute setup are normal there), `A002`/`A004`/`FBT001` for the vendored third-party library (not ours to restyle), and `E402` specifically for `__init__.py` (its `sys.path` shim must run before the imports that depend on it - intentional, not an oversight).
+  - Deliberately, explicitly opted out of PEP 695 generic syntax modernization (`UP046`/`UP047`) for now - purely cosmetic, zero runtime difference, but converting 14 class declarations correctly needs live `mypy` verification this environment can't fully provide. Tracked as a real future PR, not left as unexplained lint noise.
+- Added `tests/test_alarm_control_panel.py` (4 tests covering the arm-code fix above).
+
 ## 2026.7.7.2b0 (beta)
 
 ### Fixed

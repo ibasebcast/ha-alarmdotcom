@@ -30,17 +30,24 @@ if _VENDOR_PATH not in sys.path:
 
 import logging
 
-import aiohttp
 import _pyalarmdotcomajax as pyadc
+import aiohttp
 import voluptuous as vol
-from homeassistant.helpers import config_validation as cv
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import Event, HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError, ServiceValidationError
-
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.core import Event, HomeAssistant, ServiceCall
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
+from homeassistant.helpers import config_validation as cv
 
+from .camera_api import AlarmCameraSession
 from .const import (
+    ATTR_PARTITION_ID,
+    ATTR_RESOURCE_ID,
     CONF_ARM_AWAY,
     CONF_ARM_HOME,
     CONF_ARM_NIGHT,
@@ -48,8 +55,6 @@ from .const import (
     CONF_MFA_TOKEN,
     CONF_NO_ENTRY_DELAY,
     CONF_SILENT_ARM,
-    ATTR_PARTITION_ID,
-    ATTR_RESOURCE_ID,
     DATA_HUB,
     DEBUG_REQ_EVENT,
     DOMAIN,
@@ -59,9 +64,35 @@ from .const import (
     STARTUP_MESSAGE,
 )
 from .hub import AlarmHub
-from .camera_api import AlarmCameraSession
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _log_pyadc_location() -> None:
+    """
+    Log which pyalarmdotcomajax copy actually loaded, warning if it's not the vendored one.
+
+    Pure path-string operations (join/abspath/normcase never touch the
+    filesystem for a path that's already resolved via a live module's
+    __file__), pulled into its own sync function rather than left inline
+    in async_setup_entry - it has no genuine async/await need.
+    """
+    pyadc_version = getattr(pyadc, "__version__", "unknown")
+    expected_pyadc_path = os.path.join(_VENDOR_PATH, "_pyalarmdotcomajax", "__init__.py")
+    resolved_pyadc_path = os.path.normcase(os.path.abspath(pyadc.__file__))
+    if resolved_pyadc_path != os.path.normcase(os.path.abspath(expected_pyadc_path)):
+        LOGGER.warning(
+            "pyalarmdotcomajax %s loaded from an UNEXPECTED location: %s "
+            "(expected the bundled copy at: %s). This usually means a leftover "
+            "pip-installed pyalarmdotcomajax from before this integration vendored "
+            "it directly (harmless on its own, but worth cleaning up with "
+            "'pip uninstall pyalarmdotcomajax' - see the CHANGELOG for details).",
+            pyadc_version,
+            pyadc.__file__,
+            expected_pyadc_path,
+        )
+    else:
+        LOGGER.info("pyalarmdotcomajax %s loaded from the bundled copy: %s", pyadc_version, pyadc.__file__)
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -69,23 +100,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     LOGGER.info("%s: Initializing Alarmdotcom from config entry.", __name__)
     LOGGER.info(STARTUP_MESSAGE)
-
-    _pyadc_version = getattr(pyadc, "__version__", "unknown")
-    _expected_pyadc_path = os.path.join(_VENDOR_PATH, "_pyalarmdotcomajax", "__init__.py")
-    _resolved_pyadc_path = os.path.normcase(os.path.abspath(pyadc.__file__))
-    if _resolved_pyadc_path != os.path.normcase(os.path.abspath(_expected_pyadc_path)):
-        LOGGER.warning(
-            "pyalarmdotcomajax %s loaded from an UNEXPECTED location: %s "
-            "(expected the bundled copy at: %s). This usually means a leftover "
-            "pip-installed pyalarmdotcomajax from before this integration vendored "
-            "it directly (harmless on its own, but worth cleaning up with "
-            "'pip uninstall pyalarmdotcomajax' - see the CHANGELOG for details).",
-            _pyadc_version,
-            pyadc.__file__,
-            _expected_pyadc_path,
-        )
-    else:
-        LOGGER.info("pyalarmdotcomajax %s loaded from the bundled copy: %s", _pyadc_version, pyadc.__file__)
+    _log_pyadc_location()
 
     hub = AlarmHub(hass, config_entry)
 
@@ -116,7 +131,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
         # Only log in when we had to create our own independent session and
         # still do not have an ajax key.
-        if camera_session._owns_session and not camera_session.ajax_key:
+        if camera_session.owns_session and not camera_session.ajax_key:
             LOGGER.debug("Camera session: performing independent login.")
             await camera_session.login()
         else:

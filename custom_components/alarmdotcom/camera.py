@@ -1,11 +1,11 @@
 """Camera platform for Alarm.com (WebRTC)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 from typing import Any
 
-import asyncio
 import aiohttp
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.config_entries import ConfigEntry
@@ -137,7 +137,7 @@ class AlarmDotComCamera(Camera):
                         err.status,
                     )
                     try:
-                        if self._session._owns_session:
+                        if self._session.owns_session:
                             await self._session.login()
                         else:
                             _LOGGER.info(
@@ -202,7 +202,8 @@ class AlarmDotComCamera(Camera):
         return {"webrtc_config": self._webrtc_config}
 
     async def stream_source(self) -> str | None:
-        """Return a native HA stream source.
+        """
+        Return a native HA stream source.
 
         Alarm.com cameras in this integration use WebRTC config delivered
         through entity attributes, not a native HLS or RTSP stream URL.
@@ -225,7 +226,7 @@ class AlarmDotComCamera(Camera):
     ) -> bytes | None:
         """Return a still snapshot image from the camera."""
         try:
-            resp = await self._session._get(
+            resp = await self._session.get(
                 f"https://www.alarm.com/web/api/video/devices/cameras/{self._id}/snapshot"
             )
             return await resp.read()

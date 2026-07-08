@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic
 
 import _pyalarmdotcomajax as pyadc
+from _pyalarmdotcomajax.controllers.partitions import PartitionController
 from homeassistant.components.alarm_control_panel import (
     AlarmControlPanelEntity,
     AlarmControlPanelEntityDescription,
@@ -21,7 +22,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import InvalidStateError, ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
-from _pyalarmdotcomajax.controllers.partitions import PartitionController
 
 from .const import (
     CONF_ARM_AWAY,
@@ -159,7 +159,16 @@ async def control_fn(
     config_options = hub.config_entry.options
     arm_code = config_options.get(CONF_ARM_CODE)
 
-    user_entered_code = options.get("code")
+    # HA core's _attr_code_format/_attr_code_arm_required (set in initiate_state()
+    # from code_format_fn()) only validates that an entered code matches the
+    # expected *format* (numeric vs text) before this function is ever called -
+    # it does not check the code against the configured arm_code. Without this
+    # check, any correctly-formatted code would succeed, defeating the point of
+    # configuring an arm code at all.
+    if arm_code not in (None, ""):
+        user_entered_code = options.get("code")
+        if user_entered_code != arm_code:
+            raise ServiceValidationError("Invalid code entered for arm/disarm command.")
 
     try:
         if command == DISARM:

@@ -6,13 +6,13 @@ import logging
 from datetime import timedelta
 
 import _pyalarmdotcomajax as pyadc
+from _pyalarmdotcomajax import AlarmBridge
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.event import async_track_time_interval
-from _pyalarmdotcomajax import AlarmBridge
 
 from .const import (
     CONF_MFA_TOKEN,
@@ -34,7 +34,8 @@ WS_HEARTBEAT_INTERVAL = 60  # seconds
 
 
 class _AlarmBridgeWithHeartbeat(AlarmBridge):
-    """AlarmBridge subclass that injects a WebSocket heartbeat.
+    """
+    AlarmBridge subclass that injects a WebSocket heartbeat.
 
     aiohttp will send a PING frame every WS_HEARTBEAT_INTERVAL seconds and
     close the connection if no PONG is received, triggering reconnection.
@@ -213,10 +214,6 @@ class AlarmHub:
                 async with asyncio.timeout(15):
                     await self.api.initialize()
                 await self.api.start_event_monitoring(self._ws_state_handler)
-                self.available = True
-                self._reconnect_attempts = 0
-                log.info("Alarm.com: reconnect successful.")
-                return
             except pyadc.AuthenticationException:
                 log.error("Alarm.com: reconnect failed — authentication error. Triggering reauth.")
                 self.hass.async_create_task(
@@ -229,6 +226,11 @@ class AlarmHub:
                     self._reconnect_attempts,
                     err,
                 )
+            else:
+                self.available = True
+                self._reconnect_attempts = 0
+                log.info("Alarm.com: reconnect successful.")
+                return
 
         # All attempts exhausted — schedule a full entry reload
         log.error(
@@ -244,10 +246,8 @@ class AlarmHub:
         # Cancel any in-progress reconnect
         if self._reconnect_task and not self._reconnect_task.done():
             self._reconnect_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._reconnect_task
-            except asyncio.CancelledError:
-                pass
 
         while self.close_jobs:
             self.close_jobs.pop()()
