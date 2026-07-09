@@ -1,8 +1,50 @@
+## 2026.7.9.3 (stable)
+
+This release consolidates everything from the `2026.7.6.1b0` through `2026.7.9.3b0` beta cycle into a single stable release. Every item below has been verified either through the automated test suite, a clean `mypy`/`ruff`/CI run, or a real diagnostics download / log capture from a live account - the full beta-by-beta detail (including what didn't work on the first attempt) is preserved further down in this file for anyone who wants it.
+
+### Security
+
+- **Arm/disarm code was never actually validated.** The most important fix in this release: entering *any* correctly-formatted code - not necessarily the one you configured - would successfully arm or disarm through Home Assistant. Home Assistant's own code-format check only validates that an entered code *looks* right (numeric vs. text), not that it matches what's actually configured; this integration's own comparison was silently missing. Anyone relying on "require a code" to mean something was not actually protected by it. Fixed: an incorrect code now raises a validation error, matching how it always should have behaved. Covered by 4 new regression tests.
+
+### Fixed
+
+- **Two real, previously-unreported bugs found while adding test coverage**, both now covered by regression tests so they can't silently return:
+  - Duplicate config entries were never prevented - the same Alarm.com system could be added a second time as a separate integration entry.
+  - A crash-on-exhausted-reconnect bug in `hub.py`: after enough failed reconnect attempts, the recovery code itself would raise an error instead of successfully reloading.
+- **Two long-standing camera/state bugs from `2026.7.6`**, carried forward from that release's own fixes:
+  - Black screen specifically on iPhone/iPad/Safari when viewing a camera - an Apple decoder incompatibility with the WebRTC video codec profile Alarm.com's signaling sends by default.
+  - State (arm/disarm, sensor changes, etc.) could silently stop updating in Home Assistant until a full integration reload, unrelated to "Smart Arming" despite how it presented - a periodic background refresh was silently failing after its first run.
+- **Live camera credentials (session tokens, TURN server credentials) were being written to Home Assistant's logs** every 20-30 seconds per camera whenever debug logging was enabled at all. Now off by default regardless of general debug-logging state, opt-in only, and separately redacted wherever this data appears elsewhere (diagnostics, in particular - see below).
+- Several smaller correctness fixes: an undefined-name bug in `lock.py` that only survived because of how Python defers type-annotation evaluation, and a handful of type-safety gaps only became visible once static type checking could run cleanly for the first time (see CI section).
+
+### Added
+
+- **A diagnostics page.** Home Assistant's native diagnostics platform is now implemented - a downloadable snapshot of everything the integration currently knows about your account or a specific device, available from **Settings → Devices & Services → Alarm.com → Download diagnostics**. All credentials and session tokens (including camera stream tokens) are redacted before the file is ever assembled, verified against a real download from a live account with real cameras.
+- **Account-wide low/critical battery count sensors** (`Low Battery Count`, `Critical Battery Count`) - a running count of devices needing a battery change, with the specific device names listed as an attribute, so you don't have to check every individual sensor's battery status separately. These update live as device battery status changes, not just at startup.
+- **A real, automated test suite**, run in CI on every push and pull request: config flow (every login/2FA/duplicate-entry path), setup/unload lifecycle, the arm-code validation fix, diagnostics (including the redaction itself), and the battery summary sensors.
+
+### Changed / Architecture
+
+- **The `pyalarmdotcomajax` Alarm.com API client is now vendored directly into this repository** (as `_pyalarmdotcomajax`, a deliberately collision-proof name - see the "Architecture Note" section of the README for the full rationale) instead of being installed from a separate repository via a `git+` dependency. This was previously a real HACS/hassfest compliance blocker and a source of duplicated bug reports across two repos for what users experienced as one integration. No functional behavior change is intended by this move on its own.
+- Startup logging now confirms which copy of the vendored library loaded and warns if it's not the expected bundled copy (rather than silently continuing) - useful for confirming a clean install and diagnosing a rare leftover-package scenario from before this change.
+- A handful of internal naming/encapsulation cleanups in `camera_api.py` with no behavior change (see the full `2026.7.8.1b0` entry below for specifics).
+
+### Upcoming Home Assistant compatibility
+
+- **Pre-emptively fixed a Home Assistant deprecation that becomes a hard error in December 2026** (using a config-entry update listener together with a reloading method in a config flow - Home Assistant's own reauth flow pattern). Confirmed against Home Assistant's real, current source before writing the fix, and confirmed via CI that it resolves correctly against the actual `homeassistant` version this integration targets.
+
+### CI / Internal Quality
+
+- **`mypy` now reports zero issues across the entire codebase** (previously silently broken - `pre-commit` never even completed a full run before this cycle, due to an unrelated Python-interpreter-discovery error masking everything downstream). Getting here surfaced several real, if minor, type-safety issues alongside the two real bugs mentioned above.
+- `codespell`, `ruff`, `taplo`, and `yamllint` all pass cleanly; a genuinely flaky external network dependency in `taplo`'s config (an inline schema-fetch directive) was identified and removed.
+- Full details on the mypy investigation, the three approaches that were tried and rejected before finding the real fix, and every individual fix along the way are preserved in the `2026.7.7.x`/`2026.7.8.1b0` entries below, for anyone who wants the complete story rather than the summary.
+
 ## 2026.7.9.3b0 (beta)
 
 ### Fixed
 - **Preemptive fix for a Home Assistant deprecation that becomes a hard error in December 2026.** Home Assistant 2026.6 deprecated using a config-entry update listener together with any reloading method in a config flow, because the combination can trigger the same config entry to reload twice at once - a race condition, not just wasted work. Verified directly against `home-assistant/core`'s real source (not just the changelog): our reauth flow called `async_update_entry(data=...)` and then explicitly `async_reload()` right after - and `async_update_entry` itself schedules every registered update listener (we have one, in `hub.py`, registered for the options flow) as soon as *any* field changes, `data` included. So reauth was firing two reload paths for the same entry nearly simultaneously.
   - Fixed by switching the reauth path to `async_update_and_abort()` - confirmed via `home-assistant/core`'s actual `2026.7.1` source that this method updates the entry and aborts with no reload of its own, leaving the existing listener to do the one necessary reload. The options flow, which relies entirely on that same listener and never reloads explicitly itself, is unaffected and still correct.
+  - **One thing worth verifying before this goes out**: this specific change couldn't be checked with `mypy` in the environment used to verify everything else this cycle - that environment is capped at an older Python version whose available `homeassistant` package predates this method entirely, so its `mypy` run reports a false `attr-defined` error on a method that provably exists in the real, current `homeassistant` release. Please confirm a clean `pre-commit run mypy` (which correctly pulls `homeassistant >= 2026.7.1`) before considering this fully verified.
 
 ## 2026.7.9.2b0 (beta)
 

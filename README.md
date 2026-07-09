@@ -185,16 +185,30 @@ Still image snapshots are also available, which means the camera will display a 
 
 # Development Status
 
-This integration is under active maintenance.
+This integration is under active maintenance. **Version `2026.7.9.3`** is the current stable release, consolidating a significant round of fixes and new features - see `CHANGELOG.md` for the complete, detailed history, but the highlights:
 
-Recent improvements include:
+### Security fix
 
-* Restored compatibility with modern Home Assistant releases
-* Fixed entities becoming unavailable
-* Updated device registry usage to comply with upcoming Home Assistant requirements
-* Improved websocket connection reliability
-* Vendored the `pyalarmdotcomajax` API client directly into this repository (see "Architecture Note" below)
-* Added a real automated test suite (config flow, setup/unload lifecycle), run in CI on every push and pull request
+**Arm/disarm code enforcement was silently broken.** If you configured a code to require for arming/disarming, entering *any* correctly-formatted code - not necessarily the one you set - would still successfully arm or disarm. This is now fixed and covered by automated regression tests. If you rely on the code requirement, you should update as soon as practical.
+
+### New features
+
+* **A diagnostics page** (Settings → Devices & Services → Alarm.com → Download diagnostics) - a downloadable snapshot of everything the integration knows about your account or a specific device, with all credentials and session tokens automatically redacted. Useful for troubleshooting and for attaching to bug reports without needing to dig through logs or worry about leaking a live camera token.
+* **Account-wide low/critical battery count sensors** - two new entities that track how many devices currently report low or critical battery, with the specific device names available as an attribute, so you don't have to check every sensor individually.
+
+### Bug fixes
+
+* Two real bugs found while adding test coverage: duplicate config entries were never actually prevented, and a crash could occur in the reconnect-recovery path after enough failed connection attempts.
+* Camera diagnostics were silently missing all camera data due to cameras using a different internal discovery path than every other device type - now fixed and verified against a real account with real cameras.
+* Live camera session tokens were being written to Home Assistant's logs whenever debug logging was enabled - this is now off by default and opt-in only, and separately redacted anywhere else this data surfaces.
+* Carried-forward fixes from `2026.7.6`: the iPhone/iPad/Safari black-screen camera issue, and a bug where entity state could silently stop updating until a full integration reload.
+
+### Under the hood
+
+* **Vendored the `pyalarmdotcomajax` API client directly into this repository** (see "Architecture Note" below) - this was previously a real HACS compliance blocker and a source of duplicated bug reports across two repos.
+* **A real, automated test suite** now runs in CI on every push and pull request, covering config flow, setup/unload lifecycle, the arm-code security fix, diagnostics (including the redaction itself), and the new battery sensors.
+* `mypy` now reports zero type errors across the entire codebase, for the first time - `ruff`, `codespell`, and `taplo` all pass cleanly as well.
+* A pre-emptive fix for a Home Assistant deprecation that becomes a hard error in December 2026 (a config-entry reload pattern used during reauthentication), verified directly against Home Assistant's own source code before shipping.
 
 ---
 

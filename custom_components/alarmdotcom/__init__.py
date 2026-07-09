@@ -92,7 +92,7 @@ def _log_pyadc_location() -> None:
             expected_pyadc_path,
         )
     else:
-        LOGGER.info("pyalarmdotcomajax %s loaded from the bundled copy: %s", pyadc_version, pyadc.__file__)
+        LOGGER.info("pyalarmdotcomajax loaded from the bundled copy: %s", pyadc.__file__)
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
