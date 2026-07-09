@@ -288,14 +288,22 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         if self._existing_entry:
-            self.hass.config_entries.async_update_entry(
+            # Deliberately async_update_and_abort, not the older, separate
+            # async_update_entry() + async_reload() pair this used to be:
+            # combining an explicit reload with the config-entry update
+            # listener already registered in hub.py (which itself reloads
+            # in response to ANY entry update, not just options) is exactly
+            # the double-reload/race-condition pattern Home Assistant
+            # deprecated in 2026.6 (hard error from 2026.12). Verified
+            # directly against home-assistant/core's 2026.7.1 source:
+            # async_update_and_abort has no reload of its own - it updates
+            # the entry (firing the listener, which does the one necessary
+            # reload) and aborts, with reason correctly defaulting to
+            # "reauth_successful" for this flow source.
+            return self.async_update_and_abort(
                 self._existing_entry,
                 data=self.config,
             )
-            await self.hass.config_entries.async_reload(
-                self._existing_entry.entry_id
-            )
-            return self.async_abort(reason="reauth_successful")
 
         # Only enforced for a brand-new entry, not reauth: during reauth the
         # unique_id is expected to match the entry currently being
