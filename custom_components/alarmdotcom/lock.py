@@ -7,7 +7,8 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic
 
-import pyalarmdotcomajax as pyadc
+import _pyalarmdotcomajax as pyadc
+from homeassistant.components.alarm_control_panel import CodeFormat
 from homeassistant.components.lock import (
     LockEntity,
     LockEntityDescription,
@@ -117,7 +118,8 @@ async def control_fn(
 
 @callback
 def code_format_fn(hub: AlarmHub) -> CodeFormat | None:
-    """Return the code format for the lock.
+    """
+    Return the code format for the lock.
 
     Locks do not require a code to operate from Home Assistant by default.
     The arm_code integration option applies to the alarm control panel only.

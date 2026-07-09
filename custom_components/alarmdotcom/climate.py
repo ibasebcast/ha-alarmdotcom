@@ -7,7 +7,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic
 
-import pyalarmdotcomajax as pyadc
+import _pyalarmdotcomajax as pyadc
 from homeassistant.components.climate import (
     FAN_AUTO,
     FAN_ON,
@@ -189,7 +189,8 @@ def hvac_modes_fn(controller: pyadc.ThermostatController, thermostat_id: str) ->
 
 @callback
 def target_temperature_fn(controller: pyadc.ThermostatController, thermostat_id: str) -> float | None:
-    """Return the target heat and cool temperatures.
+    """
+    Return the target heat and cool temperatures.
 
     Must stay None while in AUTO mode: Home Assistant's climate entity model
     treats `temperature` and the `target_temperature_high`/`target_temperature_low`

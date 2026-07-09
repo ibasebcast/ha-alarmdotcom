@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
-import pyalarmdotcomajax as pyadc
+import _pyalarmdotcomajax as pyadc
 from homeassistant.core import callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -70,7 +70,8 @@ def available_fn(hub: AlarmHub, resource_id: str) -> bool:
 
 @callback
 def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> DeviceInfo:
-    """Return device information.
+    """
+    Return device information.
 
     Home Assistant 2025.12 will enforce that via_device must reference an existing device.
     Historically this integration sometimes set via_device to (DOMAIN, None) or to ids that

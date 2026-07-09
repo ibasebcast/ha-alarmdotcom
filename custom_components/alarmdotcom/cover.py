@@ -7,7 +7,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Generic
 
-import pyalarmdotcomajax as pyadc
+import _pyalarmdotcomajax as pyadc
 from homeassistant.components.cover import (
     CoverDeviceClass,
     CoverEntity,
@@ -30,7 +30,8 @@ log = logging.getLogger(__name__)
 
 
 def _controller_resources(controller: Any) -> list[Any]:
-    """Return a list of resources from a pyalarmdotcomajax controller.
+    """
+    Return a list of resources from a pyalarmdotcomajax controller.
 
     Controllers vary across library versions:
       - some look like dicts (values())
@@ -43,7 +44,7 @@ def _controller_resources(controller: Any) -> list[Any]:
         return []
 
     # Dict-like
-    if hasattr(controller, "values") and callable(getattr(controller, "values")):
+    if hasattr(controller, "values") and callable(controller.values):
         try:
             return list(controller.values())
         except TypeError:

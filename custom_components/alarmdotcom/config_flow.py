@@ -1,11 +1,11 @@
 """Config flow to configure Alarmdotcom."""
 
-import logging
-from typing import TYPE_CHECKING, Any, Literal
-
-import aiohttp
 import asyncio
-import pyalarmdotcomajax as pyadc
+import logging
+from typing import Any, Literal
+
+import _pyalarmdotcomajax as pyadc
+import aiohttp
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
@@ -35,9 +35,6 @@ from .const import (
     CONF_REMOVE_ARM_CODE,
     DOMAIN,
 )
-
-if TYPE_CHECKING:
-    from .hub import AlarmHub
 
 LOGGER = logging.getLogger(__name__)
 LegacyArmingOptions = Literal["home", "away", "true", "false"]
@@ -140,6 +137,10 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Select OTP method when integration configured through UI."""
+        # self.bridge is always set by this point: this step is only ever
+        # reached via async_step_user's own successful bridge creation, never
+        # invoked independently.
+        assert self.bridge is not None
         if not self._otp_options:
             return self.async_abort(reason="no_otp_options")
 
@@ -217,6 +218,8 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Gather OTP when integration configured through UI."""
+        # self.bridge is always set by this point - see async_step_otp_select_method.
+        assert self.bridge is not None
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -272,6 +275,8 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Create configuration entry using entered data."""
+        # self.bridge is always set by this point - see async_step_otp_select_method.
+        assert self.bridge is not None
         await self.bridge.fetch_full_state()
 
         system_id = str(self.bridge.active_system.id)
@@ -283,14 +288,28 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
         if self._existing_entry:
-            self.hass.config_entries.async_update_entry(
+            # Deliberately async_update_and_abort, not the older, separate
+            # async_update_entry() + async_reload() pair this used to be:
+            # combining an explicit reload with the config-entry update
+            # listener already registered in hub.py (which itself reloads
+            # in response to ANY entry update, not just options) is exactly
+            # the double-reload/race-condition pattern Home Assistant
+            # deprecated in 2026.6 (hard error from 2026.12). Verified
+            # directly against home-assistant/core's 2026.7.1 source:
+            # async_update_and_abort has no reload of its own - it updates
+            # the entry (firing the listener, which does the one necessary
+            # reload) and aborts, with reason correctly defaulting to
+            # "reauth_successful" for this flow source.
+            return self.async_update_and_abort(
                 self._existing_entry,
                 data=self.config,
             )
-            await self.hass.config_entries.async_reload(
-                self._existing_entry.entry_id
-            )
-            return self.async_abort(reason="reauth_successful")
+
+        # Only enforced for a brand-new entry, not reauth: during reauth the
+        # unique_id is expected to match the entry currently being
+        # reauthenticated (handled above), so aborting here would incorrectly
+        # block a legitimate reauth.
+        self._abort_if_unique_id_configured()
 
         return self.async_create_entry(
             title=self._config_title,

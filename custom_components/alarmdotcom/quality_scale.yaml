@@ -13,7 +13,15 @@ rules:
       Uses a custom AlarmHub class rather than DataUpdateCoordinator.
       Refactoring would be needed to adopt the common coordinator pattern.
   config-flow: done
-  config-flow-test-coverage: todo
+  config-flow-test-coverage:
+    status: done
+    comment: >
+      tests/test_config_flow.py covers the initial login step, all three
+      login failure modes (cannot_connect/invalid_auth/unknown), the
+      must_enable_2fa abort, the OTP method-selection step (including the
+      auto-skip-when-only-app-is-enabled case), OTP submission (including
+      invalid code), the duplicate-system abort, and the options flow's
+      two steps.
   dependency-transparency: done
   docs-actions: todo
   docs-high-level-description: todo
@@ -45,11 +53,30 @@ rules:
       No PARALLEL_UPDATES constant defined in platform files.
       Push-based integrations should set PARALLEL_UPDATES = 0.
   reauthentication-flow: done
-  test-coverage: todo
+  test-coverage:
+    status: todo
+    comment: >
+      tests/test_init.py covers the core setup/unload lifecycle (successful
+      setup, auth-failure -> reauth, connection-failure -> retry, and
+      unload closing both the hub and camera session). Not yet covered:
+      any platform file (climate, binary_sensor, sensor, alarm_control_panel,
+      camera, cover, lock, light, valve, button), the bypass/unbypass
+      services, or the websocket reconnect logic in hub.py. Config flow has
+      its own separate, more complete item (see config-flow-test-coverage).
 
   # Gold
   devices: done
-  diagnostics: todo
+  diagnostics:
+    status: done
+    comment: >
+      diagnostics.py implements both async_get_config_entry_diagnostics
+      (whole-account dump: config entry data, connection/websocket health,
+      and a raw JSON:API dump of every resource across every controller)
+      and async_get_device_diagnostics (same data, filtered to one
+      device). All known-sensitive fields (credentials, session tokens,
+      camera stream tokens) are redacted via HA's own async_redact_data
+      before being returned. Covered by tests/test_diagnostics.py,
+      including explicit tests that the redaction actually happens.
   discovery-update-info:
     status: exempt
     comment: >

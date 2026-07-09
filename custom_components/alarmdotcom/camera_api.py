@@ -11,7 +11,7 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 if TYPE_CHECKING:
-    from pyalarmdotcomajax import AlarmBridge
+    from _pyalarmdotcomajax import AlarmBridge
 
 URL_BASE = "https://www.alarm.com/"
 API_URL_BASE = URL_BASE + "web/api/"
@@ -33,6 +33,74 @@ PREVIOUSPAGE_FIELD = "__PREVIOUSPAGE"
 TWO_FACTOR_PATH = "engines/twoFactorAuthentication/twoFactorAuthentications"
 
 _LOGGER = logging.getLogger(__name__)
+# Raw camera stream responses contain live, unexpired session credentials
+# (janusToken, cameraAuthToken, signallingServerToken, TURN credentials) and
+# are extremely verbose (fire on every WebRTC token refresh, roughly every
+# 20-30 seconds per camera). Logged through a separate child logger so they
+# don't show up just because someone enabled debug logging for
+# custom_components.alarmdotcom generally - see get_stream_info() below.
+_RAW_RESPONSE_LOGGER = logging.getLogger(f"{__name__}.raw_responses")
+# Default this child logger to WARNING so it does NOT inherit DEBUG just
+# because someone enabled Home Assistant's standard "Enable debug logging"
+# toggle for the integration (which sets custom_components.alarmdotcom to
+# DEBUG, and child loggers inherit their effective level from the nearest
+# ancestor with an explicit level). Only set the default if nothing more
+# specific has already been configured for this exact logger name (e.g. via
+# configuration.yaml's `logger:` integration) - checking .level (not
+# .getEffectiveLevel()) distinguishes "explicitly set on this logger" from
+# "inherited," so this never overwrites a user's own explicit choice
+# regardless of which runs first at startup.
+if _RAW_RESPONSE_LOGGER.level == logging.NOTSET:
+    _RAW_RESPONSE_LOGGER.setLevel(logging.WARNING)
+
+_REDACTED = "[REDACTED]"
+_SENSITIVE_ATTRIBUTE_KEYS = {
+    "proxyUrl",
+    "janusToken",
+    "signallingServerToken",
+    "cameraAuthToken",
+}
+
+
+def _redact_stream_info(body: dict) -> dict:
+    """
+    Return a deep copy of a get_stream_info response with credentials masked.
+
+    Safe to log at normal debug level. Masks the known sensitive attribute
+    keys plus iceServers TURN credentials/usernames (which are themselves
+    time-limited but still live access credentials while valid).
+    """
+
+    redacted: dict = json.loads(json.dumps(body))  # cheap deep copy via round-trip
+
+    def _redact_attributes(attributes: dict) -> None:
+        for key in _SENSITIVE_ATTRIBUTE_KEYS:
+            if key in attributes:
+                attributes[key] = _REDACTED
+        ice_servers_s = attributes.get("iceServers")
+        if ice_servers_s:
+            try:
+                ice_servers = json.loads(ice_servers_s)
+                for server in ice_servers:
+                    if "credential" in server:
+                        server["credential"] = _REDACTED
+                    if "username" in server:
+                        server["username"] = _REDACTED
+                attributes["iceServers"] = json.dumps(ice_servers)
+            except Exception:
+                attributes["iceServers"] = _REDACTED
+
+    data_attrs = redacted.get("data", {}).get("attributes")
+    if isinstance(data_attrs, dict):
+        _redact_attributes(data_attrs)
+
+    for item in redacted.get("included", []):
+        item_attrs = item.get("attributes")
+        if isinstance(item_attrs, dict):
+            _redact_attributes(item_attrs)
+
+    return redacted
+
 
 
 class OtpType(Enum):
@@ -99,6 +167,18 @@ class AlarmCameraSession:
         self.cookie_jar = cookie_jar or aiohttp.CookieJar(unsafe=True)
         self.session = session or aiohttp.ClientSession(cookie_jar=self.cookie_jar)
 
+    @property
+    def owns_session(self) -> bool:
+        """
+        Return whether this instance created its own aiohttp session.
+
+        True unless a session was passed in externally (e.g. reusing the
+        vendored library's own session) - determines whether close() should
+        actually close the underlying session, and whether a fresh login is
+        needed versus reusing credentials already established elsewhere.
+        """
+        return self._owns_session
+
     @classmethod
     def from_alarm_bridge(
         cls,
@@ -143,7 +223,8 @@ class AlarmCameraSession:
                         "Camera session: reusing pyalarmdotcomajax internal session."
                     )
                     break
-            except Exception:
+            except Exception as err:
+                _LOGGER.debug("Camera session: session candidate %s failed: %s", fn, err)
                 continue
 
         for fn in ajax_key_candidates:
@@ -153,7 +234,8 @@ class AlarmCameraSession:
                     extracted_ajax_key = val
                     _LOGGER.debug("Camera session: reusing pyalarmdotcomajax ajax key.")
                     break
-            except Exception:
+            except Exception as err:
+                _LOGGER.debug("Camera session: ajax key candidate %s failed: %s", fn, err)
                 continue
 
         for fn in mfa_candidates:
@@ -162,7 +244,8 @@ class AlarmCameraSession:
                 if isinstance(val, str) and val:
                     extracted_mfa_cookie = val
                     break
-            except Exception:
+            except Exception as err:
+                _LOGGER.debug("Camera session: MFA cookie candidate %s failed: %s", fn, err)
                 continue
 
         if extracted_session is not None:
@@ -203,13 +286,20 @@ class AlarmCameraSession:
         if mfa and mfa.value != self.mfa_cookie:
             self.mfa_cookie = mfa.value
 
-    async def _get(
+    async def get(
         self,
         url: str,
         *,
         accept: dict[str, str] | None = None,
         use_ajax: bool = True,
     ) -> aiohttp.ClientResponse:
+        """
+        Perform an authenticated GET request against the Alarm.com API.
+
+        Public because camera.py (a sibling module, not just internal callers)
+        also needs this for fetching snapshot images - it was never actually
+        private in practice, just named as if it were.
+        """
         resp = await self.session.get(
             url,
             headers=_build_headers(accept or ACCEPT_JSONAPI, self.ajax_key if use_ajax else None),
@@ -253,7 +343,7 @@ class AlarmCameraSession:
             raise ValueError("Password required for independent login")
 
         _LOGGER.debug("Loading login page...")
-        resp = await self._get(f"{URL_BASE}login", accept=ACCEPT_HTML, use_ajax=False)
+        resp = await self.get(f"{URL_BASE}login", accept=ACCEPT_HTML, use_ajax=False)
         html = await resp.text()
         soup = BeautifulSoup(html, "html.parser")
 
@@ -299,7 +389,7 @@ class AlarmCameraSession:
 
     async def _load_identity(self) -> None:
         _LOGGER.debug("Loading user identity...")
-        resp = await self._get(f"{API_URL_BASE}identities")
+        resp = await self.get(f"{API_URL_BASE}identities")
         body = await resp.json()
         data = body.get("data")
 
@@ -313,7 +403,7 @@ class AlarmCameraSession:
     async def _check_mfa(self) -> AuthResult:
         """Check MFA requirement."""
         _LOGGER.debug("Checking MFA requirements...")
-        resp = await self._get(f"{API_URL_BASE}{TWO_FACTOR_PATH}/{self.identity_id}")
+        resp = await self.get(f"{API_URL_BASE}{TWO_FACTOR_PATH}/{self.identity_id}")
         body = await resp.json()
         attrs = body.get("data", {}).get("attributes", {})
 
@@ -335,7 +425,7 @@ class AlarmCameraSession:
 
     async def get_camera_list(self) -> list[dict]:
         """Return list of camera summary dicts."""
-        resp = await self._get(f"{API_URL_BASE}video/devices/cameras")
+        resp = await self.get(f"{API_URL_BASE}video/devices/cameras")
         body = await resp.json()
         data = body.get("data", [])
 
@@ -352,21 +442,37 @@ class AlarmCameraSession:
         return cameras
 
     async def get_stream_info(self, camera_id: str) -> dict | None:
-        """Fetch WebRTC config for a camera.
+        """
+        Fetch WebRTC config for a camera.
 
         Important: do not swallow ClientResponseError here.
         camera.py needs 401/403 to bubble up so it can retry auth.
         """
-        resp = await self._get(
+        resp = await self.get(
             f"{API_URL_BASE}video/videoSources/liveVideoHighestResSources/{camera_id}"
         )
         body = await resp.json()
 
-        _LOGGER.debug(
-            "get_stream_info raw response for camera %s: %s",
-            camera_id,
-            body,
-        )
+        # Off by default, regardless of the main camera_api logger's level -
+        # this fires on every WebRTC token refresh (roughly every 20-30
+        # seconds per camera) and the raw response contains live session
+        # credentials. Enable via configuration.yaml:
+        #   logger:
+        #     logs:
+        #       custom_components.alarmdotcom.camera_api.raw_responses: debug   # full, unredacted
+        #       custom_components.alarmdotcom.camera_api.raw_responses: info    # redacted summary
+        if _RAW_RESPONSE_LOGGER.isEnabledFor(logging.DEBUG):
+            _RAW_RESPONSE_LOGGER.debug(
+                "get_stream_info raw response for camera %s: %s",
+                camera_id,
+                body,
+            )
+        elif _RAW_RESPONSE_LOGGER.isEnabledFor(logging.INFO):
+            _RAW_RESPONSE_LOGGER.info(
+                "get_stream_info response for camera %s (redacted): %s",
+                camera_id,
+                _redact_stream_info(body),
+            )
 
         top_attrs = body.get("data", {}).get("attributes", {})
         ice_servers_s = top_attrs.get("iceServers")

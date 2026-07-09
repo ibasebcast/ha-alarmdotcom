@@ -185,14 +185,48 @@ Still image snapshots are also available, which means the camera will display a 
 
 # Development Status
 
-This integration is under active maintenance.
+This integration is under active maintenance. **Version `2026.7.9.3`** is the current stable release, consolidating a significant round of fixes and new features - see `CHANGELOG.md` for the complete, detailed history, but the highlights:
 
-Recent improvements include:
+### Security fix
 
-* Restored compatibility with modern Home Assistant releases
-* Fixed entities becoming unavailable
-* Updated device registry usage to comply with upcoming Home Assistant requirements
-* Improved websocket connection reliability
+**Arm/disarm code enforcement was silently broken.** If you configured a code to require for arming/disarming, entering *any* correctly-formatted code - not necessarily the one you set - would still successfully arm or disarm. This is now fixed and covered by automated regression tests. If you rely on the code requirement, you should update as soon as practical.
+
+### New features
+
+* **A diagnostics page** (Settings → Devices & Services → Alarm.com → Download diagnostics) - a downloadable snapshot of everything the integration knows about your account or a specific device, with all credentials and session tokens automatically redacted. Useful for troubleshooting and for attaching to bug reports without needing to dig through logs or worry about leaking a live camera token.
+* **Account-wide low/critical battery count sensors** - two new entities that track how many devices currently report low or critical battery, with the specific device names available as an attribute, so you don't have to check every sensor individually.
+
+### Bug fixes
+
+* Two real bugs found while adding test coverage: duplicate config entries were never actually prevented, and a crash could occur in the reconnect-recovery path after enough failed connection attempts.
+* Camera diagnostics were silently missing all camera data due to cameras using a different internal discovery path than every other device type - now fixed and verified against a real account with real cameras.
+* Live camera session tokens were being written to Home Assistant's logs whenever debug logging was enabled - this is now off by default and opt-in only, and separately redacted anywhere else this data surfaces.
+* Carried-forward fixes from `2026.7.6`: the iPhone/iPad/Safari black-screen camera issue, and a bug where entity state could silently stop updating until a full integration reload.
+
+### Under the hood
+
+* **Vendored the `pyalarmdotcomajax` API client directly into this repository** (see "Architecture Note" below) - this was previously a real HACS compliance blocker and a source of duplicated bug reports across two repos.
+* **A real, automated test suite** now runs in CI on every push and pull request, covering config flow, setup/unload lifecycle, the arm-code security fix, diagnostics (including the redaction itself), and the new battery sensors.
+* `mypy` now reports zero type errors across the entire codebase, for the first time - `ruff`, `codespell`, and `taplo` all pass cleanly as well.
+* A preemptive fix for a Home Assistant deprecation that becomes a hard error in December 2026 (a config-entry reload pattern used during reauthentication), verified directly against Home Assistant's own source code before shipping.
+
+---
+
+# Architecture Note: Vendored `pyalarmdotcomajax`
+
+As of `2026.7.6.1b0`, the `pyalarmdotcomajax` Alarm.com API client lives directly in this repository, instead of being installed separately via a `git+` URL in `manifest.json`. As of `2026.7.7.1b0`, it's vendored under the deliberately collision-proof name `_pyalarmdotcomajax` at `custom_components/alarmdotcom/_pyalarmdotcomajax/` (see below for why the name changed).
+
+**Why:** `pyalarmdotcomajax` was previously a separate repository ([ibasebcast/pyalarmdotcomajax](https://github.com/ibasebcast/pyalarmdotcomajax)) that this integration depended on via a `git+` dependency. In practice, the two repos were never really independent — nearly every bug fix required a version bump in `pyalarmdotcomajax`, then a matching dependency-pin bump here, then a release of both. Bugs also frequently got reported in both repos as duplicates, since from a user's perspective it's one integration. On top of the coordination overhead, a `git+` dependency in `manifest.json` is a HACS/hassfest compliance issue, since HACS/hassfest strongly prefer plain PyPI-resolvable requirements.
+
+**What changed:**
+- The library's code (and its git history) now lives under `custom_components/alarmdotcom/_pyalarmdotcomajax/`. It's imported as `_pyalarmdotcomajax` (leading underscore), not `pyalarmdotcomajax`, deliberately: no legitimate PyPI package can use a leading underscore, so this name can never collide with a stray pip-installed `pyalarmdotcomajax` (e.g. one left over from before this vendoring change). Without that, a missing or broken vendored copy could silently fall back to a stale pip-installed copy instead of failing loudly - which is exactly what happened during beta testing of `2026.7.6.1b0`.
+- `manifest.json` no longer has a `git+` requirement; it now lists the library's actual runtime dependencies directly (`mashumaro`, `phonenumbers`, `pyhumps`, `typer`, `beautifulsoup4`), which were previously pulled in transitively.
+- The library's internal code is otherwise unchanged and still uses absolute imports internally (e.g. `from _pyalarmdotcomajax.controllers.users import ...`, updated from the original `pyalarmdotcomajax.` prefix as part of the rename). This integration's `__init__.py` adds the vendored directory to `sys.path` before anything imports it, so those imports keep resolving without needing every file in the library rewritten to relative imports.
+- No functional/runtime behavior changes are intended by this move — it's a packaging change only.
+
+**What this means going forward:**
+- Bug reports and contributions related to the Alarm.com API client now belong in this repository, not a separate one.
+- The standalone `pyalarmdotcomajax` repository is no longer the source of truth for this integration; see that repository's own README for its current status.
 
 ---
 

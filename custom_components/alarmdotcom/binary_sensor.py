@@ -8,16 +8,16 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Generic
 
-import pyalarmdotcomajax as pyadc
+import _pyalarmdotcomajax as pyadc
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
     BinarySensorEntityDescription,
 )
-from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
@@ -236,7 +236,8 @@ class AdcBinarySensorEntityDescription(
 
 @callback
 def sensor_extra_attrib_fn(device: pyadc.base.AdcDeviceResource) -> dict[str, str]:
-    """Expose the Alarm.com resource ID as an entity attribute.
+    """
+    Expose the Alarm.com resource ID as an entity attribute.
 
     This is the identifier required by the alarmdotcom.bypass_sensor /
     alarmdotcom.unbypass_sensor services. Without this, finding it requires a
@@ -368,7 +369,7 @@ class TroubleConditionBinarySensorEntity(BinarySensorEntity):
         self._attr_is_on = self._has_active_trouble()
 
     @property
-    def extra_state_attributes(self) -> dict[str, str | int | list[str] | None]:
+    def extra_state_attributes(self) -> dict[str, str | int | list[str | None] | None]:
         """Return extra state attributes for the active trouble conditions."""
 
         matching_conditions = [
@@ -428,7 +429,6 @@ class DeviceTroubleBinarySensorEntity(BinarySensorEntity):
 
         self.hub = hub
         self.resource_id = resource_id
-        resource = hub.api.managed_devices[resource_id]
         self._attr_name = "Trouble"
         self._attr_unique_id = f"{resource_id}_trouble"
         self._attr_available = hub.available
@@ -436,7 +436,7 @@ class DeviceTroubleBinarySensorEntity(BinarySensorEntity):
         self._attr_is_on = self._has_active_trouble()
 
     @property
-    def extra_state_attributes(self) -> dict[str, str | int | list[str] | None]:
+    def extra_state_attributes(self) -> dict[str, str | int | list[str | None] | None]:
         """Return extra state attributes for active device trouble conditions."""
 
         matching_conditions = _conditions_for_resource(self.hub, self.resource_id)

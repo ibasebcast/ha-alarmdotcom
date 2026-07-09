@@ -1,0 +1,21 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v3
+      with:
+        python-version: "3.14"
+    - name: Install dependencies
+      run: |
+        pip install -r requirements-dev.txt
+        pip install beautifulsoup4 mashumaro phonenumbers pyhumps typer click rich
+    - name: Run tests
+      run: pytest tests/ -v

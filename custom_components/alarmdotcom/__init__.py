@@ -1,18 +1,53 @@
 """The alarmdotcom integration."""
 
+import os
+import sys
+
+# pyalarmdotcomajax is vendored directly in this directory, as the
+# _pyalarmdotcomajax package (custom_components/alarmdotcom/_pyalarmdotcomajax/),
+# rather than installed as a separate pip package. This avoids the git+
+# dependency in manifest.json that blocked full HACS/hassfest compliance and
+# required lockstep version bumps across two repos for every fix.
+#
+# It's imported and referenced everywhere as _pyalarmdotcomajax (leading
+# underscore), not pyalarmdotcomajax, deliberately: no legitimate PyPI package
+# can use a leading underscore, so this name can never collide with a stray
+# pip-installed pyalarmdotcomajax left over from before this vendoring change
+# (or from anything else). A collision like that previously meant a missing
+# or broken vendored copy could silently fall back to a stale pip-installed
+# copy instead of failing - this rename makes that fall-back impossible: if
+# _pyalarmdotcomajax isn't on sys.path, importing it can only ever raise
+# ModuleNotFoundError, never silently resolve to the wrong thing.
+#
+# The vendored package's internal modules still use absolute imports (e.g.
+# `from _pyalarmdotcomajax.controllers.users import ...`), so this directory
+# is added to sys.path here, before anything imports _pyalarmdotcomajax, so
+# those imports resolve without needing every internal file rewritten to
+# relative imports.
+_VENDOR_PATH = os.path.dirname(__file__)
+if _VENDOR_PATH not in sys.path:
+    sys.path.insert(0, _VENDOR_PATH)
+
 import logging
 
+import _pyalarmdotcomajax as pyadc
 import aiohttp
-import pyalarmdotcomajax as pyadc
 import voluptuous as vol
-from homeassistant.helpers import config_validation as cv
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import Event, HomeAssistant, ServiceCall
-from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady, HomeAssistantError, ServiceValidationError
-
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.core import Event, HomeAssistant, ServiceCall
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
+from homeassistant.helpers import config_validation as cv
 
+from .camera_api import AlarmCameraSession
 from .const import (
+    ATTR_PARTITION_ID,
+    ATTR_RESOURCE_ID,
     CONF_ARM_AWAY,
     CONF_ARM_HOME,
     CONF_ARM_NIGHT,
@@ -20,8 +55,6 @@ from .const import (
     CONF_MFA_TOKEN,
     CONF_NO_ENTRY_DELAY,
     CONF_SILENT_ARM,
-    ATTR_PARTITION_ID,
-    ATTR_RESOURCE_ID,
     DATA_HUB,
     DEBUG_REQ_EVENT,
     DOMAIN,
@@ -31,9 +64,35 @@ from .const import (
     STARTUP_MESSAGE,
 )
 from .hub import AlarmHub
-from .camera_api import AlarmCameraSession
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _log_pyadc_location() -> None:
+    """
+    Log which pyalarmdotcomajax copy actually loaded, warning if it's not the vendored one.
+
+    Pure path-string operations (join/abspath/normcase never touch the
+    filesystem for a path that's already resolved via a live module's
+    __file__), pulled into its own sync function rather than left inline
+    in async_setup_entry - it has no genuine async/await need.
+    """
+    pyadc_version = getattr(pyadc, "__version__", "unknown")
+    expected_pyadc_path = os.path.join(_VENDOR_PATH, "_pyalarmdotcomajax", "__init__.py")
+    resolved_pyadc_path = os.path.normcase(os.path.abspath(pyadc.__file__))
+    if resolved_pyadc_path != os.path.normcase(os.path.abspath(expected_pyadc_path)):
+        LOGGER.warning(
+            "pyalarmdotcomajax %s loaded from an UNEXPECTED location: %s "
+            "(expected the bundled copy at: %s). This usually means a leftover "
+            "pip-installed pyalarmdotcomajax from before this integration vendored "
+            "it directly (harmless on its own, but worth cleaning up with "
+            "'pip uninstall pyalarmdotcomajax' - see the CHANGELOG for details).",
+            pyadc_version,
+            pyadc.__file__,
+            expected_pyadc_path,
+        )
+    else:
+        LOGGER.info("pyalarmdotcomajax loaded from the bundled copy: %s", pyadc.__file__)
 
 
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -41,6 +100,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     LOGGER.info("%s: Initializing Alarmdotcom from config entry.", __name__)
     LOGGER.info(STARTUP_MESSAGE)
+    _log_pyadc_location()
 
     hub = AlarmHub(hass, config_entry)
 
@@ -71,7 +131,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
         # Only log in when we had to create our own independent session and
         # still do not have an ajax key.
-        if camera_session._owns_session and not camera_session.ajax_key:
+        if camera_session.owns_session and not camera_session.ajax_key:
             LOGGER.debug("Camera session: performing independent login.")
             await camera_session.login()
         else:
