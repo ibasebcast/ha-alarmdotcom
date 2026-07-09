@@ -1,3 +1,12 @@
+## 2026.7.9.4b0 (beta)
+
+### Added
+- **New: auto-off timers for lights**, via two new services - `alarmdotcom.set_auto_off` and `alarmdotcom.cancel_auto_off`. Target any Alarm.com light entity (or several at once, using the standard entity target picker) and a duration; the light turns off automatically once that duration elapses.
+  - Deliberately more than a plain "wait then turn off" automation can do on its own: the scheduled off-time is persisted, so it **survives a Home Assistant restart** - a timer that was already due while Home Assistant was offline fires immediately on startup, and one still pending is rescheduled for its remaining time rather than being lost. The scheduled off-time is also exposed as an `auto_off_at` attribute directly on the light entity, so "time remaining" is available to templates and other automations without a separate helper entity.
+  - If a light is turned off some other way before its timer fires - manually, from the Alarm.com app, from an unrelated automation - the timer is automatically cleared rather than lingering with a stale `auto_off_at` attribute.
+  - Checked first whether Alarm.com's own API supports this natively at the device level (which would be more robust still, working even through a Home Assistant outage) - it does not, at least not in what this integration currently models; this is a Home Assistant-side implementation.
+  - Covered by `tests/test_auto_off.py`, including the two restart-survival scenarios (catch-up on a missed past time, reschedule on a still-pending future time) that are the actual point of this feature over a plain automation.
+
 ## 2026.7.9.3 (stable)
 
 This release consolidates everything from the `2026.7.6.1b0` through `2026.7.9.3b0` beta cycle into a single stable release. Every item below has been verified either through the automated test suite, a clean `mypy`/`ruff`/CI run, or a real diagnostics download / log capture from a live account - the full beta-by-beta detail (including what didn't work on the first attempt) is preserved further down in this file for anyone who wants it.

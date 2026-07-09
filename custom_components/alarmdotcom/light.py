@@ -22,11 +22,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 from homeassistant.util.color import brightness_to_value, value_to_brightness
 
-from .const import DATA_HUB, DOMAIN
+from .const import DATA_AUTO_OFF, DATA_HUB, DOMAIN
 from .entity import AdcControllerT, AdcEntity, AdcEntityDescription, AdcManagedDeviceT
 from .util import cleanup_orphaned_entities_and_devices
 
 if TYPE_CHECKING:
+    from .auto_off import AutoOffManager
     from .hub import AlarmHub
 
 BRIGHTNESS_SCALE = (1, 99)
@@ -43,9 +44,12 @@ async def async_setup_entry(
     """Set up the light platform."""
 
     hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
+    auto_off_manager: AutoOffManager = hass.data[DOMAIN][config_entry.entry_id][DATA_AUTO_OFF]
 
-    entities = [
-        AdcLightEntity(hub=hub, resource_id=device.id, description=entity_description)
+    entities: list[AdcLightEntity] = [
+        AdcLightEntity(
+            hub=hub, resource_id=device.id, description=entity_description, auto_off_manager=auto_off_manager
+        )
         for entity_description in ENTITY_DESCRIPTIONS
         for device in hub.api.lights
         if entity_description.supported_fn(hub, device.id)
@@ -173,6 +177,36 @@ class AdcLightEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], LightEntity):
 
     entity_description: AdcLightEntityDescription
 
+    def __init__(
+        self,
+        hub: AlarmHub,
+        resource_id: str,
+        description: AdcLightEntityDescription,
+        auto_off_manager: AutoOffManager,
+    ) -> None:
+        """Initialize the light entity, additionally wiring in the auto-off manager."""
+
+        self._auto_off_manager = auto_off_manager
+        super().__init__(hub=hub, resource_id=resource_id, description=description)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """
+        Return this entity's extra attributes, plus a live auto_off_at if a timer is pending.
+
+        auto_off_at is deliberately computed live here (not set once in
+        __init__ like the rest of this entity's state) since it needs to
+        reflect whatever the auto-off manager currently has scheduled,
+        which can change at any time via the set_auto_off/cancel_auto_off
+        services - not just on the resource-update events the rest of this
+        entity's state responds to.
+        """
+
+        attrs = dict(self._attr_extra_state_attributes or {})
+        if self.entity_id and (off_at := self._auto_off_manager.get_off_at(self.entity_id)) is not None:
+            attrs["auto_off_at"] = off_at.isoformat()
+        return attrs
+
     @callback
     def initiate_state(self) -> None:
         """Initiate entity state."""
@@ -195,6 +229,12 @@ class AdcLightEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], LightEntity):
             self._attr_is_on = self.entity_description.is_on_fn(self.hub, self.resource_id)
             self._attr_brightness = self.entity_description.brightness_fn(self.hub, self.resource_id)
             self._attr_color_mode = self.entity_description.color_mode_fn(self.hub, self.resource_id)
+
+            # entity_id is only set once this entity has actually been added
+            # to hass - not during the initial initiate_state() call inside
+            # __init__, which is why this lives here and not there.
+            if self.entity_id:
+                self._auto_off_manager.notify_state_changed_externally(self.entity_id, is_on=self._attr_is_on)
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the light on."""

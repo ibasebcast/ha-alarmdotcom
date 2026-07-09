@@ -22,8 +22,13 @@ DEBUG_REQ_EVENT = "alarmdotcom_debug_request"
 
 SERVICE_BYPASS_SENSOR = "bypass_sensor"
 SERVICE_UNBYPASS_SENSOR = "unbypass_sensor"
+SERVICE_SET_AUTO_OFF = "set_auto_off"
+SERVICE_CANCEL_AUTO_OFF = "cancel_auto_off"
 ATTR_RESOURCE_ID = "resource_id"
 ATTR_PARTITION_ID = "partition_id"
+ATTR_DURATION = "duration"
+
+DATA_AUTO_OFF = "auto_off_manager"
 
 MIGRATE_MSG_ALERT = (
     "The Alarm.com integration is now configured exclusively via Home Assistant's"
