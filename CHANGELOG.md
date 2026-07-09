@@ -31,7 +31,7 @@ This release consolidates everything from the `2026.7.6.1b0` through `2026.7.9.3
 
 ### Upcoming Home Assistant compatibility
 
-- **Pre-emptively fixed a Home Assistant deprecation that becomes a hard error in December 2026** (using a config-entry update listener together with a reloading method in a config flow - Home Assistant's own reauth flow pattern). Confirmed against Home Assistant's real, current source before writing the fix, and confirmed via CI that it resolves correctly against the actual `homeassistant` version this integration targets.
+- **Preemptively fixed a Home Assistant deprecation that becomes a hard error in December 2026** (using a config-entry update listener together with a reloading method in a config flow - Home Assistant's own reauth flow pattern). Confirmed against Home Assistant's real, current source before writing the fix, and confirmed via CI that it resolves correctly against the actual `homeassistant` version this integration targets.
 
 ### CI / Internal Quality
 

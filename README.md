@@ -208,7 +208,7 @@ This integration is under active maintenance. **Version `2026.7.9.3`** is the cu
 * **Vendored the `pyalarmdotcomajax` API client directly into this repository** (see "Architecture Note" below) - this was previously a real HACS compliance blocker and a source of duplicated bug reports across two repos.
 * **A real, automated test suite** now runs in CI on every push and pull request, covering config flow, setup/unload lifecycle, the arm-code security fix, diagnostics (including the redaction itself), and the new battery sensors.
 * `mypy` now reports zero type errors across the entire codebase, for the first time - `ruff`, `codespell`, and `taplo` all pass cleanly as well.
-* A pre-emptive fix for a Home Assistant deprecation that becomes a hard error in December 2026 (a config-entry reload pattern used during reauthentication), verified directly against Home Assistant's own source code before shipping.
+* A preemptive fix for a Home Assistant deprecation that becomes a hard error in December 2026 (a config-entry reload pattern used during reauthentication), verified directly against Home Assistant's own source code before shipping.
 
 ---
 
