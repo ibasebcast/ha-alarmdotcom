@@ -2,18 +2,27 @@
 
 from abc import ABC
 from dataclasses import dataclass, field
-from enum import IntEnum
+from enum import Enum, IntEnum
+from typing import Generic, TypeVar
 
 from _pyalarmdotcomajax.models.base import (
     AdcDeviceResource,
     BaseManagedDeviceAttributes,
-    DeviceState,
     ResourceType,
 )
 
+# Declared locally rather than imported from _pyalarmdotcomajax.models.base,
+# even though it's the same conceptual type variable. Works around a known,
+# longstanding mypy limitation (python/mypy#11854): a TypeVar imported from
+# another module, used to parameterize a Generic[] class, triggers a spurious
+# "Free type variable expected in Generic[...]" error. Bound identically, so
+# this stays fully type-compatible with BaseManagedDeviceAttributes[DeviceState]
+# (TypeVar bound-checking is structural, not based on object identity).
+DeviceState = TypeVar("DeviceState", bound=Enum)
+
 
 @dataclass(kw_only=True)
-class TemperatureDeviceAttributes(BaseManagedDeviceAttributes[DeviceState], ABC):
+class TemperatureDeviceAttributes(BaseManagedDeviceAttributes[DeviceState], Generic[DeviceState], ABC):
     """Attributes of temperature device."""
 
     # fmt: off

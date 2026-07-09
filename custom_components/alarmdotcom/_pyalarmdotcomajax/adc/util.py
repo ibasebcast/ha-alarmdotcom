@@ -50,8 +50,8 @@ class AsyncTyper(typer.Typer):
                 asyncio.get_event_loop().run_until_complete(f(*args, **kwargs))
 
             if inspect.iscoroutinefunction(f):
-                return decorator(runner)  # type: ignore
-            return decorator(f)  # type: ignore
+                return decorator(runner)
+            return decorator(f)
 
         return add_runner
 

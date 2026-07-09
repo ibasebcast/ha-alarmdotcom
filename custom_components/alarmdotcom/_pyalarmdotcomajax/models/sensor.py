@@ -55,7 +55,7 @@ class SensorSubtype(AdcResourceSubtype):
     MOBILE_PHONE = 69
 
     @classmethod
-    def _missing_(cls: type, value: object) -> SensorSubtype:
+    def _missing_(cls: type[SensorSubtype], value: object) -> SensorSubtype:
         """Set default enum member if an unknown value is provided."""
         return SensorSubtype.UNKNOWN
 

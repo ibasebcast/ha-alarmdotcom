@@ -19,7 +19,7 @@ from _pyalarmdotcomajax.events import (
     ResourceEventMessage,
 )
 from _pyalarmdotcomajax.exceptions import NotAuthorized, UnknownDevice
-from _pyalarmdotcomajax.models import AdcResourceT
+from _pyalarmdotcomajax.models.base import AdcResource
 from _pyalarmdotcomajax.util import resources_pretty, resources_raw
 from _pyalarmdotcomajax.websocket.client import (
     ConnectionEvent,
@@ -36,15 +36,34 @@ from rich.console import Group
 
 if TYPE_CHECKING:
     from _pyalarmdotcomajax import AlarmBridge
-    from _pyalarmdotcomajax.models.base import AdcResource, ResourceType
+    from _pyalarmdotcomajax.models.base import ResourceType
     from _pyalarmdotcomajax.models.jsonapi import Resource
 
 log = logging.getLogger(__name__)
 
-C = TypeVar("C", bound="BaseController[Any]")
+# Declared locally rather than imported from _pyalarmdotcomajax.models, even
+# though it's the same conceptual type variable used throughout the codebase.
+# This works around a known, longstanding mypy limitation (python/mypy#11854):
+# a TypeVar imported from another module and used to parameterize a Generic[]
+# class triggers a spurious "Free type variable expected in Generic[...]"
+# error. Bound identically, so this remains fully type-compatible with every
+# other file's own AdcResourceT usage (TypeVar bound-checking is structural,
+# not based on object identity).
+AdcResourceT = TypeVar("AdcResourceT", bound=AdcResource)
+
+C = TypeVar("C", bound="BaseController")
+# Deliberately a separate TypeVar from AdcResourceT (not just reused), even
+# though they're conceptually related - reusing the exact same TypeVar object
+# in this plain function's signature, positioned before BaseController's own
+# class definition, confuses mypy into treating AdcResourceT as no longer
+# "free" by the time it reaches `class BaseController(ABC, Generic[AdcResourceT])`
+# below, causing a spurious "Free type variable expected in Generic[...]" error.
+_ResourceClassT = TypeVar("_ResourceClassT", bound="AdcResource")
 
 
-def device_controller(resource_type: ResourceType, resource_class: type[AdcResourceT]) -> Callable[[type[C]], type[C]]:
+def device_controller(
+    resource_type: ResourceType, resource_class: type[_ResourceClassT]
+) -> Callable[[type[C]], type[C]]:
     """
     Simplify controller definitions by setting common attributes.
 

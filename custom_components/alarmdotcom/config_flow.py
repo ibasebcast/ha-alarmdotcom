@@ -137,6 +137,10 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Select OTP method when integration configured through UI."""
+        # self.bridge is always set by this point: this step is only ever
+        # reached via async_step_user's own successful bridge creation, never
+        # invoked independently.
+        assert self.bridge is not None
         if not self._otp_options:
             return self.async_abort(reason="no_otp_options")
 
@@ -214,6 +218,8 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Gather OTP when integration configured through UI."""
+        # self.bridge is always set by this point - see async_step_otp_select_method.
+        assert self.bridge is not None
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -269,6 +275,8 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Create configuration entry using entered data."""
+        # self.bridge is always set by this point - see async_step_otp_select_method.
+        assert self.bridge is not None
         await self.bridge.fetch_full_state()
 
         system_id = str(self.bridge.active_system.id)

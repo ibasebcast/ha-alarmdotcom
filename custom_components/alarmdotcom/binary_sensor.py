@@ -369,7 +369,7 @@ class TroubleConditionBinarySensorEntity(BinarySensorEntity):
         self._attr_is_on = self._has_active_trouble()
 
     @property
-    def extra_state_attributes(self) -> dict[str, str | int | list[str] | None]:
+    def extra_state_attributes(self) -> dict[str, str | int | list[str | None] | None]:
         """Return extra state attributes for the active trouble conditions."""
 
         matching_conditions = [
@@ -436,7 +436,7 @@ class DeviceTroubleBinarySensorEntity(BinarySensorEntity):
         self._attr_is_on = self._has_active_trouble()
 
     @property
-    def extra_state_attributes(self) -> dict[str, str | int | list[str] | None]:
+    def extra_state_attributes(self) -> dict[str, str | int | list[str | None] | None]:
         """Return extra state attributes for active device trouble conditions."""
 
         matching_conditions = _conditions_for_resource(self.hub, self.resource_id)

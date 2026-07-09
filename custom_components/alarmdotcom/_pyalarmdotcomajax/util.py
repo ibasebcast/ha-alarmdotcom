@@ -25,7 +25,7 @@ def get_related_entity_id_by_key(resource: Resource, name: str) -> str | None:
     """Return related entity ID by relationship dict key."""
 
     try:
-        return resource.relationships.get(name).data.id  # type: ignore
+        return resource.relationships.get(name).data.id
     except Exception:
         log.info("Unable to get related entity ID for %s in %s", name, resource.id)
         log.debug("Resource: %s", resource.to_json())

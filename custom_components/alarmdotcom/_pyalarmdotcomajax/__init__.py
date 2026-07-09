@@ -806,7 +806,7 @@ class AlarmBridge:
                     pass
 
                 if isinstance(response, success_response_class):
-                    return response  # type: ignore
+                    return response
 
                 # JsonAPI and AdcMini failure responses evaluate to the standard JSON:API FailureDocument.
                 try:

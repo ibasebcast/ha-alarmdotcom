@@ -9,7 +9,7 @@ from typing import Any
 import aiohttp
 from homeassistant.components.camera import Camera, CameraEntityFeature
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
@@ -81,7 +81,7 @@ class AlarmDotComCamera(Camera):
         self._attr_unique_id = f"{entry_id}_camera_{self._id}"
         self._attr_name = self._name
         self._webrtc_config: dict | None = None
-        self._remove_refresh: callback | None = None
+        self._remove_refresh: CALLBACK_TYPE | None = None
 
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"camera_{self._id}")},
