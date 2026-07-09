@@ -17,6 +17,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
@@ -63,10 +64,16 @@ async def async_setup_entry(
             if entity_description.supported_fn(hub, device.id)
         )
 
-    async_add_entities(entities)
+    battery_summary_entities: list[AdcBatterySummarySensor] = [
+        AdcBatterySummarySensor(hub=hub, level=pyadc.base.BatteryLevel.LOW, name="Low Battery Count"),
+        AdcBatterySummarySensor(hub=hub, level=pyadc.base.BatteryLevel.CRITICAL, name="Critical Battery Count"),
+    ]
 
-    current_entity_ids = {entity.entity_id for entity in entities}
-    current_unique_ids = {uid for uid in (entity.unique_id for entity in entities) if uid is not None}
+    async_add_entities([*entities, *battery_summary_entities])
+
+    all_entities = [*entities, *battery_summary_entities]
+    current_entity_ids = {entity.entity_id for entity in all_entities}
+    current_unique_ids = {uid for uid in (entity.unique_id for entity in all_entities) if uid is not None}
     await cleanup_orphaned_entities_and_devices(hass, config_entry, current_entity_ids, current_unique_ids, "sensor")
 
 
@@ -175,3 +182,65 @@ class AdcSensorEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], SensorEntity
 
         if isinstance(message, pyadc.ResourceEventMessage):
             self._attr_native_value = self.entity_description.native_value_fn(self.hub, self.resource_id)
+
+
+class AdcBatterySummarySensor(SensorEntity):
+    """
+    Aggregate count of devices at a given battery-level classification, account-wide.
+
+    Unlike every other entity in this platform, this is a single, permanent
+    entity per classification (not one per device) - it doesn't fit the
+    per-resource_id AdcEntity base class, which is hard-wired to react to
+    updates for one specific device. Subscribes with ids=None (matching
+    AlarmBridge.subscribe's own documented "all resource controllers"
+    behavior) so it recomputes whenever any device's battery status
+    changes, not just at startup.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "devices"
+
+    def __init__(self, hub: AlarmHub, level: pyadc.base.BatteryLevel, name: str) -> None:
+        """Initialize the battery summary sensor."""
+
+        self.hub = hub
+        self._level = level
+        self._attr_name = name
+        self._attr_unique_id = f"{hub.config_entry.entry_id}_battery_summary_{level.name.lower()}"
+
+        system_id = getattr(hub.api.active_system, "id", None)
+        self._attr_device_info = (
+            DeviceInfo(identifiers={(DOMAIN, system_id)}) if isinstance(system_id, str) else None
+        )
+
+        self._recompute()
+
+    @callback
+    def _recompute(self, message: pyadc.EventBrokerMessage | None = None) -> None:
+        """Recount matching devices and refresh the device-name attribute list."""
+
+        matching = [
+            device
+            for device in self.hub.api.managed_devices.values()
+            if getattr(device.attributes, "battery_level_classification", None) == self._level
+        ]
+        self._attr_native_value = len(matching)
+        self._attr_extra_state_attributes = {"devices": sorted(device.name for device in matching)}
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to updates for every resource, not just one device."""
+
+        self.async_on_remove(self.hub.api.subscribe(self._event_handler, None))
+
+    @callback
+    def _event_handler(self, message: pyadc.EventBrokerMessage) -> None:
+        """Recompute and push state on any resource add/update - mirrors AdcEntity.event_handler."""
+
+        if message.topic in (
+            pyadc.EventBrokerTopic.RESOURCE_ADDED,
+            pyadc.EventBrokerTopic.RESOURCE_UPDATED,
+        ):
+            self._recompute(message)
+            self.async_write_ha_state()

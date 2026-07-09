@@ -1,3 +1,13 @@
+## 2026.7.9.2b0 (beta)
+
+### Added
+- **New: account-wide low/critical battery count sensors** (`sensor.Low Battery Count`, `sensor.Critical Battery Count`). Unlike every other sensor in this integration, these are single, permanent entities per account rather than one per device - they recount and update live whenever any device's battery status changes, not just at startup. Each sensor's state is the count of matching devices; a `devices` attribute lists which ones by name, so you don't need to go hunting through every individual device's battery sensor to find out which one actually needs a new battery. Both attach to the account's System device. Covered by `tests/test_sensor_battery_summary.py`.
+
+### Fixed
+- **Diagnostics downloads were silently missing all camera data.** Found by inspecting an actual diagnostics download from a live account: `CameraController` showed `0 items` despite the account having real, working cameras, while every other controller (lights, locks, sensors, thermostat) showed correct real counts. Root cause: cameras aren't discovered through the standard `resource_controllers` system the rest of the integration uses - `camera.py` fetches them through a separate session (`AlarmCameraSession`) entirely, so the standard `CameraController` is never actually populated. `diagnostics.py` now pulls camera data from that real source: a summary list (`get_camera_list()`) plus per-camera stream/connectivity info (`get_stream_info()`) for both the whole-account and per-device diagnostics views.
+  - `get_stream_info()`'s raw response includes live session tokens - the exact data already redacted for debug logging (see `2026.7.6.1b0`) - so this only went in because it flows through the same redaction as everything else in the diagnostics dump, not a separate, easier-to-miss path. Covered by a dedicated test asserting the tokens actually come back redacted, not just that the feature runs without error.
+  - No camera session (e.g. camera login never completed) and a failed camera-list fetch are both reported as a clean status in the output rather than raising and breaking the rest of the diagnostics download.
+
 ## 2026.7.9.1b0 (beta)
 
 ### Added

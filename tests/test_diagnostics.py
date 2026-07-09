@@ -6,7 +6,7 @@ be safe to attach to a GitHub issue, so a regression that stops sensitive
 fields from being redacted is a real, if quiet, security-relevant bug.
 """
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -140,3 +140,120 @@ async def test_device_diagnostics_excludes_other_devices(hass, mock_hub_with_cam
     result = await async_get_device_diagnostics(hass, entry, device)
 
     assert result["resources"] == {}
+
+
+@pytest.fixture
+def mock_camera_session():
+    """
+    Build a mock AlarmCameraSession with one camera whose stream_info carries live tokens.
+
+    Cameras are fetched through this separate session, not through the
+    standard resource_controllers list - see the note in diagnostics.py's
+    _dump_all_resources for why. Found by inspecting a real diagnostics
+    download from a live account: CameraController showed 0 items despite
+    real cameras existing, because nothing populates it via the normal
+    fetch_full_state() path.
+    """
+    session = MagicMock()
+    session.get_camera_list = AsyncMock(
+        return_value=[{"id": "cam-1", "description": "Front Door"}]
+    )
+    session.get_stream_info = AsyncMock(
+        return_value={
+            "data": {
+                "attributes": {
+                    "proxyUrl": "SECRET_PROXY_URL",
+                    "janusToken": "SECRET_JANUS_TOKEN",
+                }
+            }
+        }
+    )
+    return session
+
+
+async def test_config_entry_diagnostics_includes_and_redacts_camera_session_data(
+    hass, mock_hub_with_camera_resource, mock_camera_session
+) -> None:
+    """
+    Camera data from the real camera session is included and redacted.
+
+    This is the actual regression test for the gap found via a real
+    diagnostics download: cameras must show up at all (not just an empty
+    CameraController), and get_stream_info's live tokens must be redacted
+    the same as everywhere else - this data flows through the same
+    async_redact_data(..., TO_REDACT) call, but it's worth confirming
+    directly rather than assuming.
+    """
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
+    entry.add_to_hass(hass)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        DATA_HUB: mock_hub_with_camera_resource,
+        "camera_session": mock_camera_session,
+    }
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["cameras"]["status"] == "ok"
+    camera = result["cameras"]["cameras"][0]
+    assert camera["summary"]["id"] == "cam-1"
+    assert camera["stream_info"]["data"]["attributes"]["proxyUrl"] == "**REDACTED**"
+    assert camera["stream_info"]["data"]["attributes"]["janusToken"] == "**REDACTED**"
+
+
+async def test_config_entry_diagnostics_camera_session_none_is_reported_cleanly(
+    hass, mock_hub_with_camera_resource
+) -> None:
+    """No camera session (e.g. camera login never succeeded) is reported, not a crash."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
+    entry.add_to_hass(hass)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        DATA_HUB: mock_hub_with_camera_resource,
+        "camera_session": None,
+    }
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["cameras"]["status"] == "no_camera_session"
+
+
+async def test_config_entry_diagnostics_camera_fetch_failure_does_not_break_whole_dump(
+    hass, mock_hub_with_camera_resource
+) -> None:
+    """A camera-list fetch failure is reported, not allowed to crash the whole diagnostics call."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
+    entry.add_to_hass(hass)
+    failing_session = MagicMock()
+    failing_session.get_camera_list = AsyncMock(side_effect=ConnectionError("boom"))
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        DATA_HUB: mock_hub_with_camera_resource,
+        "camera_session": failing_session,
+    }
+
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    assert result["cameras"]["status"] == "fetch_failed"
+    # The rest of the diagnostics dump should still be present and correct.
+    assert result["connection"]["available"] is True
+
+
+async def test_device_diagnostics_includes_matching_camera_only(
+    hass, mock_hub_with_camera_resource, mock_camera_session
+) -> None:
+    """A camera's own device page includes its camera session data, filtered to just that camera."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
+    entry.add_to_hass(hass)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
+        DATA_HUB: mock_hub_with_camera_resource,
+        "camera_session": mock_camera_session,
+    }
+
+    device = MagicMock()
+    device.name = "Front Door Camera"
+    device.model = "Camera"
+    device.manufacturer = "Alarm.com"
+    device.identifiers = {(DOMAIN, "cam-1")}
+
+    result = await async_get_device_diagnostics(hass, entry, device)
+
+    assert len(result["cameras"]) == 1
+    assert result["cameras"][0]["stream_info"]["data"]["attributes"]["proxyUrl"] == "**REDACTED**"
