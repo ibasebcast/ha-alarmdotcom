@@ -1,4 +1,4 @@
-## 2026.7.7.3b0 (beta)
+## 2026.7.8.1b0 (beta)
 
 ### Fixed
 - **Arm/disarm code was never actually validated** (found while clearing a pre-commit lint backlog, not previously reported - this is the most important fix in this release): `alarm_control_panel.py`'s `control_fn` computed both the configured arm code and the user-entered code, but never compared them. Home Assistant core's `_attr_code_arm_required`/`_attr_code_format` mechanism only validates that an entered code matches the expected *format* (numeric vs. text) before this function is even called - it does not check the code against what's actually configured. Net effect: **anyone could arm or disarm by entering any correctly-formatted code, not necessarily the one you configured** - the "require a code" option looked like it was enforcing something it wasn't. Fixed: entering the wrong (or no) code now raises a validation error instead of silently succeeding. Covered by 4 new tests in `tests/test_alarm_control_panel.py`, including a regression test that specifically fails against the old (unfixed) behavior.
