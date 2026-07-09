@@ -1,9 +1,8 @@
 ## 2026.7.9.3b0 (beta)
 
 ### Fixed
-- **Pre-emptive fix for a Home Assistant deprecation that becomes a hard error in December 2026.** Home Assistant 2026.6 deprecated using a config-entry update listener together with any reloading method in a config flow, because the combination can trigger the same config entry to reload twice at once - a race condition, not just wasted work. Verified directly against `home-assistant/core`'s real source (not just the changelog): our reauth flow called `async_update_entry(data=...)` and then explicitly `async_reload()` right after - and `async_update_entry` itself schedules every registered update listener (we have one, in `hub.py`, registered for the options flow) as soon as *any* field changes, `data` included. So reauth was firing two reload paths for the same entry nearly simultaneously.
+- **Preemptive fix for a Home Assistant deprecation that becomes a hard error in December 2026.** Home Assistant 2026.6 deprecated using a config-entry update listener together with any reloading method in a config flow, because the combination can trigger the same config entry to reload twice at once - a race condition, not just wasted work. Verified directly against `home-assistant/core`'s real source (not just the changelog): our reauth flow called `async_update_entry(data=...)` and then explicitly `async_reload()` right after - and `async_update_entry` itself schedules every registered update listener (we have one, in `hub.py`, registered for the options flow) as soon as *any* field changes, `data` included. So reauth was firing two reload paths for the same entry nearly simultaneously.
   - Fixed by switching the reauth path to `async_update_and_abort()` - confirmed via `home-assistant/core`'s actual `2026.7.1` source that this method updates the entry and aborts with no reload of its own, leaving the existing listener to do the one necessary reload. The options flow, which relies entirely on that same listener and never reloads explicitly itself, is unaffected and still correct.
- 
 
 ## 2026.7.9.2b0 (beta)
 
