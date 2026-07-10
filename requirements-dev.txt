@@ -14,4 +14,4 @@ pytest-asyncio >= 0.24.0
 # closely - when bumping the homeassistant pin above, check this package's
 # releases for a matching version, or tests may break due to API drift
 # between the pinned core version and what this test helper expects.
-pytest-homeassistant-custom-component >= 0.13.200
+pytest-homeassistant-custom-component >= 0.13.345
