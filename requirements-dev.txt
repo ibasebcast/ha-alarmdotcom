@@ -7,7 +7,7 @@ mypy>=2.2.0
 wheel>=0.47.0
 pathspec >= 1.1.1
 gitpython >= 3.1.50
-homeassistant >= 2026.7.1
+homeassistant >= 2026.7.2
 pytest >= 8.3.0
 pytest-asyncio >= 1.4.0
 # pytest-homeassistant-custom-component's version tracks Home Assistant core
