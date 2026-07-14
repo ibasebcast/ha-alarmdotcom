@@ -19,11 +19,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
-from .const import DATA_HUB, DOMAIN
+from .const import DATA_HUB, DATA_LOCK_ACTIVITY, DOMAIN
 from .entity import AdcControllerT, AdcEntity, AdcEntityDescription, AdcManagedDeviceT
 from .util import cleanup_orphaned_entities_and_devices
 
 if TYPE_CHECKING:
+    from .activity_history import LockActivityTracker
     from .hub import AlarmHub
 
 log = logging.getLogger(__name__)
@@ -38,9 +39,15 @@ async def async_setup_entry(
     """Set up the lock platform."""
 
     hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
+    lock_activity_tracker: LockActivityTracker = hass.data[DOMAIN][config_entry.entry_id][DATA_LOCK_ACTIVITY]
 
-    entities = [
-        AdcLockEntity(hub=hub, resource_id=device.id, description=entity_description)
+    entities: list[AdcLockEntity] = [
+        AdcLockEntity(
+            hub=hub,
+            resource_id=device.id,
+            description=entity_description,
+            lock_activity_tracker=lock_activity_tracker,
+        )
         for entity_description in ENTITY_DESCRIPTIONS
         for device in hub.api.locks
         if entity_description.supported_fn(hub, device.id)
@@ -170,6 +177,51 @@ class AdcLockEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], LockEntity):
     """Base Alarm.com lock entity."""
 
     entity_description: AdcLockEntityDescription
+
+    def __init__(
+        self,
+        hub: AlarmHub,
+        resource_id: str,
+        description: AdcLockEntityDescription,
+        lock_activity_tracker: LockActivityTracker,
+    ) -> None:
+        """Initialize the lock entity, additionally wiring in the lock activity tracker."""
+
+        self._lock_activity_tracker = lock_activity_tracker
+        super().__init__(hub=hub, resource_id=resource_id, description=description)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """
+        Return this entity's extra attributes, plus who last unlocked it via keypad code, if known.
+
+        Computed live (not set once in __init__) since new attribution
+        arrives on the lock activity tracker's own polling cadence, not
+        the resource-update events the rest of this entity's state
+        responds to. last_unlocked_by is deliberately omitted entirely
+        (not set to None) when nothing has been tracked yet, rather than
+        always showing a possibly-stale or empty value.
+        """
+
+        attrs = dict(self._attr_extra_state_attributes or {})
+        last_unlock = self._lock_activity_tracker.get_last_unlock(self.resource_id)
+        if last_unlock is not None:
+            unlocked_by, unlocked_at = last_unlock
+            attrs["last_unlocked_by"] = unlocked_by
+            attrs["last_unlocked_at"] = unlocked_at.isoformat()
+        return attrs
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to resource updates (via the base class) and lock activity attribution changes."""
+
+        await super().async_added_to_hass()
+        self.async_on_remove(self._lock_activity_tracker.add_listener(self._on_activity_change))
+
+    @callback
+    def _on_activity_change(self) -> None:
+        """Push updated state when the lock activity tracker finds new unlock attribution."""
+
+        self.async_write_ha_state()
 
     @callback
     def initiate_state(self) -> None:

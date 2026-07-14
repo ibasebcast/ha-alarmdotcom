@@ -29,6 +29,7 @@ ATTR_PARTITION_ID = "partition_id"
 ATTR_DURATION = "duration"
 
 DATA_AUTO_OFF = "auto_off_manager"
+DATA_LOCK_ACTIVITY = "lock_activity_tracker"
 
 MIGRATE_MSG_ALERT = (
     "The Alarm.com integration is now configured exclusively via Home Assistant's"

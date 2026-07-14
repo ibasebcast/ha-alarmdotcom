@@ -1,3 +1,20 @@
+## 2026.7.14.1b0 (beta)
+
+### Added
+- **New: `last_unlocked_by` / `last_unlocked_at` attributes on lock entities**, addressing GitHub issue #79 - a welcome-home automation (custom TTS depending on who unlocked the door) is now genuinely possible for keypad-code unlocks.
+  - Built on top of an entirely undocumented Alarm.com endpoint (`activity/activityDays`), reverse-engineered from the Alarm.com web app's own Activity page network traffic rather than guessed - confirmed working against real captured request/response data before any code was written, including the specific distinction that matters here: Alarm.com attributes a keypad-code unlock to a real name, but does *not* attribute a web/app-session or manual unlock to anyone - both of those correctly show as unattributed (`None`), not a parsing gap.
+  - This required a genuinely new architecture within the vendored library: `AlarmBridge.get_activity_history()`, the first data source in this integration that has no persistent state and never arrives over the live websocket stream - it has to be actively polled. A new `LockActivityTracker` handles this on its own 60-second interval, independent of the existing 5-minute full-state refresh.
+  - Lights and switches are deliberately not covered - confirmed (not guessed) that Alarm.com's own system does not attribute those to a specific user at all, only that a device was turned on.
+  - Covered by 22 new tests across the model, the fetch method, and the tracker's polling/filtering/deduplication logic - including a real regression test using the actual data captured from the issue's investigation.
+
+## 2026.7.9.5b0 (beta)
+
+### Added
+- **New: "Active Auto-Off Timers" sensor**, showing how many auto-off timers (from `2026.7.9.4b0`'s `set_auto_off` service) are currently pending, account-wide, with a `timers` attribute listing each affected light's friendly name and scheduled off-time.
+  - Same account-wide singleton pattern as the existing battery summary sensors, but reacting to a genuinely different source of change: `AutoOffManager` gained its own listener mechanism (`add_listener`/`get_all_active`), since a timer being set or cancelled via a service call isn't an Alarm.com resource event at all - the existing `hub.api.subscribe` mechanism the battery sensors use would never see it.
+  - Updates live: setting, cancelling, or a timer actually firing all notify this sensor immediately, not just on the next reload.
+  - Covered by `tests/test_sensor_active_auto_off_timers.py`, including a dedicated test that the sensor's state actually changes in response to a live notification, not just at construction time.
+
 ## 2026.7.9.4b0 (beta)
 
 ### Added

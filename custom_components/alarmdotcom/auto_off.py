@@ -19,6 +19,7 @@ own:
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
 
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
@@ -43,6 +44,10 @@ class AutoOffManager:
         self._off_at: dict[str, datetime] = {}
         # entity_id -> unsubscribe callback for its scheduled turn-off
         self._unsub: dict[str, CALLBACK_TYPE] = {}
+        # Callbacks to notify whenever a timer is set, cancelled, or fires -
+        # e.g. the active-timers summary sensor in sensor.py, which needs to
+        # recompute live rather than only reflecting state from startup.
+        self._change_listeners: list[Callable[[], None]] = []
 
     async def async_load(self) -> None:
         """Load persisted timers on startup, firing any that are already due."""
@@ -70,6 +75,7 @@ class AutoOffManager:
         self._cancel_existing(entity_id)
         self._schedule(entity_id, off_at)
         await self._async_persist()
+        self._notify_listeners()
         return off_at
 
     async def async_cancel(self, entity_id: str) -> bool:
@@ -78,12 +84,35 @@ class AutoOffManager:
         had_one = entity_id in self._off_at
         self._cancel_existing(entity_id)
         await self._async_persist()
+        if had_one:
+            self._notify_listeners()
         return had_one
 
     def get_off_at(self, entity_id: str) -> datetime | None:
         """Return the scheduled off time for entity_id, or None if no timer is active."""
 
         return self._off_at.get(entity_id)
+
+    def get_all_active(self) -> dict[str, datetime]:
+        """Return a snapshot of every entity_id with a currently active timer and its off-at time."""
+
+        return dict(self._off_at)
+
+    @callback
+    def add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
+        """Register a callback to be invoked whenever a timer is set, cancelled, or fires. Returns an unsubscribe function."""
+
+        self._change_listeners.append(listener)
+
+        @callback
+        def _unsubscribe() -> None:
+            self._change_listeners.remove(listener)
+
+        return _unsubscribe
+
+    def _notify_listeners(self) -> None:
+        for listener in self._change_listeners:
+            listener()
 
     @callback
     def notify_state_changed_externally(self, entity_id: str, *, is_on: bool) -> None:
@@ -100,6 +129,7 @@ class AutoOffManager:
         if not is_on and entity_id in self._off_at:
             self._cancel_existing(entity_id)
             self.hass.async_create_task(self._async_persist())
+            self._notify_listeners()
 
     async def async_unload(self) -> None:
         """
@@ -133,6 +163,7 @@ class AutoOffManager:
         self._unsub.pop(entity_id, None)
         self._off_at.pop(entity_id, None)
         await self._async_persist()
+        self._notify_listeners()
         await self.hass.services.async_call("light", "turn_off", {"entity_id": entity_id}, blocking=True)
 
     async def _async_persist(self) -> None:

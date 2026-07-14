@@ -97,6 +97,7 @@ from _pyalarmdotcomajax.models.base import (
     BaseManagedDeviceAttributes,
     ResourceType,
 )
+from _pyalarmdotcomajax.models.history_event import HistoryEvent
 from _pyalarmdotcomajax.models.jsonapi import (
     FailureDocument,
     JsonApiBaseElement,
@@ -286,6 +287,66 @@ class AlarmBridge:
         """Login to alarm.com."""
 
         return await self._auth_controller.login()
+
+    async def get_activity_history(
+        self,
+        start_time: datetime,
+        end_time: datetime | None = None,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> list[HistoryEvent]:
+        """
+        Fetch activity history events in the given time range.
+
+        Uses an entirely undocumented endpoint (`activity/activityDays`),
+        reverse-engineered from the Alarm.com web app's own Activity page
+        rather than found in any prior version of this library. Confirmed
+        directly from real captured requests, not guessed from other
+        endpoints' conventions - see the comments on individual parameters
+        below for what's actually been observed.
+
+        Unlike every other resource this library models, history events
+        have no persistent state and never arrive over the websocket -
+        they have to be actively polled, which is why this lives as a
+        plain bridge-level method rather than a BaseController subclass
+        (there is no ongoing "controller" of history events to maintain,
+        no subscribe-to-live-updates behavior that would apply here).
+
+        Args:
+            start_time: earliest event to include (inclusive), aware datetime.
+            end_time: latest event to include - omit (None) for "now",
+                matching the real web app's own behavior of leaving this
+                blank for its default view.
+            page: 1-indexed page number - confirmed real parameter, the
+                web app increments this to load older activity.
+            page_size: confirmed real parameter; the web app itself uses
+                100, kept as this method's own default to match.
+
+        Returns:
+            Every activity/history-event resource found in the response's
+            `included` array - the response's own `data` array (grouped by
+            day) is intentionally not modeled here, since nothing about
+            the day-grouping itself is needed for any current use case.
+
+        """
+
+        params: dict[str, str] = {
+            "debounceTimeMs": "1000",
+            "startTime": start_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "endTime": end_time.strftime("%Y-%m-%dT%H:%M:%S.000Z") if end_time else "",
+            "page": str(page),
+            "pageSize": str(page_size),
+            "searchString": "",
+            "showOnlyOpenEyeEvents": "false",
+        }
+
+        response = await self.get("activity/activityDays", None, params=params)
+
+        return [
+            HistoryEvent(api_resource=resource)
+            for resource in response.included
+            if resource.type == ResourceType.HISTORY_EVENT.value
+        ]
 
     async def fetch_full_state(self) -> None:
         """Fetch full state from alarm.com."""

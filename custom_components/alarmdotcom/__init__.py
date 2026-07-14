@@ -46,6 +46,7 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 
+from .activity_history import LockActivityTracker
 from .auto_off import AutoOffManager
 from .camera_api import AlarmCameraSession
 from .const import (
@@ -61,6 +62,7 @@ from .const import (
     CONF_SILENT_ARM,
     DATA_AUTO_OFF,
     DATA_HUB,
+    DATA_LOCK_ACTIVITY,
     DEBUG_REQ_EVENT,
     DOMAIN,
     PLATFORMS,
@@ -128,6 +130,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     auto_off_manager = AutoOffManager(hass, config_entry.entry_id)
     await auto_off_manager.async_load()
     hass.data[DOMAIN][config_entry.entry_id][DATA_AUTO_OFF] = auto_off_manager
+
+    lock_activity_tracker = LockActivityTracker(hub)
+    lock_activity_tracker.async_start()
+    hass.data[DOMAIN][config_entry.entry_id][DATA_LOCK_ACTIVITY] = lock_activity_tracker
 
     # Initialize WebRTC camera session, best effort.
     # Prefer reusing the already-authenticated pyalarmdotcomajax session to
@@ -436,12 +442,16 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
     hub: AlarmHub = entry_data[DATA_HUB]
     camera_session: AlarmCameraSession | None = entry_data.get("camera_session")
     auto_off_manager: AutoOffManager | None = entry_data.get(DATA_AUTO_OFF)
+    lock_activity_tracker: LockActivityTracker | None = entry_data.get(DATA_LOCK_ACTIVITY)
 
     if camera_session is not None:
         await camera_session.close()
 
     if auto_off_manager is not None:
         await auto_off_manager.async_unload()
+
+    if lock_activity_tracker is not None:
+        lock_activity_tracker.async_stop()
 
     unload_success = await hub.close()
 
