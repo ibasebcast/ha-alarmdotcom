@@ -19,12 +19,12 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
-from .const import DATA_HUB, DATA_LOCK_ACTIVITY, DOMAIN
+from .const import DATA_ACTIVITY_FEED, DATA_HUB, DOMAIN
 from .entity import AdcControllerT, AdcEntity, AdcEntityDescription, AdcManagedDeviceT
 from .util import cleanup_orphaned_entities_and_devices
 
 if TYPE_CHECKING:
-    from .activity_history import LockActivityTracker
+    from .activity_history import ActivityFeedTracker
     from .hub import AlarmHub
 
 log = logging.getLogger(__name__)
@@ -39,7 +39,7 @@ async def async_setup_entry(
     """Set up the lock platform."""
 
     hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
-    lock_activity_tracker: LockActivityTracker = hass.data[DOMAIN][config_entry.entry_id][DATA_LOCK_ACTIVITY]
+    lock_activity_tracker: ActivityFeedTracker = hass.data[DOMAIN][config_entry.entry_id][DATA_ACTIVITY_FEED]
 
     entities: list[AdcLockEntity] = [
         AdcLockEntity(
@@ -183,7 +183,7 @@ class AdcLockEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], LockEntity):
         hub: AlarmHub,
         resource_id: str,
         description: AdcLockEntityDescription,
-        lock_activity_tracker: LockActivityTracker,
+        lock_activity_tracker: ActivityFeedTracker,
     ) -> None:
         """Initialize the lock entity, additionally wiring in the lock activity tracker."""
 

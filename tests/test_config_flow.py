@@ -208,7 +208,7 @@ async def test_duplicate_system_aborts(hass: HomeAssistant, mock_bridge_class, m
 
 
 async def test_options_flow_full_walkthrough(hass: HomeAssistant) -> None:
-    """The options flow's two steps (arm code, then arm mode profiles) both work."""
+    """The options flow's three steps (arm code, arm mode profiles, then polling intervals) all work."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_CREDS)
     entry.add_to_hass(hass)
 
@@ -227,7 +227,40 @@ async def test_options_flow_full_walkthrough(hass: HomeAssistant) -> None:
         result["flow_id"],
         {CONF_ARM_HOME: ["silent_arming"], CONF_ARM_AWAY: [], CONF_ARM_NIGHT: []},
     )
+    assert result["type"] == data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "polling"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"activity_poll_interval": 15, "full_state_poll_interval": 5},
+    )
 
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_ARM_CODE] == "1234"
     assert result["data"][CONF_ARM_HOME] == ["silent_arming"]
+    assert result["data"]["activity_poll_interval"] == 15
+    assert result["data"]["full_state_poll_interval"] == 5
+
+
+async def test_options_flow_polling_step_accepts_custom_intervals(hass: HomeAssistant) -> None:
+    """The polling step actually persists custom (non-default) interval values, not just the defaults."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_CREDS)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_ARM_CODE: "", CONF_REMOVE_ARM_CODE: False}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_ARM_HOME: [], CONF_ARM_AWAY: [], CONF_ARM_NIGHT: []}
+    )
+    assert result["step_id"] == "polling"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"activity_poll_interval": 60, "full_state_poll_interval": 15},
+    )
+
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result["data"]["activity_poll_interval"] == 60
+    assert result["data"]["full_state_poll_interval"] == 15

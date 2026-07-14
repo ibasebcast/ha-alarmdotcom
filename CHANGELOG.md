@@ -1,3 +1,31 @@
+## 2026.7.14.4b0 (beta)
+
+### Added
+- **A general activity feed.** `LockActivityTracker` is renamed `ActivityFeedTracker` and now, alongside lock unlock attribution, fires a curated `alarmdotcom_activity` event on Home Assistant's event bus for other significant activity - system armed/disarmed, lock/unlock, and camera motion triggers - plus a new **"Recent Activity"** sensor with a short rolling history attribute. Built on the same poller and poll cycle as lock unlock attribution - no additional requests against the undocumented endpoint.
+  - The curated allow-list is a deliberate, documented choice, not a claim of completeness: real captured data showed noisy event types (paired light on/off command+state events, constant motion/button-press events) that add little automation value since Alarm.com doesn't attribute any of them to a user either. Garage door open/close is deliberately excluded for now - Alarm.com's activity data doesn't reliably distinguish a garage door from an ordinary window/door sensor by event type alone.
+- **Configurable polling intervals.** The options flow gained a third step: both the activity poll interval (default 15s) and the full-state safety-net poll interval (default 5min, previously a hardcoded constant in `hub.py`) can now be tuned via **Configure**, rather than requiring a code change. Existing users get the same defaults automatically; changing either triggers the existing config-entry reload, no extra plumbing needed.
+
+### Under the hood
+- `ActivityFeedTracker` gained `get_recent_activity()` and a `RecentActivityEntry` shape alongside its existing lock-attribution and listener-notification mechanisms.
+- 13 new tests covering the curated feed (bus event firing, the recent-activity rolling list and its bounded length, non-curated events correctly excluded) and the configurable interval (reading a configured value, falling back to the default) - 97 total, `mypy`/`ruff` both clean.
+
+## 2026.7.14.3b0 (beta)
+
+### Fixed
+- **`bypass_sensor`/`unbypass_sensor` crashed with `'PartitionController' object has no attribute 'values'`** whenever called without an explicit `partition_id` (GitHub issue #80) - the auto-resolve-partition-from-sensor path incorrectly treated `hub.api.partitions` as dict-like. It isn't: like every other controller in this integration, it's iterable directly. `alarm_control_panel.py` already did this correctly; `__init__.py`'s bypass handler was simply missed when that convention was established.
+  - There was previously zero test coverage for either service at all, which is exactly how this shipped unnoticed. Added 6 regression tests, deliberately using a real list subclass (not a dict, not a permissive mock) to stand in for the partition controller - a mock that happened to support `.values()` would have defeated the entire point of testing this. Confirmed these tests actually catch the reported bug by temporarily reintroducing it and watching the test fail, before re-fixing it.
+
+## 2026.7.14.2b0 (beta)
+
+### Changed
+- **Lock activity poll interval reduced from 60 seconds to 15 seconds**, for a faster welcome-home automation response. A deliberate tradeoff, not a free improvement: this is 4x the request volume against an entirely undocumented endpoint with no confirmed rate-limit information. Reasonable given the web app's own request carries `debounceTimeMs=1000` (suggesting the endpoint tolerates fairly frequent calls), but that's an inference from one observed request, not a guarantee - worth reverting toward 60s if this ever causes problems.
+
+### Added
+- **Lock activity polling now logs meaningfully**, closing a real gap from `2026.7.14.1b0`: previously only a *failed* poll produced any log output, so there was no way to confirm the poller was working short of a live unlock test.
+  - A real new unlock now logs at INFO level (e.g. "Lock activity: 110353471-1201 unlocked (attributed to: Chris Pulliam)") - deliberately INFO, not debug, since it only fires on an actual new unlock rather than every 15-second poll, so it's a genuine confirmation signal rather than log noise.
+  - Every poll additionally logs a DEBUG-level summary (events fetched, how many matched a known lock, the time window covered) - not useful at normal log levels, but confirms the poller is alive and fetching successfully once debug logging is turned on to investigate something.
+  - Covered by 2 new tests confirming the INFO line fires on real new attribution and stays silent otherwise.
+
 ## 2026.7.14.1b0 (beta)
 
 ### Added
