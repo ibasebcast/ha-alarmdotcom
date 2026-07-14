@@ -19,6 +19,7 @@ from custom_components.alarmdotcom.activity_history import (
 
 FRONT_DOOR_ID = "110353471-1201"
 PATIO_DOOR_ID = "110353471-1200"
+GARAGE_DOOR_ID = "110353471-2205"
 
 
 def _make_lock(resource_id: str) -> MagicMock:
@@ -48,10 +49,17 @@ def _make_event(
     return event
 
 
-def _make_hub(locks: list[MagicMock], events: list[MagicMock], *, options: dict | None = None) -> MagicMock:
-    """Build a mock hub whose api returns the given locks and get_activity_history returns the given events."""
+def _make_hub(
+    locks: list[MagicMock],
+    events: list[MagicMock],
+    *,
+    options: dict | None = None,
+    garage_doors: list[MagicMock] | None = None,
+) -> MagicMock:
+    """Build a mock hub whose api returns the given locks, garage doors, and get_activity_history events."""
     hub = MagicMock()
     hub.api.locks = locks
+    hub.api.garage_doors = garage_doors or []
     hub.api.get_activity_history = AsyncMock(return_value=events)
     hub.config_entry.options = options or {}
     return hub
@@ -330,6 +338,110 @@ async def test_curated_feed_notifies_listeners_even_without_a_lock_change(tracke
     await tracker.async_poll()
 
     assert calls == 1
+
+
+# --- Garage door disambiguation ---
+
+
+async def test_known_garage_door_open_event_fires_on_the_event_bus(hass) -> None:
+    """
+    An Opened/Closed event for a known garage door resource is included in the curated feed.
+
+    This is the actual disambiguation this feature needed: Opened/Closed
+    is not in ACTIVITY_FEED_EVENT_TYPES at all (too ambiguous on its own -
+    see module comments), but a garage door specifically is included via
+    a separate cross-reference against hub.api.garage_doors, the same
+    controller cover.py already uses.
+    """
+    garage_door = MagicMock()
+    garage_door.id = GARAGE_DOOR_ID
+    hub = _make_hub(locks=[], events=[], garage_doors=[garage_door])
+    hub.hass = hass
+    tracker = ActivityFeedTracker(hub)
+
+    event = _make_event(
+        "Closed", GARAGE_DOOR_ID, "2026-07-13T23:45:41Z", None,
+        description="Closed", device_description="Garage Door",
+    )
+    tracker.hub.api.get_activity_history = AsyncMock(return_value=[event])
+
+    captured = []
+    hass.bus.async_listen("alarmdotcom_activity", captured.append)
+
+    await tracker.async_poll()
+    await hass.async_block_till_done()
+
+    assert len(captured) == 1
+    assert captured[0].data["device_description"] == "Garage Door"
+
+
+async def test_ordinary_sensor_open_event_is_not_included(hass) -> None:
+    """
+    An Opened/Closed event for an ordinary window/door sensor (not a known garage door) stays excluded.
+
+    Same event_type_name as the garage door case above - the only
+    difference is global_device_id not matching any known garage door
+    resource, which is exactly the ambiguity this feature exists to
+    resolve.
+    """
+    garage_door = MagicMock()
+    garage_door.id = GARAGE_DOOR_ID
+    hub = _make_hub(locks=[], events=[], garage_doors=[garage_door])
+    hub.hass = hass
+    tracker = ActivityFeedTracker(hub)
+
+    event = _make_event(
+        "OpenedClosed", "110353471-2", "2026-07-14T03:24:34.543Z", None,
+        description="Opened/Closed", device_description="Front",
+    )
+    tracker.hub.api.get_activity_history = AsyncMock(return_value=[event])
+
+    captured = []
+    hass.bus.async_listen("alarmdotcom_activity", captured.append)
+
+    await tracker.async_poll()
+    await hass.async_block_till_done()
+
+    assert captured == []
+
+
+async def test_garage_door_event_appears_in_recent_activity(hass) -> None:
+    """A known garage door event also lands in the recent-activity rolling list, same as any other curated event."""
+    garage_door = MagicMock()
+    garage_door.id = GARAGE_DOOR_ID
+    hub = _make_hub(locks=[], events=[], garage_doors=[garage_door])
+    hub.hass = hass
+    tracker = ActivityFeedTracker(hub)
+
+    event = _make_event(
+        "Opened", GARAGE_DOOR_ID, "2026-07-13T23:37:18Z", None,
+        description="Opened", device_description="Garage Door",
+    )
+    tracker.hub.api.get_activity_history = AsyncMock(return_value=[event])
+
+    await tracker.async_poll()
+
+    recent = tracker.get_recent_activity()
+    assert len(recent) == 1
+    assert recent[0]["device_description"] == "Garage Door"
+
+
+async def test_no_garage_doors_on_the_account_means_nothing_matches(hass) -> None:
+    """With zero garage doors configured (the default in most tests), no Opened/Closed event ever matches."""
+    hub = _make_hub(locks=[], events=[])  # garage_doors defaults to []
+    hub.hass = hass
+    tracker = ActivityFeedTracker(hub)
+
+    event = _make_event("Closed", GARAGE_DOOR_ID, "2026-07-13T23:45:41Z", None)
+    tracker.hub.api.get_activity_history = AsyncMock(return_value=[event])
+
+    captured = []
+    hass.bus.async_listen("alarmdotcom_activity", captured.append)
+
+    await tracker.async_poll()
+    await hass.async_block_till_done()
+
+    assert captured == []
 
 
 # --- Configurable poll interval ---

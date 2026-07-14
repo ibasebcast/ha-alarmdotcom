@@ -288,8 +288,9 @@ This uses the same underlying poll as lock unlock attribution - nothing extra to
 * System armed (any mode) or disarmed
 * A lock locked or unlocked
 * A camera detected motion/a person
+* A garage door opened or closed
 
-Garage door open/close and general door/window sensor events are not currently included - Alarm.com's activity data does not reliably distinguish a garage door from an ordinary window/door sensor by event type alone, and getting this wrong would mean either missing real garage activity or drowning the feed in ordinary sensor noise.
+Garage door events specifically are cross-referenced against this account's known garage door devices (the same ones the garage door cover entity is built from) before being included - this is what lets them in while ordinary window/door sensors, which share the exact same event data shape, stay excluded as noise.
 
 **Example: catch any curated event in an automation**
 
@@ -324,7 +325,7 @@ The activity poll interval in particular is worth understanding before turning i
 
 # Development Status
 
-This integration is under active maintenance. **Version `2026.7.14.4`** is the current beta release. See `CHANGELOG.md` for the complete, detailed history - the highlights since the last stable release (`2026.7.9.3`):
+This integration is under active maintenance. **Version `2026.7.14.5`** is the current beta release. See `CHANGELOG.md` for the complete, detailed history - the highlights since the last stable release (`2026.7.9.3`):
 
 ### New features
 
@@ -340,7 +341,8 @@ This integration is under active maintenance. **Version `2026.7.14.4`** is the c
 ### Under the hood
 
 * `AlarmBridge.get_activity_history()` - the first data source in this integration with no persistent state and no live websocket delivery; it has to be actively polled rather than subscribed to, which is a genuinely different architecture from every device platform this integration otherwise models. The poller (`ActivityFeedTracker`, originally `LockActivityTracker` before it grew beyond just locks) now also drives the general activity feed and reads its own interval from the options flow.
-* Continued expansion of the automated test suite alongside every change above - 97 tests as of this release, `mypy`/`ruff` both clean.
+* **Garage door disambiguation for the activity feed** - garage door open/close now appears in the curated activity feed, cross-referenced against known garage door devices so ordinary window/door sensors (which share identical event data with a garage door) stay correctly excluded.
+* Continued expansion of the automated test suite alongside every change above - 101 tests as of this release, `mypy`/`ruff` both clean.
 
 <details>
 <summary>Highlights from the <code>2026.7.9.3</code> stable release (click to expand)</summary>

@@ -75,25 +75,22 @@ EVENT_ACTIVITY = f"{DOMAIN}_activity"
 RECENT_ACTIVITY_MAX_LEN = 10
 
 # Curated allow-list of event_type_name values considered "significant"
-# enough to fire on the event bus and appear in the recent-activity list.
-# A deliberate default, not a claim of completeness - real captured data
-# showed roughly one event every 2-3 minutes during ordinary evening
-# activity, much of it genuinely noisy for automation purposes (every
-# light interaction fires twice - once for the "[Web] Command:" and once
-# for the resulting state change; doorbell motion and button presses fire
-# constantly). This list favors clearly-significant, low-frequency event
-# types over completeness.
+# enough to fire on the event bus and appear in the recent-activity list,
+# regardless of which device they came from. A deliberate default, not a
+# claim of completeness - real captured data showed roughly one event
+# every 2-3 minutes during ordinary evening activity, much of it
+# genuinely noisy for automation purposes (every light interaction fires
+# twice - once for the "[Web] Command:" and once for the resulting state
+# change; doorbell motion and button presses fire constantly). This list
+# favors clearly-significant, low-frequency event types over completeness.
+#
+# Garage door open/close is deliberately NOT in this set - see
+# GARAGE_DOOR_EVENT_TYPES below for why it needs a different check.
 #
 # Deliberately excluded, and why:
 # - LightTurnedOn/LightTurnedOff, ButtonPressed: high-frequency, and
 #   Alarm.com does not attribute these to a user at all (see module
 #   docstring), so they carry less unique value than the events below.
-# - Opened/Closed/OpenedClosed: genuinely ambiguous from event_type_name
-#   alone whether this is a garage door (arguably significant) or an
-#   ordinary window/door sensor (very high-frequency) - both share the
-#   same event_type_name in captured data. Excluded until this can be
-#   reliably disambiguated by cross-referencing globalDeviceId against
-#   known garage door resource IDs specifically, rather than guessed at.
 # - The "[Web] Command: ..." pseudo-events (eventType == -1, "Unknown"):
 #   redundant with the resulting state-change event these are always
 #   paired with (e.g. "[Web] Command: Disarm" + "Disarmed by Web").
@@ -110,6 +107,17 @@ ACTIVITY_FEED_EVENT_TYPES = frozenset(
         "VideoCameraTriggered",
     }
 )
+
+# Event type names used for garage door open/close - handled separately
+# from ACTIVITY_FEED_EVENT_TYPES above because these same names are also
+# used by ordinary window/door sensors (both share identical
+# event_type_name values in captured data). A garage door event only
+# qualifies for the curated feed if its global_device_id also matches one
+# of this account's known garage door resources - see
+# hub.api.garage_doors, the same controller cover.py already uses to set
+# up garage door entities, cross-referenced the same way
+# known_lock_ids is used for lock unlock attribution.
+GARAGE_DOOR_EVENT_TYPES = frozenset({"Opened", "Closed", "OpenedClosed"})
 
 
 class RecentActivityEntry(TypedDict):
@@ -200,6 +208,7 @@ class ActivityFeedTracker:
         self._last_poll_end = poll_end
 
         known_lock_ids = {lock.id for lock in self.hub.api.locks}
+        known_garage_door_ids = {door.id for door in self.hub.api.garage_doors}
         changed = False
         matched_unlock_count = 0
         feed_count = 0
@@ -207,7 +216,13 @@ class ActivityFeedTracker:
         for event in events:
             event_type_name = event.attributes.event_type_name
 
-            if event_type_name in ACTIVITY_FEED_EVENT_TYPES:
+            is_curated = event_type_name in ACTIVITY_FEED_EVENT_TYPES
+            is_curated_garage_event = (
+                event_type_name in GARAGE_DOOR_EVENT_TYPES
+                and event.attributes.global_device_id in known_garage_door_ids
+            )
+
+            if is_curated or is_curated_garage_event:
                 feed_count += 1
                 self._fire_activity_event(event)
 

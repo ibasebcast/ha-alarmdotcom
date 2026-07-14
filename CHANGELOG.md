@@ -1,7 +1,13 @@
+## 2026.7.14.5b0 (beta)
+
+### Added
+- **Garage door open/close now appears in the activity feed**, resolving the disambiguation problem flagged when the activity feed first shipped (`2026.7.14.4b0`): Alarm.com's activity data uses the same event type for a garage door as for an ordinary window/door sensor, so the two couldn't be told apart by event type alone. Resolved the same way lock unlock attribution already does - cross-referencing the event's device ID against this account's actual known garage door resources (`hub.api.garage_doors`, the same controller the garage door cover entity is built from), rather than guessing from the event data alone. Ordinary window/door sensors remain correctly excluded, since their device IDs never match.
+- 4 new tests covering the disambiguation directly - a known garage door event is included, an ordinary sensor sharing the same event type is excluded, the event lands in the recent-activity list, and an account with no garage doors configured correctly matches nothing. 101 tests total, `mypy`/`ruff` both clean.
+
 ## 2026.7.14.4b0 (beta)
 
 ### Added
-- **A general activity feed.** `LockActivityTracker` is renamed `ActivityFeedTracker` and now, alongside lock unlock attribution, fires a curated `alarmdotcom_activity` event on Home Assistant's event bus for other significant activity - system armed/disarmed, lock/unlock, and camera motion triggers - plus a new **"Recent Activity"** sensor with a short rolling history attribute. Built on the same poller and poll cycle as lock unlock attribution - no additional requests against the undocumented endpoint.
+- **A general activity feed** (extends the polling infrastructure originally built for #79). `LockActivityTracker` is renamed `ActivityFeedTracker` and now, alongside lock unlock attribution, fires a curated `alarmdotcom_activity` event on Home Assistant's event bus for other significant activity - system armed/disarmed, lock/unlock, and camera motion triggers - plus a new **"Recent Activity"** sensor with a short rolling history attribute. Built on the same poller and poll cycle as lock unlock attribution - no additional requests against the undocumented endpoint.
   - The curated allow-list is a deliberate, documented choice, not a claim of completeness: real captured data showed noisy event types (paired light on/off command+state events, constant motion/button-press events) that add little automation value since Alarm.com doesn't attribute any of them to a user either. Garage door open/close is deliberately excluded for now - Alarm.com's activity data doesn't reliably distinguish a garage door from an ordinary window/door sensor by event type alone.
 - **Configurable polling intervals.** The options flow gained a third step: both the activity poll interval (default 15s) and the full-state safety-net poll interval (default 5min, previously a hardcoded constant in `hub.py`) can now be tuned via **Configure**, rather than requiring a code change. Existing users get the same defaults automatically; changing either triggers the existing config-entry reload, no extra plumbing needed.
 
@@ -18,7 +24,7 @@
 ## 2026.7.14.2b0 (beta)
 
 ### Changed
-- **Lock activity poll interval reduced from 60 seconds to 15 seconds**, for a faster welcome-home automation response. A deliberate tradeoff, not a free improvement: this is 4x the request volume against an entirely undocumented endpoint with no confirmed rate-limit information. Reasonable given the web app's own request carries `debounceTimeMs=1000` (suggesting the endpoint tolerates fairly frequent calls), but that's an inference from one observed request, not a guarantee - worth reverting toward 60s if this ever causes problems.
+- **Lock activity poll interval reduced from 60 seconds to 15 seconds** (follow-up to #79), for a faster welcome-home automation response. A deliberate tradeoff, not a free improvement: this is 4x the request volume against an entirely undocumented endpoint with no confirmed rate-limit information. Reasonable given the web app's own request carries `debounceTimeMs=1000` (suggesting the endpoint tolerates fairly frequent calls), but that's an inference from one observed request, not a guarantee - worth reverting toward 60s if this ever causes problems.
 
 ### Added
 - **Lock activity polling now logs meaningfully**, closing a real gap from `2026.7.14.1b0`: previously only a *failed* poll produced any log output, so there was no way to confirm the poller was working short of a live unlock test.
