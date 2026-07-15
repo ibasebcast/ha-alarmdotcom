@@ -8,12 +8,10 @@ rules:
       poll runs as a safety net for missed events only.
   brands: done
   common-modules:
-    status: done
+    status: todo
     comment: >
-      AlarmCoordinator now inherits DataUpdateCoordinator[AlarmBridge].
-      All entities extend CoordinatorEntity and receive updates via
-      async_set_updated_data() rather than per-device hub.api.subscribe() calls.
-      AlarmHub is kept as a backward-compat alias (AlarmHub = AlarmCoordinator).
+      Uses a custom AlarmHub class rather than DataUpdateCoordinator.
+      Refactoring would be needed to adopt the common coordinator pattern.
   config-flow: done
   config-flow-test-coverage:
     status: done
@@ -45,10 +43,10 @@ rules:
   runtime-data:
     status: done
     comment: >
-      AlarmEntryData dataclass (coordinator, auto_off_manager, camera_session)
-      is stored as config_entry.runtime_data in async_setup_entry.
-      All platform files and diagnostics.py read from entry.runtime_data
-      instead of hass.data[DOMAIN][entry_id].
+      AlarmEntryData dataclass (hub, auto_off_manager, camera_session,
+      activity_feed_tracker) is stored as config_entry.runtime_data in
+      async_setup_entry. All platform files and diagnostics.py read from
+      entry.runtime_data instead of hass.data[DOMAIN][entry_id].
   test-before-configure: done
   test-before-setup: done
   unique-config-entry: done
