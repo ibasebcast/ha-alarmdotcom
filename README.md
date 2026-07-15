@@ -323,7 +323,7 @@ The rest of the entites in this integration are Cloud Push.
 
 ---
 
-## Removing This Integration
+# Removing This Integration
 
 Removing this integration is the same as most HACS integrations:
 
