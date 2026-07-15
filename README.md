@@ -457,4 +457,6 @@ See the **LICENSE** file for details.
   9.  valve                - less common Alarm.com device type
   10. camera               - important for security but blocked on custom card
                              (see above; moves to 3rd–4th if card issue resolved)
+                             
+ ## Also check the quality_scale.yaml for other notes                          
 -->
