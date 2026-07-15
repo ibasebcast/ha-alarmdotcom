@@ -4,8 +4,20 @@ rules:
   appropriate-polling:
     status: done
     comment: >
-      WebSocket push is the primary update mechanism; a 5-minute full-state
-      poll runs as a safety net for missed events only.
+      WebSocket push is the primary update mechanism. Two supplemental polls
+      run alongside it, both user-configurable via the options flow:
+      (1) A 5-minute full-state refresh in hub.py as a safety net for missed
+      WebSocket events — default is appropriate.
+      (2) A 15-second activity feed poll in activity_history.py that fetches
+      lock/garage open history from an undocumented Alarm.com endpoint to
+      populate last_unlock_method on lock entities — default is defensible
+      (the web app itself hits the endpoint frequently), but the endpoint has
+      no confirmed rate limit.
+      NOTE: For core submission, the activity feed poll is a blocker in its
+      current form — HA does not accept integrations that poll undocumented
+      endpoints. The activity feed feature (and its configurable interval)
+      would need to be removed or replaced with an official API path before
+      this integration can be submitted to core.
   brands: done
   common-modules:
     status: todo
