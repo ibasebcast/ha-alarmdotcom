@@ -13,11 +13,8 @@ rules:
       populate last_unlock_method on lock entities — default is defensible
       (the web app itself hits the endpoint frequently), but the endpoint has
       no confirmed rate limit.
-      NOTE: For core submission, the activity feed poll is a blocker in its
-      current form — HA does not accept integrations that poll undocumented
-      endpoints. The activity feed feature (and its configurable interval)
-      would need to be removed or replaced with an official API path before
-      this integration can be submitted to core.
+      NOTE: For core submission, remove user configurable options for
+      these two polls and hardcode them to the defaults above.
   brands: done
   common-modules:
     status: todo
