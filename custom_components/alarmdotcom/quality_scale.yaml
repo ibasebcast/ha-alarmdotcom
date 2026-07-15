@@ -192,8 +192,8 @@ rules:
     comment: >
       pyalarmdotcomajax is fully async and aiohttp-based.
       However when submitting this integration as a core integration,
-      pyalarmdotcomajax has to be a seperate repo (like it was before)
-       because it is a requiremnt to become a core integration.
+      pyalarmdotcomajax has to be a separate repo (like it was before)
+      because it is a requirement to become a core integration.
   inject-websession:
     status: todo
     comment: >

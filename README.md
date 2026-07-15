@@ -319,7 +319,7 @@ Two things are polled on a timer rather than arriving live over the websocket, a
 
 The activity poll interval in particular is worth understanding before turning it down further: it hits an entirely undocumented Alarm.com endpoint with no confirmed rate-limit information. The default of 15 seconds is a deliberate tradeoff for a prompt welcome-home automation experience, not a guarantee it's safe at any value - if you ever run into problems, this is the first thing worth dialing back up.
 
-The rest of the entites in this integration are Cloud Push.
+The rest of the entities in this integration are Cloud Push.
 
 ---
 
@@ -461,6 +461,6 @@ See the **LICENSE** file for details.
   9.  valve                - less common Alarm.com device type
   10. camera               - important for security but blocked on custom card
                              (see above; moves to 3rd–4th if card issue resolved)
-                             
- ## Also check the quality_scale.yaml for other notes                          
+
+ ## Also check the quality_scale.yaml for other notes
 -->
