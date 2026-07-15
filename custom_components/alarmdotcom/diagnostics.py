@@ -31,7 +31,6 @@ from .const import (
     CONF_CAMERA_MFA_COOKIE,
     CONF_MFA_TOKEN,
     CONF_OTP,
-
     DOMAIN,
 )
 
