@@ -27,6 +27,11 @@ if TYPE_CHECKING:
     from .activity_history import ActivityFeedTracker
     from .hub import AlarmHub
 
+# Entities are updated via push (websocket events), not per-entity polling -
+# PARALLEL_UPDATES has no effect on update frequency here, but setting it
+# to 0 is still the correct, explicit signal for a push-based integration.
+PARALLEL_UPDATES = 0
+
 log = logging.getLogger(__name__)
 
 
@@ -193,22 +198,31 @@ class AdcLockEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], LockEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """
-        Return this entity's extra attributes, plus who last unlocked it via keypad code, if known.
+        Return this entity's extra attributes, plus unlock attribution/method, if known.
 
         Computed live (not set once in __init__) since new attribution
         arrives on the lock activity tracker's own polling cadence, not
         the resource-update events the rest of this entity's state
-        responds to. last_unlocked_by is deliberately omitted entirely
-        (not set to None) when nothing has been tracked yet, rather than
-        always showing a possibly-stale or empty value.
+        responds to. These are deliberately omitted entirely (not set to
+        None) when nothing has been tracked yet, rather than always
+        showing a possibly-stale or empty value.
+
+        last_unlock_method exists specifically because last_unlocked_by
+        alone isn't reliable for gating an automation on "was this a
+        keypad entry" (real user feedback, GitHub issue #79): not every
+        unlock method generates its own loggable Alarm.com event for
+        every lock model, so last_unlocked_by can remain stuck showing an
+        earlier keypad user's name well after a different, unattributed
+        unlock. last_unlock_method reflects whatever the most recent
+        tracked unlock actually was, independent of that staleness.
         """
 
         attrs = dict(self._attr_extra_state_attributes or {})
         last_unlock = self._lock_activity_tracker.get_last_unlock(self.resource_id)
         if last_unlock is not None:
-            unlocked_by, unlocked_at = last_unlock
-            attrs["last_unlocked_by"] = unlocked_by
-            attrs["last_unlocked_at"] = unlocked_at.isoformat()
+            attrs["last_unlocked_by"] = last_unlock["unlocked_by"]
+            attrs["last_unlock_method"] = last_unlock["unlock_method"]
+            attrs["last_unlocked_at"] = last_unlock["unlocked_at"].isoformat()
         return attrs
 
     async def async_added_to_hass(self) -> None:

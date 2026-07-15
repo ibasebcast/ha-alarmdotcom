@@ -1,3 +1,16 @@
+## 2026.7.14.6b0 (beta)
+
+### Added
+- **`PARALLEL_UPDATES = 0` added to all ten platform files** (alarm_control_panel, binary_sensor, button, camera, climate, cover, light, lock, sensor, valve) - the correct, explicit signal for a push-based (websocket) integration, previously unset entirely.
+- **A "Removal" section in the README**, covering both the config-entry removal and cleaning up the WebRTC Lovelace card if one was added.
+- **`quality_scale.yaml` re-audited against the real current state of the repo** - a genuinely stale bookkeeping gap, not new functionality: 15 items previously marked `todo` (docs-actions, docs-high-level-description, docs-installation-instructions, docs-removal-instructions, docs-configuration-parameters, docs-installation-parameters, docs-data-update, docs-examples, docs-known-limitations, docs-supported-devices, docs-supported-functions, docs-use-cases, plus parallel-updates above) were already satisfied by documentation and code from earlier in this same beta cycle and are now marked `done` with accurate comments pointing at what satisfies each. `test-coverage`'s comment was flatly wrong (written when the suite had ~35 tests covering only setup/unload; it's 106 now, covering nearly every feature shipped this cycle) and has been rewritten to reflect what's actually covered and what still genuinely isn't (the platform entity classes themselves, and hub.py's websocket reconnect logic).
+- **New `last_unlock_method` attribute on lock entities** (`keypad`/`manual`/`remote`), in direct response to real user feedback on GitHub issue #79. `last_unlocked_by` alone isn't reliable for gating an automation on "was this actually a keypad entry": not every unlock method generates its own loggable Alarm.com event for every lock model, so `last_unlocked_by` can remain stuck showing an earlier keypad user's name well after a different, unattributed unlock happens. `last_unlock_method` reflects whatever the most recently tracked unlock actually was, independent of that staleness - confirmed the underlying data already distinguishes this via `unlock_method=ManualUnlock`/`ZwaveUnlock` and `lockedByKeypad=true` in the same raw activity data this feature already parses, so no new endpoint or permission was needed.
+- **Documented a real prerequisite discovered by a user**: the Alarm.com account used by this integration needs the "Activity" read-only permission enabled, or `last_unlocked_by`/`last_unlock_method`/`last_unlocked_at` never populate at all. Not documented anywhere by Alarm.com itself.
+
+### Under the hood
+- `ActivityFeedTracker`'s internal unlock-tracking storage moved from a positional `(name, timestamp)` tuple to a `LockUnlockRecord` TypedDict (matching `RecentActivityEntry`'s existing convention) now that it carries three fields - avoids fragile positional unpacking as this keeps growing.
+- 5 new tests covering `unlock_method` directly (keypad/manual/remote/unknown, and confirming it's derived independently of `unlocked_by_name` rather than one implying the other), plus 4 existing tests updated for the new `LockUnlockRecord` shape - 106 total, `mypy`/`ruff` both clean.
+
 ## 2026.7.14.5b0 (beta)
 
 ### Added

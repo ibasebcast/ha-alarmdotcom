@@ -142,3 +142,61 @@ def test_camelcase_keys_are_correctly_decamelized() -> None:
     assert event.attributes.device_description == "Front Door"
     assert event.attributes.event_type_name == "DoorUnlocked"
     assert event.attributes.unit_id == 110353471
+
+
+# --- unlock_method (added in response to real user feedback, GitHub issue #79) ---
+
+
+def test_keypad_unlock_method_is_keypad() -> None:
+    """A keypad-code unlock reports unlock_method as 'keypad'."""
+    event = _make_event("M-1687518963333", KEYPAD_UNLOCK_ATTRIBUTES)
+
+    assert event.attributes.unlock_method == "keypad"
+
+
+def test_web_session_unlock_method_is_remote() -> None:
+    """
+    A web/app-session unlock reports unlock_method as 'remote'.
+
+    Real captured extraData for this event is 'unlock_method=ZwaveUnlock' -
+    Alarm.com's own UI describes this same event as "Unlocked remotely",
+    which is why "remote" (not the raw "ZwaveUnlock" value) is what gets
+    exposed - a normalized, human-meaningful value rather than Alarm.com's
+    own internal naming.
+    """
+    event = _make_event("M-1687392287737", WEB_UNLOCK_ATTRIBUTES)
+
+    assert event.attributes.unlock_method == "remote"
+
+
+def test_manual_unlock_method_is_manual() -> None:
+    """A manual (thumbturn/handle) unlock reports unlock_method as 'manual'."""
+    event = _make_event("M-1687393117140", MANUAL_UNLOCK_ATTRIBUTES)
+
+    assert event.attributes.unlock_method == "manual"
+
+
+def test_unlock_method_is_none_when_extra_data_has_neither_field() -> None:
+    """An event with no extraData at all reports unlock_method as None, not an error."""
+    attributes = dict(KEYPAD_UNLOCK_ATTRIBUTES)
+    attributes["extraData"] = None
+    event = _make_event("test-id", attributes)
+
+    assert event.attributes.unlock_method is None
+
+
+def test_unlock_method_is_independent_of_unlocked_by_name() -> None:
+    """
+    unlock_method and unlocked_by_name are derived independently - one being set doesn't require the other.
+
+    This is the actual point of adding unlock_method separately: a manual
+    or remote unlock always has unlocked_by_name as None (Alarm.com never
+    attributes those to a person), but should still report a real,
+    non-None unlock_method - the two attributes answer genuinely
+    different questions ("who" vs "how"), not one derived from the other.
+    """
+    event = _make_event("M-1687393117140", MANUAL_UNLOCK_ATTRIBUTES)
+
+    assert event.attributes.unlocked_by_name is None
+    assert event.attributes.unlock_method == "manual"
+

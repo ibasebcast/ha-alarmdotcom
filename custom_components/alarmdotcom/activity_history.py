@@ -129,6 +129,14 @@ class RecentActivityEntry(TypedDict):
     event_date: str
 
 
+class LockUnlockRecord(TypedDict):
+    """The most recently tracked unlock for a single lock resource."""
+
+    unlocked_by: str | None
+    unlock_method: str | None
+    unlocked_at: datetime
+
+
 class ActivityFeedTracker:
     """Polls Alarm.com's activity history for lock-unlock attribution and a curated general activity feed."""
 
@@ -137,18 +145,23 @@ class ActivityFeedTracker:
 
         self.hub = hub
         self._last_poll_end: datetime = dt_util.utcnow() - INITIAL_LOOKBACK
-        # resource_id -> (unlocked_by_name, unlocked_at). unlocked_by_name
-        # is None both when the unlock wasn't a keypad-code unlock at all
-        # and when Alarm.com didn't attribute it to a specific person -
-        # see HistoryEventAttributes.unlocked_by_name for why those two
-        # cases are deliberately not distinguished.
-        self._last_unlock: dict[str, tuple[str | None, datetime]] = {}
+        # resource_id -> LockUnlockRecord. unlocked_by is None both when
+        # the unlock wasn't a keypad-code unlock at all and when
+        # Alarm.com didn't attribute it to a specific person - see
+        # HistoryEventAttributes.unlocked_by_name for why those two cases
+        # are deliberately not distinguished. unlock_method is a
+        # separate, more reliable signal for "was this a keypad entry"
+        # specifically, added in response to real feedback (#79) that
+        # unlocked_by doesn't get cleared by every subsequent unlock,
+        # since not every unlock method generates its own loggable event
+        # for every lock model.
+        self._last_unlock: dict[str, LockUnlockRecord] = {}
         self._recent_activity: deque[RecentActivityEntry] = deque(maxlen=RECENT_ACTIVITY_MAX_LEN)
         self._change_listeners: list[Callable[[], None]] = []
         self._unsub_timer: Callable[[], None] | None = None
 
-    def get_last_unlock(self, resource_id: str) -> tuple[str | None, datetime] | None:
-        """Return (unlocked_by_name, unlocked_at) for resource_id's most recently tracked unlock, if any."""
+    def get_last_unlock(self, resource_id: str) -> LockUnlockRecord | None:
+        """Return the most recently tracked unlock record for resource_id, if any."""
 
         return self._last_unlock.get(resource_id)
 
@@ -236,15 +249,18 @@ class ActivityFeedTracker:
             matched_unlock_count += 1
             unlocked_at = dt_util.parse_datetime(event.attributes.event_date) or poll_end
             existing = self._last_unlock.get(resource_id)
-            if existing is not None and existing[1] >= unlocked_at:
+            if existing is not None and existing["unlocked_at"] >= unlocked_at:
                 # Already have a same-or-newer record for this lock - a
                 # real scenario given start_time/end_time windows can
                 # overlap slightly between polls (a caught-up-but-not-yet-
                 # advanced last_poll_end), not just a defensive check.
                 continue
 
-            unlocked_by = event.attributes.unlocked_by_name
-            self._last_unlock[resource_id] = (unlocked_by, unlocked_at)
+            self._last_unlock[resource_id] = {
+                "unlocked_by": event.attributes.unlocked_by_name,
+                "unlock_method": event.attributes.unlock_method,
+                "unlocked_at": unlocked_at,
+            }
             changed = True
 
             # Deliberately INFO, not debug: this only fires on a real,
@@ -253,9 +269,10 @@ class ActivityFeedTracker:
             # working, visible without needing debug logging turned on
             # or a live test to check.
             _LOGGER.info(
-                "Lock activity: %s unlocked (attributed to: %s)",
+                "Lock activity: %s unlocked (attributed to: %s, method: %s)",
                 resource_id,
-                unlocked_by or "unknown/unattributed",
+                event.attributes.unlocked_by_name or "unknown/unattributed",
+                event.attributes.unlock_method or "unknown",
             )
 
         # Debug-level per-poll summary - not useful at normal log levels

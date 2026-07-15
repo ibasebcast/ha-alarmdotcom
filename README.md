@@ -125,6 +125,15 @@ After restarting:
 
 **Settings → Devices & Services → Add Integration → Alarm.com**
 
+## Removal
+
+1. **Settings → Devices & Services → Alarm.com**
+2. Click the three-dot menu on the integration card → **Delete**
+3. If installed via HACS and you want to remove the integration's files as well (not just the config entry), go to **HACS → Integrations → Alarm.com → three-dot menu → Remove**
+4. If you added the WebRTC Lovelace card (`www/alarm-webrtc-card.js`), remove it from your dashboard resources (**Settings → Dashboards → three-dot menu → Resources**) and delete the file from your `www/` folder
+
+Removing the integration also removes its entities and the devices they were attached to. It does not affect your Alarm.com account itself or any settings configured directly through Alarm.com's own app or website.
+
 ---
 
 # Configuration
@@ -249,13 +258,17 @@ To cancel a pending timer early, call `alarmdotcom.cancel_auto_off` with the sam
 
 # Lock Unlock Attribution
 
-Lock entities expose two additional attributes, `last_unlocked_by` and `last_unlocked_at`, showing who most recently unlocked the door via a keypad code and when.
+Lock entities expose three additional attributes: `last_unlocked_by`, `last_unlock_method`, and `last_unlocked_at`.
 
 This is sourced from Alarm.com's own activity history, polled roughly every 15 seconds - a genuinely separate data path from this integration's live state updates, since "who unlocked this" isn't part of the lock's ongoing state, only its history.
 
+**Prerequisite:** the Alarm.com account/login used by this integration needs the **"Activity" read-only permission** enabled, or these attributes will never populate at all. Confirmed by a real user - this isn't documented anywhere by Alarm.com itself, so it's easy to miss if the integration's account was set up before this feature existed, or was scoped narrowly on purpose.
+
 **Important limitation, confirmed directly from Alarm.com's own data, not a gap in this integration:** Alarm.com only attributes a keypad-code unlock to a specific person. Unlocking from the Alarm.com app, the web portal, or manually at the door is **not** attributed to anyone - `last_unlocked_by` correctly shows as unset for those, since Alarm.com itself doesn't know who performed them. Lights and switches have no equivalent - Alarm.com does not attribute those to a user at all under any circumstance.
 
-**Example: a welcome-home announcement that varies by person**
+**`last_unlocked_by` doesn't necessarily reflect the most recent unlock, and that's also not a bug.** Not every unlock method generates its own distinct, loggable Alarm.com event for every lock model - a manual/inside turn may not be logged at all on some hardware. When that happens, `last_unlocked_by` simply keeps showing whoever the last *keypad* unlock was attributed to, even after a more recent manual or remote unlock, since there's no newer event for the poller to ever see. **`last_unlock_method`** exists specifically to sidestep this: it reports `"keypad"`, `"manual"`, or `"remote"` for whatever the most recently *tracked* unlock actually was, so an automation can gate on "was this actually a keypad entry" directly, rather than relying on a name that might be stale.
+
+**Example: a welcome-home announcement that varies by person, gated on method to avoid the staleness pitfall above**
 
 ```yaml
 alias: Welcome home TTS
@@ -265,7 +278,7 @@ triggers:
     attribute: last_unlocked_by
 conditions:
   - condition: template
-    value_template: "{{ trigger.to_state.attributes.last_unlocked_by is not none }}"
+    value_template: "{{ trigger.to_state.attributes.last_unlock_method == 'keypad' }}"
 actions:
   - action: tts.speak
     target:
@@ -325,12 +338,12 @@ The activity poll interval in particular is worth understanding before turning i
 
 # Development Status
 
-This integration is under active maintenance. **Version `2026.7.14.5`** is the current beta release. See `CHANGELOG.md` for the complete, detailed history - the highlights since the last stable release (`2026.7.9.3`):
+This integration is under active maintenance. **Version `2026.7.14.6`** is the current beta release. See `CHANGELOG.md` for the complete, detailed history - the highlights since the last stable release (`2026.7.9.3`):
 
 ### New features
 
 * **Auto-off timers for lights** - see [Auto-Off Timers](#auto-off-timers) above. Survives Home Assistant restarts and exposes the scheduled off-time as an entity attribute, unlike a plain "wait then turn off" automation.
-* **Lock unlock attribution** - see [Lock Unlock Attribution](#lock-unlock-attribution) above. `last_unlocked_by`/`last_unlocked_at` attributes on lock entities, sourced from Alarm.com's own activity history (an entirely undocumented endpoint, reverse-engineered and verified against real captured data before being relied on). Keypad-code unlocks only - confirmed that Alarm.com does not attribute app/web/manual unlocks, or any light/switch action, to a specific person.
+* **Lock unlock attribution** - see [Lock Unlock Attribution](#lock-unlock-attribution) above. `last_unlocked_by`/`last_unlock_method`/`last_unlocked_at` attributes on lock entities, sourced from Alarm.com's own activity history (an entirely undocumented endpoint, reverse-engineered and verified against real captured data before being relied on). Keypad-code unlocks are the only ones Alarm.com attributes to a name - `last_unlock_method` (added after real user feedback) reports the method itself (`keypad`/`manual`/`remote`) independent of whether a name is attached, since `last_unlocked_by` alone can remain stuck showing an earlier keypad user after a later, unattributed unlock.
 * **A general activity feed** - see [Activity Feed](#activity-feed) above. A curated Home Assistant event (`alarmdotcom_activity`) fires for other significant activity (arm/disarm, lock/unlock, camera motion), plus a "Recent Activity" sensor with a short rolling history - built on the same poller as lock unlock attribution, no extra load added.
 * **Configurable polling intervals** - see [Polling Intervals](#polling-intervals) above. Both the activity poll (default 15s) and the full-state safety-net poll (default 5min) can now be tuned via the **Configure** button, rather than being fixed constants - useful for dialing back the activity poll specifically, since it hits an undocumented endpoint with no confirmed rate limit.
 
@@ -342,7 +355,7 @@ This integration is under active maintenance. **Version `2026.7.14.5`** is the c
 
 * `AlarmBridge.get_activity_history()` - the first data source in this integration with no persistent state and no live websocket delivery; it has to be actively polled rather than subscribed to, which is a genuinely different architecture from every device platform this integration otherwise models. The poller (`ActivityFeedTracker`, originally `LockActivityTracker` before it grew beyond just locks) now also drives the general activity feed and reads its own interval from the options flow.
 * **Garage door disambiguation for the activity feed** - garage door open/close now appears in the curated activity feed, cross-referenced against known garage door devices so ordinary window/door sensors (which share identical event data with a garage door) stay correctly excluded.
-* Continued expansion of the automated test suite alongside every change above - 101 tests as of this release, `mypy`/`ruff` both clean.
+* Continued expansion of the automated test suite alongside every change above - 106 tests as of this release, `mypy`/`ruff` both clean.
 
 <details>
 <summary>Highlights from the <code>2026.7.9.3</code> stable release (click to expand)</summary>

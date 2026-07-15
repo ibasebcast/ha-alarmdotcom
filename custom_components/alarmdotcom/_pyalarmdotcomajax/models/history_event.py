@@ -134,6 +134,40 @@ class HistoryEventAttributes(AdcResourceAttributes):
             return None
         return parsed.get("ew") or None
 
+    @property
+    def unlock_method(self) -> str | None:
+        """
+        Return a normalized description of how this device was unlocked, if known.
+
+        Added in response to real user feedback (GitHub issue #79): who
+        unlocked a door doesn't get cleared/reset by every subsequent
+        unlock, since not every unlock method generates a distinct,
+        attributable event in the first place - a manual/inside turn may
+        not even be logged as its own event by Alarm.com for some lock
+        models. Method is a more reliable signal than name for gating an
+        automation on "was this actually a keypad entry", independent of
+        whether a name happens to be attached.
+
+        Confirmed real values, from captured extra_data:
+        - "keypad": lockedByKeypad=true (a code was entered at the panel/keypad)
+        - "remote": unlock_method=ZwaveUnlock (Alarm.com's own UI describes
+          this as "Unlocked remotely" - i.e. from the app or web portal)
+        - "manual": unlock_method=ManualUnlock (the lock's own thumbturn/handle)
+
+        Returns None when extra_data carries neither field - a genuinely
+        unknown method, not a fourth category to model.
+        """
+
+        parsed = self.parsed_extra_data
+        if parsed.get("lockedByKeypad") == "true":
+            return "keypad"
+        method = parsed.get("unlock_method")
+        if method == "ManualUnlock":
+            return "manual"
+        if method == "ZwaveUnlock":
+            return "remote"
+        return None
+
 
 @dataclass
 class HistoryEvent(AdcResource[HistoryEventAttributes]):

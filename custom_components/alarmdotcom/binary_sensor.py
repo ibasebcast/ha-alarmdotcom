@@ -34,6 +34,11 @@ from .util import cleanup_orphaned_entities_and_devices
 if TYPE_CHECKING:
     from .hub import AlarmHub
 
+# Entities are updated via push (websocket events), not per-entity polling -
+# PARALLEL_UPDATES has no effect on update frequency here, but setting it
+# to 0 is still the correct, explicit signal for a push-based integration.
+PARALLEL_UPDATES = 0
+
 log = logging.getLogger(__name__)
 
 SENSOR_SUBTYPE_BLACKLIST = [

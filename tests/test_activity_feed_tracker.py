@@ -37,6 +37,7 @@ def _make_event(
     *,
     description: str = "Test event",
     device_description: str = "Test Device",
+    unlock_method: str | None = "unspecified",
 ) -> MagicMock:
     """Build a mock HistoryEvent with just the attributes ActivityFeedTracker actually reads."""
     event = MagicMock()
@@ -46,6 +47,15 @@ def _make_event(
     event.attributes.unlocked_by_name = unlocked_by_name
     event.attributes.description = description
     event.attributes.device_description = device_description
+
+    if unlock_method == "unspecified":
+        # Caller didn't pass one explicitly - default to "keypad" when a
+        # name is present (matching real data, where unlocked_by_name is
+        # only ever non-None for keypad unlocks), otherwise None.
+        event.attributes.unlock_method = "keypad" if unlocked_by_name else None
+    else:
+        event.attributes.unlock_method = unlock_method
+
     return event
 
 
@@ -83,9 +93,9 @@ async def test_keypad_unlock_is_tracked() -> None:
 
     result = tracker.get_last_unlock(FRONT_DOOR_ID)
     assert result is not None
-    unlocked_by, unlocked_at = result
-    assert unlocked_by == "Chris Pulliam"
-    assert unlocked_at == datetime(2026, 7, 14, 2, 22, 56, 307000, tzinfo=UTC)
+    assert result["unlocked_by"] == "Chris Pulliam"
+    assert result["unlock_method"] == "keypad"
+    assert result["unlocked_at"] == datetime(2026, 7, 14, 2, 22, 56, 307000, tzinfo=UTC)
 
 
 async def test_unattributed_unlock_is_still_tracked_with_none() -> None:
@@ -98,7 +108,7 @@ async def test_unattributed_unlock_is_still_tracked_with_none() -> None:
 
     result = tracker.get_last_unlock(FRONT_DOOR_ID)
     assert result is not None
-    assert result[0] is None
+    assert result["unlocked_by"] is None
 
 
 async def test_non_unlock_events_are_ignored(tracker: ActivityFeedTracker) -> None:
@@ -132,8 +142,8 @@ async def test_multiple_locks_are_tracked_independently() -> None:
 
     await tracker.async_poll()
 
-    assert tracker.get_last_unlock(FRONT_DOOR_ID)[0] == "Chris Pulliam"
-    assert tracker.get_last_unlock(PATIO_DOOR_ID)[0] is None
+    assert tracker.get_last_unlock(FRONT_DOOR_ID)["unlocked_by"] == "Chris Pulliam"
+    assert tracker.get_last_unlock(PATIO_DOOR_ID)["unlocked_by"] is None
 
 
 async def test_older_event_does_not_overwrite_a_newer_tracked_record() -> None:
@@ -149,7 +159,7 @@ async def test_older_event_does_not_overwrite_a_newer_tracked_record() -> None:
     tracker.hub.api.get_activity_history = AsyncMock(return_value=[older_event])
     await tracker.async_poll()
 
-    assert tracker.get_last_unlock(FRONT_DOOR_ID)[0] == "Chris Pulliam"
+    assert tracker.get_last_unlock(FRONT_DOOR_ID)["unlocked_by"] == "Chris Pulliam"
 
 
 async def test_listener_notified_when_new_attribution_found(tracker: ActivityFeedTracker) -> None:
