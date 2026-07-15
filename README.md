@@ -110,6 +110,21 @@ Some Alarm.com providers may restrict combinations of these options.
 
 ---
 
+# Services
+
+This integration exposes the following services, callable from **Developer Tools → Actions**, automations, or scripts.
+
+| Service                       | Purpose                                                          | Target                        |
+| ------------------------------ | ----------------------------------------------------------------- | ------------------------------ |
+| `alarmdotcom.bypass_sensor`    | Bypass a supported sensor (e.g. a door left open) for the current arm period | `resource_id` field (see the sensor entity's `resource_id` attribute), optional `partition_id` |
+| `alarmdotcom.unbypass_sensor`  | Remove a bypass from a sensor                                    | Same as above                 |
+| `alarmdotcom.set_auto_off`     | Schedule one or more lights to turn off after a duration - see [Auto-Off Timers](#auto-off-timers) below | Standard entity target picker, restricted to this integration's lights |
+| `alarmdotcom.cancel_auto_off`  | Cancel a pending auto-off timer                                  | Same as above                 |
+
+`bypass_sensor`/`unbypass_sensor` take a `resource_id`, not an `entity_id` - find this in the sensor entity's own `resource_id` attribute (Settings → Devices & Services → Alarm.com → the sensor entity → Attributes). `set_auto_off`/`cancel_auto_off` use Home Assistant's standard entity target selector instead, since they operate on lights specifically and Home Assistant already has a rich picker for that.
+
+---
+
 # Supported Devices
 
 | Device Type  | Actions                               | Status | Low Battery | Malfunction | Notes                                                                     |
@@ -149,13 +164,7 @@ If a supported sensor does not appear in Home Assistant, please open an issue.
 https://github.com/ibasebcast/ha-alarmdotcom/issues
 
 ---
-# Data Updates
 
-This integration's IoT class is cloud push, so when a change happens on alarm.com home assistant is notified about it. As a backup this integration also polls alarm.com for state changes every 5 minutes.
-
-Because this integration is cloud push, that means every actions goes through alarm.com's cloud and an active internet connection is required for this integration to work.
-
----
 # Camera Support
 
 This integration includes WebRTC live-streaming support for Alarm.com cameras.
@@ -181,6 +190,134 @@ When the card loads it calls the `camera.turn_on` service which fetches a fresh 
 
 Still image snapshots are also available, which means the camera will display a thumbnail in the Home Assistant media browser and picture-glance dashboard cards.
 
+---
+
+# Auto-Off Timers
+
+Any light can be scheduled to turn off automatically after a duration, using the `alarmdotcom.set_auto_off` service - useful for things like "turn on for 30 minutes" without building a full automation for every light.
+
+This is deliberately more capable than a plain automation using a "wait, then turn off" action:
+
+* **Survives a Home Assistant restart.** The scheduled off-time is persisted. If Home Assistant was offline when a timer was due, the light turns off immediately on startup instead of the timer being silently lost; a timer still in the future is rescheduled for its exact remaining time.
+* **The scheduled off-time is visible.** Every light with a pending timer shows it directly in its own `auto_off_at` attribute - no separate helper entity needed to check "how much time is left."
+* **A summary sensor** ("Active Auto-Off Timers", found on the account's System device) shows how many timers are currently pending account-wide, with a `timers` attribute listing each affected light and its scheduled off-time.
+* If a light is turned off some other way before its timer fires - manually, from the Alarm.com app, from an unrelated automation - the timer clears itself automatically.
+
+**Example: turn on a light for one hour**
+
+```yaml
+action: alarmdotcom.set_auto_off
+target:
+  entity_id: light.front_porch
+data:
+  duration:
+    hours: 1
+```
+
+**Example: automatically time out any of a group of lights whenever they're turned on**
+
+```yaml
+alias: Auto-off lights after 1 hour
+triggers:
+  - trigger: state
+    entity_id:
+      - light.front_porch
+      - light.back_porch
+      - light.garage
+    to: "on"
+actions:
+  - action: alarmdotcom.set_auto_off
+    target:
+      entity_id: "{{ trigger.entity_id }}"
+    data:
+      duration:
+        hours: 1
+mode: queued
+```
+
+To cancel a pending timer early, call `alarmdotcom.cancel_auto_off` with the same target.
+
+---
+
+# Lock Unlock Attribution
+
+Lock entities expose three additional attributes: `last_unlocked_by`, `last_unlock_method`, and `last_unlocked_at`.
+
+This is sourced from Alarm.com's own activity history, polled roughly every 15 seconds - a genuinely separate data path from this integration's live state updates, since "who unlocked this" isn't part of the lock's ongoing state, only its history.
+
+**Prerequisite:** the Alarm.com account/login used by this integration needs the **"Activity" read-only permission** enabled, or these attributes will never populate at all. Confirmed by a real user - this isn't documented anywhere by Alarm.com itself, so it's easy to miss if the integration's account was set up before this feature existed, or was scoped narrowly on purpose.
+
+**Important limitation, confirmed directly from Alarm.com's own data, not a gap in this integration:** Alarm.com only attributes a keypad-code unlock to a specific person. Unlocking from the Alarm.com app, the web portal, or manually at the door is **not** attributed to anyone - `last_unlocked_by` correctly shows as unset for those, since Alarm.com itself doesn't know who performed them. Lights and switches have no equivalent - Alarm.com does not attribute those to a user at all under any circumstance.
+
+**`last_unlocked_by` doesn't necessarily reflect the most recent unlock, and that's also not a bug.** Not every unlock method generates its own distinct, loggable Alarm.com event for every lock model - a manual/inside turn may not be logged at all on some hardware. When that happens, `last_unlocked_by` simply keeps showing whoever the last *keypad* unlock was attributed to, even after a more recent manual or remote unlock, since there's no newer event for the poller to ever see. **`last_unlock_method`** exists specifically to sidestep this: it reports `"keypad"`, `"manual"`, or `"remote"` for whatever the most recently *tracked* unlock actually was, so an automation can gate on "was this actually a keypad entry" directly, rather than relying on a name that might be stale.
+
+**Example: a welcome-home announcement that varies by person, gated on method to avoid the staleness pitfall above**
+
+```yaml
+alias: Welcome home TTS
+triggers:
+  - trigger: state
+    entity_id: lock.front_door
+    attribute: last_unlocked_by
+conditions:
+  - condition: template
+    value_template: "{{ trigger.to_state.attributes.last_unlock_method == 'keypad' }}"
+actions:
+  - action: tts.speak
+    target:
+      entity_id: tts.google_translate
+    data:
+      media_player_entity_id: media_player.living_room_speaker
+      message: "Welcome home, {{ trigger.to_state.attributes.last_unlocked_by }}."
+```
+
+---
+
+# Activity Feed
+
+Beyond lock unlock attribution, this integration also fires a curated event on Home Assistant's event bus for other significant Alarm.com activity - arm/disarm, lock/unlock, and camera motion triggers - and keeps a short rolling list of the most recent ones on a **"Recent Activity"** sensor (found on the account's System device).
+
+This uses the same underlying poll as lock unlock attribution - nothing extra to configure, no additional load on Alarm.com's servers.
+
+**What's included by default**, and why the list is deliberately curated rather than exhaustive: real captured activity data showed roughly one event every 2-3 minutes during ordinary use, much of it genuinely noisy for automation purposes - every light interaction fires twice (a command event and a state-change event), motion and button presses fire constantly. Alarm.com does not attribute any of those to a specific person either (see [Lock Unlock Attribution](#lock-unlock-attribution) above), so they carry less unique automation value than the events below:
+
+* System armed (any mode) or disarmed
+* A lock locked or unlocked
+* A camera detected motion/a person
+* A garage door opened or closed
+
+Garage door events specifically are cross-referenced against this account's known garage door devices (the same ones the garage door cover entity is built from) before being included - this is what lets them in while ordinary window/door sensors, which share the exact same event data shape, stay excluded as noise.
+
+**Example: catch any curated event in an automation**
+
+```yaml
+alias: Log all significant Alarm.com activity
+triggers:
+  - trigger: event
+    event_type: alarmdotcom_activity
+actions:
+  - action: logbook.log
+    data:
+      name: Alarm.com
+      message: "{{ trigger.event.data.description }}"
+```
+
+Filter by `trigger.event.data.event_type_name` (e.g. `ArmedStay`, `DoorUnlocked`, `VideoCameraTriggered`) if you only want to react to specific kinds of activity.
+
+---
+
+# Polling Intervals
+
+Two things are polled on a timer rather than arriving live over the websocket, and both are configurable via the **Configure** button on the Alarm.com integration card:
+
+| Setting                       | Default    | What it affects                                                              |
+| ------------------------------ | ---------- | ------------------------------------------------------------------------------ |
+| Activity poll interval         | 15 seconds | How quickly lock unlock attribution and the activity feed reflect real events |
+| Full state poll interval       | 5 minutes  | A safety net that re-syncs everything in case a websocket event was ever missed |
+
+The activity poll interval in particular is worth understanding before turning it down further: it hits an entirely undocumented Alarm.com endpoint with no confirmed rate-limit information. The default of 15 seconds is a deliberate tradeoff for a prompt welcome-home automation experience, not a guarantee it's safe at any value - if you ever run into problems, this is the first thing worth dialing back up.
+
+---
 
 ## Removing This Integration
 

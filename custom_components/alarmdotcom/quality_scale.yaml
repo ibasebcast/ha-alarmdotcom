@@ -118,11 +118,36 @@ rules:
     status: exempt
     comment: >
       Alarm.com devices, to my knowledge, do not exist on any local network. So they cannot be discovered.
-  docs-data-update: todo
-  docs-examples: todo
-  docs-known-limitations: todo
-  docs-supported-devices: todo
-  docs-supported-functions: todo
+  docs-data-update:
+    status: done
+    comment: >
+      README.md's "Polling Intervals" section documents both timer-based
+      update mechanisms (activity feed/lock attribution, and the
+      full-state safety-net poll), their default intervals, and that
+      they're user-configurable via the options flow.
+  docs-examples:
+    status: done
+    comment: >
+      Working YAML automation examples in the "Auto-Off Timers", "Lock
+      Unlock Attribution", and "Activity Feed" sections - all validated
+      as real, parseable YAML.
+  docs-known-limitations:
+    status: done
+    comment: >
+      README.md's "Lock Unlock Attribution" section states plainly, with
+      the reasoning, that only keypad-code unlocks are attributed to a
+      person and that last_unlocked_by can lag behind the most recent
+      unlock for some lock models (see last_unlock_method).
+  docs-supported-devices:
+    status: done
+    comment: >
+      README.md's "Supported Devices" and "Supported Sensor Types" tables.
+  docs-supported-functions:
+    status: done
+    comment: >
+      Covered by the same "Supported Devices" table (actions column) plus
+      the dedicated feature sections (Auto-Off Timers, Lock Unlock
+      Attribution, Activity Feed, Camera Support).
   docs-troubleshooting: todo
   docs-use-cases: todo
   dynamic-devices:
