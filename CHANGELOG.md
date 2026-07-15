@@ -1,3 +1,76 @@
+## 2026.7.14.6b0 (beta)
+
+### Added
+- **`PARALLEL_UPDATES = 0` added to all ten platform files** (alarm_control_panel, binary_sensor, button, camera, climate, cover, light, lock, sensor, valve) - the correct, explicit signal for a push-based (websocket) integration, previously unset entirely.
+- **A "Removal" section in the README**, covering both the config-entry removal and cleaning up the WebRTC Lovelace card if one was added.
+- **`quality_scale.yaml` re-audited against the real current state of the repo** - a genuinely stale bookkeeping gap, not new functionality: 15 items previously marked `todo` (docs-actions, docs-high-level-description, docs-installation-instructions, docs-removal-instructions, docs-configuration-parameters, docs-installation-parameters, docs-data-update, docs-examples, docs-known-limitations, docs-supported-devices, docs-supported-functions, docs-use-cases, plus parallel-updates above) were already satisfied by documentation and code from earlier in this same beta cycle and are now marked `done` with accurate comments pointing at what satisfies each. `test-coverage`'s comment was flatly wrong (written when the suite had ~35 tests covering only setup/unload; it's 106 now, covering nearly every feature shipped this cycle) and has been rewritten to reflect what's actually covered and what still genuinely isn't (the platform entity classes themselves, and hub.py's websocket reconnect logic).
+- **New `last_unlock_method` attribute on lock entities** (`keypad`/`manual`/`remote`), in direct response to real user feedback on GitHub issue #79. `last_unlocked_by` alone isn't reliable for gating an automation on "was this actually a keypad entry": not every unlock method generates its own loggable Alarm.com event for every lock model, so `last_unlocked_by` can remain stuck showing an earlier keypad user's name well after a different, unattributed unlock happens. `last_unlock_method` reflects whatever the most recently tracked unlock actually was, independent of that staleness - confirmed the underlying data already distinguishes this via `unlock_method=ManualUnlock`/`ZwaveUnlock` and `lockedByKeypad=true` in the same raw activity data this feature already parses, so no new endpoint or permission was needed.
+- **Documented a real prerequisite discovered by a user**: the Alarm.com account used by this integration needs the "Activity" read-only permission enabled, or `last_unlocked_by`/`last_unlock_method`/`last_unlocked_at` never populate at all. Not documented anywhere by Alarm.com itself.
+
+### Under the hood
+- `ActivityFeedTracker`'s internal unlock-tracking storage moved from a positional `(name, timestamp)` tuple to a `LockUnlockRecord` TypedDict (matching `RecentActivityEntry`'s existing convention) now that it carries three fields - avoids fragile positional unpacking as this keeps growing.
+- 5 new tests covering `unlock_method` directly (keypad/manual/remote/unknown, and confirming it's derived independently of `unlocked_by_name` rather than one implying the other), plus 4 existing tests updated for the new `LockUnlockRecord` shape - 106 total, `mypy`/`ruff` both clean.
+
+## 2026.7.14.5b0 (beta)
+
+### Added
+- **Garage door open/close now appears in the activity feed**, resolving the disambiguation problem flagged when the activity feed first shipped (`2026.7.14.4b0`): Alarm.com's activity data uses the same event type for a garage door as for an ordinary window/door sensor, so the two couldn't be told apart by event type alone. Resolved the same way lock unlock attribution already does - cross-referencing the event's device ID against this account's actual known garage door resources (`hub.api.garage_doors`, the same controller the garage door cover entity is built from), rather than guessing from the event data alone. Ordinary window/door sensors remain correctly excluded, since their device IDs never match.
+- 4 new tests covering the disambiguation directly - a known garage door event is included, an ordinary sensor sharing the same event type is excluded, the event lands in the recent-activity list, and an account with no garage doors configured correctly matches nothing. 101 tests total, `mypy`/`ruff` both clean.
+
+## 2026.7.14.4b0 (beta)
+
+### Added
+- **A general activity feed** (extends the polling infrastructure originally built for #79). `LockActivityTracker` is renamed `ActivityFeedTracker` and now, alongside lock unlock attribution, fires a curated `alarmdotcom_activity` event on Home Assistant's event bus for other significant activity - system armed/disarmed, lock/unlock, and camera motion triggers - plus a new **"Recent Activity"** sensor with a short rolling history attribute. Built on the same poller and poll cycle as lock unlock attribution - no additional requests against the undocumented endpoint.
+  - The curated allow-list is a deliberate, documented choice, not a claim of completeness: real captured data showed noisy event types (paired light on/off command+state events, constant motion/button-press events) that add little automation value since Alarm.com doesn't attribute any of them to a user either. Garage door open/close is deliberately excluded for now - Alarm.com's activity data doesn't reliably distinguish a garage door from an ordinary window/door sensor by event type alone.
+- **Configurable polling intervals.** The options flow gained a third step: both the activity poll interval (default 15s) and the full-state safety-net poll interval (default 5min, previously a hardcoded constant in `hub.py`) can now be tuned via **Configure**, rather than requiring a code change. Existing users get the same defaults automatically; changing either triggers the existing config-entry reload, no extra plumbing needed.
+
+### Under the hood
+- `ActivityFeedTracker` gained `get_recent_activity()` and a `RecentActivityEntry` shape alongside its existing lock-attribution and listener-notification mechanisms.
+- 13 new tests covering the curated feed (bus event firing, the recent-activity rolling list and its bounded length, non-curated events correctly excluded) and the configurable interval (reading a configured value, falling back to the default) - 97 total, `mypy`/`ruff` both clean.
+
+## 2026.7.14.3b0 (beta)
+
+### Fixed
+- **`bypass_sensor`/`unbypass_sensor` crashed with `'PartitionController' object has no attribute 'values'`** whenever called without an explicit `partition_id` (GitHub issue #80) - the auto-resolve-partition-from-sensor path incorrectly treated `hub.api.partitions` as dict-like. It isn't: like every other controller in this integration, it's iterable directly. `alarm_control_panel.py` already did this correctly; `__init__.py`'s bypass handler was simply missed when that convention was established.
+  - There was previously zero test coverage for either service at all, which is exactly how this shipped unnoticed. Added 6 regression tests, deliberately using a real list subclass (not a dict, not a permissive mock) to stand in for the partition controller - a mock that happened to support `.values()` would have defeated the entire point of testing this. Confirmed these tests actually catch the reported bug by temporarily reintroducing it and watching the test fail, before re-fixing it.
+
+## 2026.7.14.2b0 (beta)
+
+### Changed
+- **Lock activity poll interval reduced from 60 seconds to 15 seconds** (follow-up to #79), for a faster welcome-home automation response. A deliberate tradeoff, not a free improvement: this is 4x the request volume against an entirely undocumented endpoint with no confirmed rate-limit information. Reasonable given the web app's own request carries `debounceTimeMs=1000` (suggesting the endpoint tolerates fairly frequent calls), but that's an inference from one observed request, not a guarantee - worth reverting toward 60s if this ever causes problems.
+
+### Added
+- **Lock activity polling now logs meaningfully**, closing a real gap from `2026.7.14.1b0`: previously only a *failed* poll produced any log output, so there was no way to confirm the poller was working short of a live unlock test.
+  - A real new unlock now logs at INFO level (e.g. "Lock activity: 110353471-1201 unlocked (attributed to: Chris Pulliam)") - deliberately INFO, not debug, since it only fires on an actual new unlock rather than every 15-second poll, so it's a genuine confirmation signal rather than log noise.
+  - Every poll additionally logs a DEBUG-level summary (events fetched, how many matched a known lock, the time window covered) - not useful at normal log levels, but confirms the poller is alive and fetching successfully once debug logging is turned on to investigate something.
+  - Covered by 2 new tests confirming the INFO line fires on real new attribution and stays silent otherwise.
+
+## 2026.7.14.1b0 (beta)
+
+### Added
+- **New: `last_unlocked_by` / `last_unlocked_at` attributes on lock entities**, addressing GitHub issue #79 - a welcome-home automation (custom TTS depending on who unlocked the door) is now genuinely possible for keypad-code unlocks.
+  - Built on top of an entirely undocumented Alarm.com endpoint (`activity/activityDays`), reverse-engineered from the Alarm.com web app's own Activity page network traffic rather than guessed - confirmed working against real captured request/response data before any code was written, including the specific distinction that matters here: Alarm.com attributes a keypad-code unlock to a real name, but does *not* attribute a web/app-session or manual unlock to anyone - both of those correctly show as unattributed (`None`), not a parsing gap.
+  - This required a genuinely new architecture within the vendored library: `AlarmBridge.get_activity_history()`, the first data source in this integration that has no persistent state and never arrives over the live websocket stream - it has to be actively polled. A new `LockActivityTracker` handles this on its own 60-second interval, independent of the existing 5-minute full-state refresh.
+  - Lights and switches are deliberately not covered - confirmed (not guessed) that Alarm.com's own system does not attribute those to a specific user at all, only that a device was turned on.
+  - Covered by 22 new tests across the model, the fetch method, and the tracker's polling/filtering/deduplication logic - including a real regression test using the actual data captured from the issue's investigation.
+
+## 2026.7.9.5b0 (beta)
+
+### Added
+- **New: "Active Auto-Off Timers" sensor**, showing how many auto-off timers (from `2026.7.9.4b0`'s `set_auto_off` service) are currently pending, account-wide, with a `timers` attribute listing each affected light's friendly name and scheduled off-time.
+  - Same account-wide singleton pattern as the existing battery summary sensors, but reacting to a genuinely different source of change: `AutoOffManager` gained its own listener mechanism (`add_listener`/`get_all_active`), since a timer being set or cancelled via a service call isn't an Alarm.com resource event at all - the existing `hub.api.subscribe` mechanism the battery sensors use would never see it.
+  - Updates live: setting, cancelling, or a timer actually firing all notify this sensor immediately, not just on the next reload.
+  - Covered by `tests/test_sensor_active_auto_off_timers.py`, including a dedicated test that the sensor's state actually changes in response to a live notification, not just at construction time.
+
+## 2026.7.9.4b0 (beta)
+
+### Added
+- **New: auto-off timers for lights**, via two new services - `alarmdotcom.set_auto_off` and `alarmdotcom.cancel_auto_off`. Target any Alarm.com light entity (or several at once, using the standard entity target picker) and a duration; the light turns off automatically once that duration elapses.
+  - Deliberately more than a plain "wait then turn off" automation can do on its own: the scheduled off-time is persisted, so it **survives a Home Assistant restart** - a timer that was already due while Home Assistant was offline fires immediately on startup, and one still pending is rescheduled for its remaining time rather than being lost. The scheduled off-time is also exposed as an `auto_off_at` attribute directly on the light entity, so "time remaining" is available to templates and other automations without a separate helper entity.
+  - If a light is turned off some other way before its timer fires - manually, from the Alarm.com app, from an unrelated automation - the timer is automatically cleared rather than lingering with a stale `auto_off_at` attribute.
+  - Checked first whether Alarm.com's own API supports this natively at the device level (which would be more robust still, working even through a Home Assistant outage) - it does not, at least not in what this integration currently models; this is a Home Assistant-side implementation.
+  - Covered by `tests/test_auto_off.py`, including the two restart-survival scenarios (catch-up on a missed past time, reschedule on a still-pending future time) that are the actual point of this feature over a plain automation.
+
 ## 2026.7.9.3 (stable)
 
 This release consolidates everything from the `2026.7.6.1b0` through `2026.7.9.3b0` beta cycle into a single stable release. Every item below has been verified either through the automated test suite, a clean `mypy`/`ruff`/CI run, or a real diagnostics download / log capture from a live account - the full beta-by-beta detail (including what didn't work on the first attempt) is preserved further down in this file for anyone who wants it.

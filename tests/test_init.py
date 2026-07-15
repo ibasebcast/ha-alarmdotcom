@@ -21,12 +21,15 @@ VALID_DATA = {"username": "test@example.com", "password": "hunter2"}
 
 
 @pytest.fixture
-def mock_hub():
+def mock_hub(hass: HomeAssistant):
     """Build a mock AlarmHub that initializes successfully with no real network calls."""
     hub = MagicMock()
     hub.initialize = AsyncMock(return_value=True)
     hub.close = AsyncMock(return_value=True)
     hub.api = MagicMock()
+    hub.api.locks = []
+    hub.hass = hass
+    hub.config_entry.options = {}
     return hub
 
 
