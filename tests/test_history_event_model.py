@@ -199,4 +199,3 @@ def test_unlock_method_is_independent_of_unlocked_by_name() -> None:
 
     assert event.attributes.unlocked_by_name is None
     assert event.attributes.unlock_method == "manual"
-
