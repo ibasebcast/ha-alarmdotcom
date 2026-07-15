@@ -31,7 +31,7 @@ from .const import (
     CONF_FORCE_BYPASS,
     CONF_NO_ENTRY_DELAY,
     CONF_SILENT_ARM,
-    DATA_HUB,
+
     DOMAIN,
 )
 from .entity import AdcControllerT, AdcEntity, AdcEntityDescription, AdcManagedDeviceT
@@ -61,7 +61,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the light platform."""
 
-    hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
+    hub: AlarmHub = config_entry.runtime_data.hub
 
     entities = [
         AdcAlarmControlPanelEntity(hub=hub, resource_id=device.id, description=entity_description)

@@ -31,7 +31,7 @@ from .const import (
     CONF_CAMERA_MFA_COOKIE,
     CONF_MFA_TOKEN,
     CONF_OTP,
-    DATA_HUB,
+
     DOMAIN,
 )
 
@@ -153,8 +153,8 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for the whole config entry (the full account)."""
-    hub: AlarmHub = hass.data[DOMAIN][entry.entry_id][DATA_HUB]
-    camera_session = hass.data[DOMAIN][entry.entry_id].get("camera_session")
+    hub: AlarmHub = entry.runtime_data.hub
+    camera_session = entry.runtime_data.camera_session
 
     return async_redact_data(
         {
@@ -181,8 +181,8 @@ async def async_get_device_diagnostics(
     someone's reporting an issue with one sensor/lock/camera and doesn't
     need (or want to share) the whole account's data.
     """
-    hub: AlarmHub = hass.data[DOMAIN][entry.entry_id][DATA_HUB]
-    camera_session = hass.data[DOMAIN][entry.entry_id].get("camera_session")
+    hub: AlarmHub = entry.runtime_data.hub
+    camera_session = entry.runtime_data.camera_session
 
     device_identifiers = {identifier[1] for identifier in device.identifiers if identifier[0] == DOMAIN}
 
