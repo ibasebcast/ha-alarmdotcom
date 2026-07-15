@@ -306,7 +306,9 @@ Filter by `trigger.event.data.event_type_name` (e.g. `ArmedStay`, `DoorUnlocked`
 
 ---
 
-# Polling Intervals
+# Data Updates
+
+This integrations uses both Cloud Push and Cloud Polling.
 
 Two things are polled on a timer rather than arriving live over the websocket, and both are configurable via the **Configure** button on the Alarm.com integration card:
 
@@ -316,6 +318,8 @@ Two things are polled on a timer rather than arriving live over the websocket, a
 | Full state poll interval       | 5 minutes  | A safety net that re-syncs everything in case a websocket event was ever missed |
 
 The activity poll interval in particular is worth understanding before turning it down further: it hits an entirely undocumented Alarm.com endpoint with no confirmed rate-limit information. The default of 15 seconds is a deliberate tradeoff for a prompt welcome-home automation experience, not a guarantee it's safe at any value - if you ever run into problems, this is the first thing worth dialing back up.
+
+The rest of the entites in this integration are Cloud Push.
 
 ---
 
