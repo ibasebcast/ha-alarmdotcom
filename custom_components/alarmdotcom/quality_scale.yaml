@@ -25,9 +25,9 @@ rules:
     status: todo
     comment: >
       Uses a custom AlarmHub class rather than DataUpdateCoordinator.
-      Refactoring would be needed to adopt the common coordinator pattern.
-      NOTE: This would need to be resolved before submitting to HA core —
-      core integrations are expected to use DataUpdateCoordinator.
+      This is a Bronze blocker — the integration cannot claim Bronze (or Silver)
+      compliance until AlarmHub is refactored to use DataUpdateCoordinator.
+      Intentionally left out of this PR due to scope; tracked separately.
   config-flow: done
   config-flow-test-coverage:
     status: done
