@@ -33,9 +33,7 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Alarm.com cameras from a config entry."""
-    camera_session: AlarmCameraSession | None = hass.data[DOMAIN][entry.entry_id].get(
-        "camera_session"
-    )
+    camera_session: AlarmCameraSession | None = entry.runtime_data.camera_session
 
     if camera_session is None:
         _LOGGER.debug(

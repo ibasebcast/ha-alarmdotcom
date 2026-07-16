@@ -19,7 +19,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
-from .const import DATA_ACTIVITY_FEED, DATA_HUB, DOMAIN
 from .entity import AdcControllerT, AdcEntity, AdcEntityDescription, AdcManagedDeviceT
 from .util import cleanup_orphaned_entities_and_devices
 
@@ -43,8 +42,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up the lock platform."""
 
-    hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
-    lock_activity_tracker: ActivityFeedTracker = hass.data[DOMAIN][config_entry.entry_id][DATA_ACTIVITY_FEED]
+    hub: AlarmHub = config_entry.runtime_data.hub
+    lock_activity_tracker: ActivityFeedTracker = config_entry.runtime_data.activity_feed_tracker
 
     entities: list[AdcLockEntity] = [
         AdcLockEntity(

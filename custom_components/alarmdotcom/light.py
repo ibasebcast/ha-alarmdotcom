@@ -22,7 +22,6 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 from homeassistant.util.color import brightness_to_value, value_to_brightness
 
-from .const import DATA_AUTO_OFF, DATA_HUB, DOMAIN
 from .entity import AdcControllerT, AdcEntity, AdcEntityDescription, AdcManagedDeviceT
 from .util import cleanup_orphaned_entities_and_devices
 
@@ -48,8 +47,8 @@ async def async_setup_entry(
 ) -> None:
     """Set up the light platform."""
 
-    hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
-    auto_off_manager: AutoOffManager = hass.data[DOMAIN][config_entry.entry_id][DATA_AUTO_OFF]
+    hub: AlarmHub = config_entry.runtime_data.hub
+    auto_off_manager: AutoOffManager = config_entry.runtime_data.auto_off_manager
 
     entities: list[AdcLightEntity] = [
         AdcLightEntity(
