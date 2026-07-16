@@ -1,6 +1,11 @@
 rules:
   # Bronze
-  action-setup: done
+  action-setup:
+    status: done
+    comment: >
+      NOTE: When submitting this as a core integration, remove all custom
+      services for the initial PR — this rule becomes irrelevant until
+      services are added back in a follow-up PR.
   appropriate-polling:
     status: done
     comment: >
@@ -21,6 +26,8 @@ rules:
     comment: >
       Uses a custom AlarmHub class rather than DataUpdateCoordinator.
       Refactoring would be needed to adopt the common coordinator pattern.
+      NOTE: This would need to be resolved before submitting to HA core —
+      core integrations are expected to use DataUpdateCoordinator.
   config-flow: done
   config-flow-test-coverage:
     status: done
@@ -61,7 +68,12 @@ rules:
   unique-config-entry: done
 
   # Silver
-  action-exceptions: done
+  action-exceptions:
+    status: done
+    comment: >
+      NOTE: When submitting this as a core integration, remove all custom
+      services for the initial PR — this rule becomes irrelevant until
+      services are added back in a follow-up PR.
   config-entry-unloading: done
   docs-configuration-parameters: done
   docs-installation-parameters: done
