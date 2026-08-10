@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from enum import Enum
@@ -166,6 +167,81 @@ class AlarmCameraSession:
 
         self.cookie_jar = cookie_jar or aiohttp.CookieJar(unsafe=True)
         self.session = session or aiohttp.ClientSession(cookie_jar=self.cookie_jar)
+
+        # Guards concurrent re-login. All camera entities on a config entry share one
+        # AlarmCameraSession, and each schedules its own independent 30-minute token
+        # refresh timer starting at entity setup, so their timers fire in near-lockstep.
+        # When the shared session's auth ages out, every camera hits 401/403 at once and,
+        # without this, each independently calls login() on the same session - producing
+        # N simultaneous real logins against Alarm.com every refresh interval. This mirrors
+        # the AlarmBridge single-flight fix in _pyalarmdotcomajax/__init__.py.
+        self._login_lock = asyncio.Lock()
+        self._login_generation = 0
+        self._replacement_session: AlarmCameraSession | None = None
+
+    @property
+    def session_generation(self) -> int:
+        """
+        Return the current login generation.
+
+        Callers should snapshot this before a request that might fail with 401/403,
+        then pass the snapshot to ensure_login() on failure. This lets a caller that
+        queues on the login lock discover the session was already repaired by another
+        concurrent caller while it waited, and skip a redundant login.
+        """
+        return self._login_generation
+
+    async def ensure_login(self, prior_generation: int) -> None:
+        """
+        Repair the session by logging in, unless another caller already has.
+
+        See session_generation for the expected snapshot-then-repair usage pattern.
+        """
+        async with self._login_lock:
+            if prior_generation == self._login_generation:
+                await self.login()
+                self._login_generation += 1
+            else:
+                _LOGGER.debug(
+                    "Session already repaired by another caller; skipping login."
+                )
+
+    async def repair_shared_session(self, prior_generation: int) -> AlarmCameraSession:
+        """
+        Replace a stale, externally-owned (owns_session=False) session with an independent one.
+
+        All camera entities on a config entry start out referencing the same
+        AlarmBridge-extracted session (see from_alarm_bridge). When that session goes
+        stale, without coordination each camera independently creates and logs into
+        its own separate replacement session on the same ~30-minute refresh cycle -
+        producing one real Alarm.com login per camera, all at once, repeatedly. Call
+        this instead of constructing a replacement directly: the first caller performs
+        the swap-and-login and caches the result on this (the original, now-stale)
+        session; concurrent or subsequently-failing callers on the same generation
+        reuse the cached replacement instead of creating their own.
+        """
+        async with self._login_lock:
+            if prior_generation == self._login_generation:
+                _LOGGER.info(
+                    "Shared camera session became stale, creating independent session."
+                )
+                replacement = AlarmCameraSession(
+                    username=self.username,
+                    password=self.password,
+                    mfa_cookie=self.mfa_cookie,
+                )
+                await replacement.login()
+                self._replacement_session = replacement
+                self._login_generation += 1
+            else:
+                _LOGGER.debug(
+                    "Independent session already created by another camera; reusing it."
+                )
+        if self._replacement_session is None:
+            raise RuntimeError(
+                "repair_shared_session: no replacement session available after repair"
+            )
+        return self._replacement_session
 
     @property
     def owns_session(self) -> bool:

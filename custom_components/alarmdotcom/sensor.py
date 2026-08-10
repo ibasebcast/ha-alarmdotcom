@@ -21,7 +21,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
-from .const import DATA_HUB, DOMAIN
+from .const import DATA_ACTIVITY_FEED, DATA_AUTO_OFF, DATA_HUB, DOMAIN
 from .entity import (
     AdcControllerT,
     AdcEntity,
@@ -31,7 +31,14 @@ from .entity import (
 from .util import cleanup_orphaned_entities_and_devices
 
 if TYPE_CHECKING:
+    from .activity_history import ActivityFeedTracker
+    from .auto_off import AutoOffManager
     from .hub import AlarmHub
+
+# Entities are updated via push (websocket events), not per-entity polling -
+# PARALLEL_UPDATES has no effect on update frequency here, but setting it
+# to 0 is still the correct, explicit signal for a push-based integration.
+PARALLEL_UPDATES = 0
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +62,8 @@ async def async_setup_entry(
     """Set up the sensor platform."""
 
     hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
+    auto_off_manager: AutoOffManager = hass.data[DOMAIN][config_entry.entry_id][DATA_AUTO_OFF]
+    activity_feed_tracker: ActivityFeedTracker = hass.data[DOMAIN][config_entry.entry_id][DATA_ACTIVITY_FEED]
 
     entities: list[AdcSensorEntity] = []
     for entity_description in ENTITY_DESCRIPTIONS:
@@ -69,9 +78,17 @@ async def async_setup_entry(
         AdcBatterySummarySensor(hub=hub, level=pyadc.base.BatteryLevel.CRITICAL, name="Critical Battery Count"),
     ]
 
-    async_add_entities([*entities, *battery_summary_entities])
+    auto_off_summary_entities: list[AdcActiveAutoOffTimersSensor] = [
+        AdcActiveAutoOffTimersSensor(hub=hub, auto_off_manager=auto_off_manager),
+    ]
 
-    all_entities = [*entities, *battery_summary_entities]
+    activity_feed_entities: list[AdcRecentActivitySensor] = [
+        AdcRecentActivitySensor(hub=hub, activity_feed_tracker=activity_feed_tracker),
+    ]
+
+    all_entities = [*entities, *battery_summary_entities, *auto_off_summary_entities, *activity_feed_entities]
+    async_add_entities(all_entities)
+
     current_entity_ids = {entity.entity_id for entity in all_entities}
     current_unique_ids = {uid for uid in (entity.unique_id for entity in all_entities) if uid is not None}
     await cleanup_orphaned_entities_and_devices(hass, config_entry, current_entity_ids, current_unique_ids, "sensor")
@@ -244,3 +261,120 @@ class AdcBatterySummarySensor(SensorEntity):
         ):
             self._recompute(message)
             self.async_write_ha_state()
+
+
+class AdcActiveAutoOffTimersSensor(SensorEntity):
+    """
+    Count of currently-pending auto-off timers, account-wide.
+
+    Same architecture as AdcBatterySummarySensor (a single, permanent,
+    account-level entity rather than one per device) but reacts to a
+    different source of change: AutoOffManager's own listener mechanism,
+    since a timer being set or cancelled via the set_auto_off/cancel_auto_off
+    services isn't an Alarm.com resource event at all - hub.api.subscribe
+    would never see it.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Active Auto-Off Timers"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "timers"
+    _attr_icon = "mdi:timer-outline"
+
+    def __init__(self, hub: AlarmHub, auto_off_manager: AutoOffManager) -> None:
+        """Initialize the active auto-off timers sensor."""
+
+        self.hub = hub
+        self._auto_off_manager = auto_off_manager
+        self._attr_unique_id = f"{hub.config_entry.entry_id}_active_auto_off_timers"
+
+        system_id = getattr(hub.api.active_system, "id", None)
+        self._attr_device_info = (
+            DeviceInfo(identifiers={(DOMAIN, system_id)}) if isinstance(system_id, str) else None
+        )
+
+        self._recompute()
+
+    @callback
+    def _recompute(self) -> None:
+        """Recount active timers and refresh the per-light off-time attribute list."""
+
+        active = self._auto_off_manager.get_all_active()
+        self._attr_native_value = len(active)
+        self._attr_extra_state_attributes = {
+            "timers": {
+                self._friendly_name(entity_id): off_at.isoformat()
+                for entity_id, off_at in sorted(active.items(), key=lambda item: item[1])
+            }
+        }
+
+    def _friendly_name(self, entity_id: str) -> str:
+        """Return the light's current friendly name, falling back to its entity_id if unavailable."""
+
+        state = self.hub.hass.states.get(entity_id)
+        return state.name if state is not None else entity_id
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to the auto-off manager's own change notifications."""
+
+        self.async_on_remove(self._auto_off_manager.add_listener(self._on_change))
+
+    @callback
+    def _on_change(self) -> None:
+        """Recompute and push state whenever a timer is set, cancelled, or fires."""
+
+        self._recompute()
+        self.async_write_ha_state()
+
+
+class AdcRecentActivitySensor(SensorEntity):
+    """
+    Most recent curated Alarm.com activity event, account-wide, with a short rolling history attribute.
+
+    Same account-wide singleton architecture as AdcBatterySummarySensor and
+    AdcActiveAutoOffTimersSensor, reacting to ActivityFeedTracker's own
+    listener mechanism (the same one lock unlock attribution uses) rather
+    than hub.api.subscribe - a curated activity event is sourced from
+    Alarm.com's activity history endpoint, not a live resource-update
+    event, so hub.api.subscribe would never see it.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Recent Activity"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_icon = "mdi:history"
+
+    def __init__(self, hub: AlarmHub, activity_feed_tracker: ActivityFeedTracker) -> None:
+        """Initialize the recent activity sensor."""
+
+        self.hub = hub
+        self._activity_feed_tracker = activity_feed_tracker
+        self._attr_unique_id = f"{hub.config_entry.entry_id}_recent_activity"
+
+        system_id = getattr(hub.api.active_system, "id", None)
+        self._attr_device_info = (
+            DeviceInfo(identifiers={(DOMAIN, system_id)}) if isinstance(system_id, str) else None
+        )
+
+        self._recompute()
+
+    @callback
+    def _recompute(self) -> None:
+        """Refresh the current-value description and the recent-events attribute list."""
+
+        recent = self._activity_feed_tracker.get_recent_activity()
+        self._attr_native_value = recent[0]["description"] if recent else "No recent activity"
+        self._attr_extra_state_attributes = {"recent_events": recent}
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to the activity feed tracker's own change notifications."""
+
+        self.async_on_remove(self._activity_feed_tracker.add_listener(self._on_change))
+
+    @callback
+    def _on_change(self) -> None:
+        """Recompute and push state whenever new curated activity is found."""
+
+        self._recompute()
+        self.async_write_ha_state()

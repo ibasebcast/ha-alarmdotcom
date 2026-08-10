@@ -22,11 +22,13 @@ from homeassistant.helpers.selector import (
 )
 
 from .const import (
+    CONF_ACTIVITY_POLL_INTERVAL,
     CONF_ARM_AWAY,
     CONF_ARM_CODE,
     CONF_ARM_HOME,
     CONF_ARM_MODE_OPTIONS,
     CONF_ARM_NIGHT,
+    CONF_FULL_STATE_POLL_INTERVAL,
     CONF_MFA_TOKEN,
     CONF_OPTIONS_DEFAULT,
     CONF_OTP,
@@ -377,7 +379,7 @@ class ADCOptionsFlowHandler(config_entries.OptionsFlow):
         """Set arming mode profiles."""
         if user_input is not None:
             self.options.update(user_input)
-            return self.async_create_entry(title="", data=self.options)
+            return await self.async_step_polling()
 
         schema = vol.Schema(
             {
@@ -407,6 +409,52 @@ class ADCOptionsFlowHandler(config_entries.OptionsFlow):
 
         return self.async_show_form(
             step_id="modes",
+            data_schema=schema,
+        )
+
+    async def async_step_polling(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """
+        Configure how often this integration polls Alarm.com.
+
+        Both intervals are user-configurable rather than fixed constants,
+        specifically so either can be dialed back by anyone who runs into
+        a real problem, without needing a code change. The activity poll
+        (lock unlock attribution, the general activity feed) hits an
+        entirely undocumented Alarm.com endpoint with no confirmed rate
+        limit - the default of 15 seconds is a deliberate tradeoff, not a
+        guarantee it's always safe to leave that low.
+        """
+        if user_input is not None:
+            self.options.update(user_input)
+            return self.async_create_entry(title="", data=self.options)
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_ACTIVITY_POLL_INTERVAL,
+                    default=self.options.get(
+                        CONF_ACTIVITY_POLL_INTERVAL,
+                        CONF_OPTIONS_DEFAULT[CONF_ACTIVITY_POLL_INTERVAL],
+                    ),
+                ): selector.selector(
+                    {"number": {"min": 15, "max": 300, "step": 1, "unit_of_measurement": "seconds"}}
+                ),
+                vol.Required(
+                    CONF_FULL_STATE_POLL_INTERVAL,
+                    default=self.options.get(
+                        CONF_FULL_STATE_POLL_INTERVAL,
+                        CONF_OPTIONS_DEFAULT[CONF_FULL_STATE_POLL_INTERVAL],
+                    ),
+                ): selector.selector(
+                    {"number": {"min": 1, "max": 60, "step": 1, "unit_of_measurement": "minutes"}}
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="polling",
             data_schema=schema,
             last_step=True,
         )

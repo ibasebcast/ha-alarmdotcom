@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 from homeassistant.components.camera import Camera, CameraEntityFeature
@@ -14,8 +14,15 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
 
-from .camera_api import AlarmCameraSession
 from .const import DOMAIN
+
+if TYPE_CHECKING:
+    from .camera_api import AlarmCameraSession
+
+# Entities are updated via push (websocket events), not per-entity polling -
+# PARALLEL_UPDATES has no effect on update frequency here, but setting it
+# to 0 is still the correct, explicit signal for a push-based integration.
+PARALLEL_UPDATES = 0
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,12 +47,27 @@ async def async_setup_entry(
         return
 
     try:
+        login_generation = camera_session.session_generation
         cameras = await camera_session.get_camera_list()
     except aiohttp.ClientResponseError as err:
         if err.status in (401, 403):
             _LOGGER.warning("Camera list fetch unauthorized, attempting re-login.")
-            await camera_session.login()
-            cameras = await camera_session.get_camera_list()
+            try:
+                await camera_session.ensure_login(login_generation)
+                cameras = await camera_session.get_camera_list()
+            except Exception as retry_err:
+                # A failed retry must not propagate: this is a separate platform from
+                # alarm_control_panel/sensor/etc, and accounts with no cameras configured
+                # (or with a persistent camera-specific auth issue) should still get their
+                # other entities. Previously an unhandled exception here could take down
+                # camera setup - and, per reports, leave the rest of the integration's
+                # entities unavailable too.
+                _LOGGER.error(
+                    "Camera list fetch failed after re-login attempt: %s. "
+                    "Skipping camera setup; other entities are unaffected.",
+                    retry_err,
+                )
+                return
         else:
             _LOGGER.error("Camera list fetch failed (%s), skipping.", err.status)
             return
@@ -127,6 +149,7 @@ class AlarmDotComCamera(Camera):
 
         async with self._fetch_lock:
             try:
+                login_generation = self._session.session_generation
                 config = await self._session.get_stream_info(self._id)
 
             except aiohttp.ClientResponseError as err:
@@ -138,18 +161,22 @@ class AlarmDotComCamera(Camera):
                     )
                     try:
                         if self._session.owns_session:
-                            await self._session.login()
+                            # self._fetch_lock only guards this one camera entity.
+                            # All cameras on this config entry share one AlarmCameraSession,
+                            # so ensure_login() (rather than login() directly) is required
+                            # here: it lets concurrent cameras hitting this same 401/403 at
+                            # the same moment collapse into a single real login instead of
+                            # each independently re-authenticating.
+                            await self._session.ensure_login(login_generation)
                         else:
-                            _LOGGER.info(
-                                "Camera %s: shared session became stale, switching to independent session.",
-                                self._id,
+                            # Normal case: this camera is on the session shared with the
+                            # AlarmBridge (owns_session=False). repair_shared_session()
+                            # coordinates the swap to an independent session across all
+                            # cameras sharing it, so only one real login happens even
+                            # though all cameras' refresh timers tend to fire together.
+                            self._session = await self._session.repair_shared_session(
+                                login_generation
                             )
-                            self._session = AlarmCameraSession(
-                                username=self._session.username,
-                                password=self._session.password,
-                                mfa_cookie=self._session.mfa_cookie,
-                            )
-                            await self._session.login()
 
                         config = await self._session.get_stream_info(self._id)
 

@@ -241,7 +241,7 @@ class WebSocketClient:
                         self._event_queue.put_nowait(msg.data)
                         self._event_history.append(msg.data)
 
-                if log.level < logging.DEBUG:
+                if log.isEnabledFor(logging.DEBUG):
                     close_code: aiohttp.WSCloseCode | int | None = websocket.close_code
                     with contextlib.suppress(AttributeError):
                         if websocket.close_code:

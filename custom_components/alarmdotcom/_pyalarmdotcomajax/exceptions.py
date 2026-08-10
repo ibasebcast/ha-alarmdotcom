@@ -53,7 +53,7 @@ class AuthenticationFailed(AuthenticationException):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         """Initialize the exception."""
-        super().__init__()
+        super().__init__(*args)
 
         self.can_autocorrect = kwargs.pop("can_autocorrect", False)
 
