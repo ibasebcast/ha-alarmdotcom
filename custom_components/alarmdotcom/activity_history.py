@@ -119,6 +119,16 @@ ACTIVITY_FEED_EVENT_TYPES = frozenset(
 # known_lock_ids is used for lock unlock attribution.
 GARAGE_DOOR_EVENT_TYPES = frozenset({"Opened", "Closed", "OpenedClosed"})
 
+# Ordinary door/window contact sensors emit these same event_type_name values.
+# They are deliberately kept OUT of the curated feed — a busy house would drown
+# the Recent Activity display, which is why they were excluded to begin with.
+# They ARE fired on the event bus, because this poll is an independent path to
+# the same physical events: when the WebSocket route drops a contact-sensor
+# state update, an automation triggering on that door has no other source for
+# it (#94). Firing the bus event costs the display nothing and gives those
+# automations something to hold on to.
+CONTACT_SENSOR_EVENT_TYPES = GARAGE_DOOR_EVENT_TYPES
+
 
 class RecentActivityEntry(TypedDict):
     """One entry in the recent-activity rolling list."""
@@ -222,6 +232,7 @@ class ActivityFeedTracker:
 
         known_lock_ids = {lock.id for lock in self.hub.api.locks}
         known_garage_door_ids = {door.id for door in self.hub.api.garage_doors}
+        known_sensor_ids = {sensor.id for sensor in self.hub.api.sensors}
         changed = False
         matched_unlock_count = 0
         feed_count = 0
@@ -238,6 +249,12 @@ class ActivityFeedTracker:
             if is_curated or is_curated_garage_event:
                 feed_count += 1
                 self._fire_activity_event(event)
+            elif (
+                event_type_name in CONTACT_SENSOR_EVENT_TYPES
+                and event.attributes.global_device_id in known_sensor_ids
+            ):
+                # Bus event only — the curated display stays as it was.
+                self._fire_activity_event(event, feed=False)
 
             if event_type_name != "DoorUnlocked":
                 continue
@@ -292,8 +309,14 @@ class ActivityFeedTracker:
         if changed or feed_count:
             self._notify_listeners()
 
-    def _fire_activity_event(self, event: pyadc.HistoryEvent) -> None:
-        """Fire a curated event on Home Assistant's event bus and append it to the recent-activity list."""
+    def _fire_activity_event(self, event: pyadc.HistoryEvent, *, feed: bool = True) -> None:
+        """
+        Fire an event on Home Assistant's event bus.
+
+        ``feed=False`` fires the bus event without adding the entry to the
+        recent-activity list — for event types that automations need but that
+        would be noise in the curated display.
+        """
 
         attrs = event.attributes
         entry: RecentActivityEntry = {
@@ -302,7 +325,8 @@ class ActivityFeedTracker:
             "device_description": attrs.device_description,
             "event_date": attrs.event_date,
         }
-        self._recent_activity.append(entry)
+        if feed:
+            self._recent_activity.append(entry)
         self.hub.hass.bus.async_fire(
             EVENT_ACTIVITY,
             {
