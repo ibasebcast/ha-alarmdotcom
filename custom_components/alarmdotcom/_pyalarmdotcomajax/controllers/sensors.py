@@ -1,6 +1,7 @@
 """Alarm.com controller for sensors."""
 
 import logging
+from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 from _pyalarmdotcomajax.const import ATTR_DESIRED_STATE, ATTR_STATE
@@ -34,14 +35,13 @@ SENSOR_EVENT_STATE_MAP = {
 }
 
 
+# Derived from the state map, as in every other device controller, so the
+# subscription list and the state map can no longer drift apart.
 SUPPORTED_RESOURCE_EVENTS = SupportedResourceEvents(
     events=[
         ResourceEventType.Bypassed,
         ResourceEventType.EndOfBypass,
-        ResourceEventType.Closed,
-        ResourceEventType.OpenedClosed,
-        ResourceEventType.Opened,
-        ResourceEventType.DoorLeftOpenRestoral,
+        *SENSOR_EVENT_STATE_MAP.keys(),
     ]
 )
 
@@ -50,6 +50,12 @@ SUPPORTED_RESOURCE_EVENTS = SupportedResourceEvents(
 class SensorController(BaseController[Sensor]):
     """Controller for sensors."""
 
+    # Contact-sensor mapping is the class-level default, so state updates go
+    # through the same unguarded path every other device controller uses
+    # (BaseController._base_handle_event). Motion sensors need IDLE/ACTIVE
+    # rather than CLOSED/OPEN, which a ClassVar cannot express per device, so
+    # _handle_event below corrects them.
+    _event_state_map = MappingProxyType(SENSOR_EVENT_STATE_MAP)
     _supported_resource_events = SUPPORTED_RESOURCE_EVENTS
 
     async def _handle_event(
@@ -57,12 +63,11 @@ class SensorController(BaseController[Sensor]):
     ) -> "AdcResourceT":
         """Handle light-specific WebSocket events."""
 
-        # Be careful here. message.value may be 0, so we need to explicitly check for None instead of relying on truthiness.
-        if (
-            isinstance(message, EventWSMessage)
-            and message.value is not None
-            and isinstance(adc_resource, Sensor)
-        ):
+        # Contact-sensor state is carried entirely by `subtype` (Opened /
+        # Closed / OpenedClosed). `event_value` means nothing for these events
+        # and is not read anywhere below, but gating on it dropped every state
+        # update whenever Alarm.com sent the event without one.
+        if isinstance(message, EventWSMessage) and isinstance(adc_resource, Sensor):
             #
             # STATE UPDATES
             #
