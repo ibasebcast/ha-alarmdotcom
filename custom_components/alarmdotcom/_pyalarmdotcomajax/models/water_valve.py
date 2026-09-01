@@ -18,7 +18,9 @@ class WaterValveState(Enum):
     CLOSED = 2
 
 
-WaterValveAttributes = BaseManagedDeviceAttributes[WaterValveState]
+@dataclass(kw_only=True)
+class WaterValveAttributes(BaseManagedDeviceAttributes[WaterValveState]):
+    """Attributes of a water valve."""
 
 
 @dataclass
