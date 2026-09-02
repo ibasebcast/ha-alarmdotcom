@@ -28,6 +28,7 @@ from .const import (
     CONF_ARM_HOME,
     CONF_ARM_MODE_OPTIONS,
     CONF_ARM_NIGHT,
+    CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
     CONF_FULL_STATE_POLL_INTERVAL,
     CONF_MFA_TOKEN,
     CONF_OPTIONS_DEFAULT,
@@ -449,6 +450,15 @@ class ADCOptionsFlowHandler(config_entries.OptionsFlow):
                     ),
                 ): selector.selector(
                     {"number": {"min": 1, "max": 60, "step": 1, "unit_of_measurement": "minutes"}}
+                ),
+                vol.Required(
+                    CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
+                    default=self.options.get(
+                        CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
+                        CONF_OPTIONS_DEFAULT[CONF_CAMERA_TOKEN_REFRESH_INTERVAL],
+                    ),
+                ): selector.selector(
+                    {"number": {"min": 5, "max": 120, "step": 1, "unit_of_measurement": "minutes"}}
                 ),
             }
         )
