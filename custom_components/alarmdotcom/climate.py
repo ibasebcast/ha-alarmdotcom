@@ -286,7 +286,11 @@ async def set_hvac_mode_fn(
         HVACMode.HEAT_COOL: pyadc.thermostat.ThermostatState.AUTO,
     }
 
-    if requested_hvac_mode := state_map.get(hvac_mode):
+    # `is not None`, not truthiness: these are IntEnum members, so a mode whose
+    # value is 0 is falsy. ThermostatState.OFF is 1 today, but the same test one
+    # function below silently dropped every "auto" fan request (see #99).
+    requested_hvac_mode = state_map.get(hvac_mode)
+    if requested_hvac_mode is not None:
         await controller.set_state(thermostat_id, state=requested_hvac_mode)
 
 
@@ -303,7 +307,12 @@ async def set_fan_mode_fn(
         FAN_CIRCULATE: pyadc.thermostat.ThermostatFanMode.CIRCULATE,
     }
 
-    if requested_fan_mode := fan_mode_map.get(fan_mode):
+    # ThermostatFanMode is an IntEnum and AUTO is 0, so a truthiness test here
+    # discards exactly the mode most thermostats sit in: climate.set_fan_mode
+    # with "auto" returned without calling the API and without raising, which is
+    # what #99 saw as an automation that fires and never reaches the thermostat.
+    requested_fan_mode = fan_mode_map.get(fan_mode)
+    if requested_fan_mode is not None:
         await controller.set_state(thermostat_id, fan_mode=requested_fan_mode, fan_mode_duration=0)
 
 
