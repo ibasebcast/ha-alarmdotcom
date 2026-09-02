@@ -73,9 +73,12 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
     """
     Return device information.
 
-    Home Assistant 2025.12 will enforce that via_device must reference an existing device.
-    Historically this integration sometimes set via_device to (DOMAIN, None) or to ids that
-    were never created as devices, which causes warnings and will become a hard failure.
+    Home Assistant 2025.12 will enforce that the parent link must reference an existing
+    device. Historically this integration sometimes pointed it at (DOMAIN, None) or at ids
+    that were never created as devices, which causes warnings and will become a hard failure.
+
+    The link is published as ``via_device_id`` (the parent's device registry id). The older
+    ``via_device`` identifier tuple is deprecated and stops working in HA Core 2027.8.
     """
 
     resource = hub.api.managed_devices[resource_id]
@@ -96,29 +99,35 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
     if resource.attributes.device_model is not None:
         device_info["model"] = resource.attributes.device_model
 
-    # Determine parent device candidate (prefer system device).
+    # Determine parent device candidate (prefer system device). This is the parent's
+    # Alarm.com resource id, i.e. the second half of its (DOMAIN, ...) identifier - not
+    # the device registry id that via_device_id wants.
     system_id: str | None = getattr(hub.api.active_system, "id", None)
-    via_device_id: str | None = None
+    parent_resource_id: str | None = None
 
     # Do not attach the system device to anything.
     if system_id and resource_id != system_id:
         # Prefer partition device if it exists as a device, otherwise fall back to system.
         partition_id = hub.api.partitions.get_device_partition(resource_id)
         if isinstance(partition_id, str) and partition_id.strip():
-            via_device_id = partition_id
+            parent_resource_id = partition_id
         else:
             resource_system_id = getattr(resource, "system_id", None)
             if isinstance(resource_system_id, str) and resource_system_id.strip():
-                via_device_id = resource_system_id
+                parent_resource_id = resource_system_id
             else:
-                via_device_id = system_id
+                parent_resource_id = system_id
 
-    # Only set via_device when the referenced device actually exists.
-    if isinstance(via_device_id, str) and via_device_id.strip():
+    # Only publish the parent link when the referenced device actually exists, and publish
+    # it as the parent's registry id. async_get_device_by_identifier scopes the lookup to
+    # this config entry, where identifiers are unique, so the match cannot be ambiguous.
+    if isinstance(parent_resource_id, str) and parent_resource_id.strip():
         device_registry = dr.async_get(hub.hass)
-        parent_device = device_registry.async_get_device(identifiers={(DOMAIN, via_device_id)})
+        parent_device = device_registry.async_get_device_by_identifier(
+            (DOMAIN, parent_resource_id), hub.config_entry.entry_id
+        )
         if parent_device is not None:
-            device_info["via_device"] = (DOMAIN, via_device_id)
+            device_info["via_device_id"] = parent_device.id
 
     return device_info
 

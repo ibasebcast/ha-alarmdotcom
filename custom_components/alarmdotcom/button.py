@@ -106,9 +106,13 @@ class AdcButtonDescription(
 def _device_exists_in_registry(hub: AlarmHub, resource_id: str) -> bool:
     """Check if a device with the given ID exists in the device registry."""
     device_registry = dr.async_get(hub.hass)
-    return any(
-        (DOMAIN, resource_id) in device.identifiers
-        for device in device_registry.devices.values()
+    # Scoped lookup rather than a scan of device_registry.devices, whose mapping
+    # interface is deprecated and stops working in HA Core 2027.9.
+    return (
+        device_registry.async_get_device_by_identifier(
+            (DOMAIN, resource_id), hub.config_entry.entry_id
+        )
+        is not None
     )
 
 

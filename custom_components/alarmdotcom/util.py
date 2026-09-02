@@ -2,7 +2,10 @@
 
 from typing import TYPE_CHECKING
 
-from homeassistant.helpers.device_registry import DeviceEntryType
+from homeassistant.helpers.device_registry import (
+    DeviceEntryType,
+    async_entries_for_config_entry,
+)
 from homeassistant.helpers.device_registry import async_get as async_get_device_registry
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 
@@ -54,8 +57,14 @@ async def cleanup_orphaned_entities_and_devices(
         if not matched_by_entity_id and not matched_by_unique_id:
             entity_registry.async_remove(entry.entity_id)
 
-    # Remove orphaned devices with no entities left, but skip SERVICE devices
-    for device in list(device_registry.devices.values()):
+    # Remove orphaned devices with no entities left, but skip SERVICE devices.
+    # async_entries_for_config_entry rather than device_registry.devices, whose mapping
+    # interface is deprecated and stops working in HA Core 2027.9. The helper already
+    # narrows to devices this entry touches; the check below keeps only those it owns
+    # outright, which is the same set the previous full scan selected.
+    for device in list(
+        async_entries_for_config_entry(device_registry, config_entry.entry_id)
+    ):
         if (
             device.config_entries == {config_entry.entry_id}
             and device.entry_type != DeviceEntryType.SERVICE
