@@ -28,8 +28,6 @@ ATTR_RESOURCE_ID = "resource_id"
 ATTR_PARTITION_ID = "partition_id"
 ATTR_DURATION = "duration"
 
-DATA_AUTO_OFF = "auto_off_manager"
-DATA_ACTIVITY_FEED = "activity_feed_tracker"
 
 MIGRATE_MSG_ALERT = (
     "The Alarm.com integration is now configured exclusively via Home Assistant's"
@@ -81,7 +79,6 @@ CONF_OPTIONS_DEFAULT = {
     CONF_FULL_STATE_POLL_INTERVAL: 5,
 }
 
-DATA_HUB = "connection"
 
 ATTRIB_BATTERY_NORMAL = "Normal"
 ATTRIB_BATTERY_LOW = "Low"

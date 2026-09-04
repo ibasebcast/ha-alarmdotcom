@@ -113,12 +113,12 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
             else:
                 via_device_id = system_id
 
-    # Only set via_device when the referenced device actually exists.
+    # Only set via_device_id when the referenced device actually exists.
     if isinstance(via_device_id, str) and via_device_id.strip():
         device_registry = dr.async_get(hub.hass)
         parent_device = device_registry.async_get_device(identifiers={(DOMAIN, via_device_id)})
         if parent_device is not None:
-            device_info["via_device"] = (DOMAIN, via_device_id)
+            device_info["via_device_id"] = parent_device.id
 
     return device_info
 

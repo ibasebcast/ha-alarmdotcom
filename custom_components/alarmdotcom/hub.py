@@ -21,7 +21,6 @@ from .const import (
     CONF_FULL_STATE_POLL_INTERVAL,
     CONF_MFA_TOKEN,
     CONF_OPTIONS_DEFAULT,
-    DATA_HUB,
     DOMAIN,
     PLATFORMS,
 )
@@ -79,8 +78,6 @@ class AlarmHub:
         self.available: bool = True
         self._reconnect_attempts: int = 0
         self._reconnect_task: asyncio.Task | None = None
-
-        hass.data.setdefault(DOMAIN, {})[self.config_entry.entry_id] = {DATA_HUB: self}
 
     async def login(self) -> bool:
         """Log in to alarm.com."""

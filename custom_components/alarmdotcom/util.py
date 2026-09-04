@@ -55,7 +55,7 @@ async def cleanup_orphaned_entities_and_devices(
             entity_registry.async_remove(entry.entity_id)
 
     # Remove orphaned devices with no entities left, but skip SERVICE devices
-    for device in list(device_registry.devices.values()):
+    for device in list(device_registry.devices):
         if (
             device.config_entries == {config_entry.entry_id}
             and device.entry_type != DeviceEntryType.SERVICE
