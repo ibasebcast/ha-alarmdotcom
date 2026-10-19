@@ -139,7 +139,7 @@ class PartitionController(BaseController[Partition]):
         await self.set_state(
             id,
             PartitionState.ARMED_STAY,
-            [option for option in extended_arming_options if option],
+            [option for option in extended_arming_options if option is not None],
         )
 
     @cli_action()
@@ -176,7 +176,7 @@ class PartitionController(BaseController[Partition]):
         await self.set_state(
             id,
             PartitionState.ARMED_AWAY,
-            [option for option in extended_arming_options if option],
+            [option for option in extended_arming_options if option is not None],
         )
 
     @cli_action()
@@ -214,7 +214,7 @@ class PartitionController(BaseController[Partition]):
         await self.set_state(
             id,
             PartitionState.ARMED_NIGHT,
-            [option for option in extended_arming_options if option],
+            [option for option in extended_arming_options if option is not None],
         )
 
     async def set_state(
