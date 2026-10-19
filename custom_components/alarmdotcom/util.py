@@ -46,9 +46,7 @@ async def cleanup_orphaned_entities_and_devices(
     # present in the current set. Entities without a unique_id are matched
     # solely by entity_id — we must not delete them just because unique_id is absent.
     for entry in list(entity_registry.entities.values()):
-        if entry.config_entry_id != config_entry.entry_id:
-            continue
-        if entry.domain != platform:
+        if entry.config_entry_id != config_entry.entry_id or entry.domain != platform:
             continue
 
         matched_by_entity_id = entry.entity_id in current_entity_ids
@@ -62,6 +60,7 @@ async def cleanup_orphaned_entities_and_devices(
     # interface is deprecated and stops working in HA Core 2027.9. The helper already
     # narrows to devices this entry touches; the check below keeps only those it owns
     # outright, which is the same set the previous full scan selected.
+    remaining_device_ids = {entry.device_id for entry in entity_registry.entities.values() if entry.device_id}
     for device in list(
         async_entries_for_config_entry(device_registry, config_entry.entry_id)
     ):
@@ -73,11 +72,5 @@ async def cleanup_orphaned_entities_and_devices(
             )
             and device.entry_type != DeviceEntryType.SERVICE
         ):
-            device_entities = [
-                e for e in entity_registry.entities.values() if e.device_id == device.id
-            ]
-            # No entities at all, or only unidentified entities on this platform
-            if not device_entities or all(
-                e.domain == platform and not e.unique_id for e in device_entities
-            ):
+            if device.id not in remaining_device_ids:
                 device_registry.async_remove_device(device.id)
