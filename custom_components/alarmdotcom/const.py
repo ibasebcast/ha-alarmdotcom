@@ -66,6 +66,10 @@ CONF_NO_ENTRY_DELAY = "no_entry_delay"
 # just the fallback defaults used before a user has ever set an option.
 CONF_ACTIVITY_POLL_INTERVAL = "activity_poll_interval"  # seconds
 CONF_FULL_STATE_POLL_INTERVAL = "full_state_poll_interval"  # minutes
+# How often each camera re-fetches its WebRTC stream tokens. Alarm.com does
+# not document the token lifetime; 30 minutes is the value that was hardcoded
+# before this became an option (#93).
+CONF_CAMERA_TOKEN_REFRESH_INTERVAL = "camera_token_refresh_interval"  # minutes  # noqa: S105
 CONF_ARM_MODE_OPTIONS = {
     CONF_FORCE_BYPASS: "Force Bypass",
     CONF_SILENT_ARM: "Arm Silently",
@@ -79,6 +83,7 @@ CONF_OPTIONS_DEFAULT = {
     CONF_ARM_NIGHT: [],
     CONF_ACTIVITY_POLL_INTERVAL: 15,
     CONF_FULL_STATE_POLL_INTERVAL: 5,
+    CONF_CAMERA_TOKEN_REFRESH_INTERVAL: 30,
 }
 
 DATA_HUB = "connection"

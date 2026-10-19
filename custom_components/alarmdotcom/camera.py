@@ -14,7 +14,11 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
 
-from .const import DOMAIN
+from .const import (
+    CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
+    CONF_OPTIONS_DEFAULT,
+    DOMAIN,
+)
 
 if TYPE_CHECKING:
     from .camera_api import AlarmCameraSession
@@ -26,7 +30,6 @@ PARALLEL_UPDATES = 0
 
 _LOGGER = logging.getLogger(__name__)
 
-TOKEN_REFRESH_INTERVAL = timedelta(minutes=30)
 
 
 async def async_setup_entry(
@@ -79,8 +82,19 @@ async def async_setup_entry(
         _LOGGER.debug("No cameras found for entry %s, skipping camera setup.", entry.entry_id)
         return
 
+    # User-configurable via the options flow (#93); the entry reloads on change.
+    refresh_interval = timedelta(
+        minutes=entry.options.get(
+            CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
+            CONF_OPTIONS_DEFAULT[CONF_CAMERA_TOKEN_REFRESH_INTERVAL],
+        )
+    )
+
     async_add_entities(
-        [AlarmDotComCamera(camera_session, cam, entry.entry_id) for cam in cameras]
+        [
+            AlarmDotComCamera(camera_session, cam, entry.entry_id, refresh_interval)
+            for cam in cameras
+        ]
     )
 
 
@@ -91,7 +105,11 @@ class AlarmDotComCamera(Camera):
     _attr_supported_features = CameraEntityFeature.ON_OFF
 
     def __init__(
-        self, session: AlarmCameraSession, info: dict, entry_id: str
+        self,
+        session: AlarmCameraSession,
+        info: dict,
+        entry_id: str,
+        token_refresh_interval: timedelta,
     ) -> None:
         """Initialize the camera."""
         super().__init__()
@@ -99,6 +117,7 @@ class AlarmDotComCamera(Camera):
         self._id = info["id"]
         self._name = info.get("description", self._id)
         self._entry_id = entry_id
+        self._token_refresh_interval = token_refresh_interval
 
         self._attr_unique_id = f"{entry_id}_camera_{self._id}"
         self._attr_name = self._name
@@ -124,7 +143,7 @@ class AlarmDotComCamera(Camera):
         self._remove_refresh = async_track_time_interval(
             self.hass,
             self._async_refresh_tokens,
-            TOKEN_REFRESH_INTERVAL,
+            self._token_refresh_interval,
         )
 
     async def async_will_remove_from_hass(self) -> None:

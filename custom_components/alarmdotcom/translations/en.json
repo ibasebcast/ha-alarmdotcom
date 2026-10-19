@@ -65,6 +65,20 @@
                 "data_description": {
                     "arm_night_options": "Note: Night mode is only compatible with specific Alarm.com partitions."
                 }
+            },
+            "polling": {
+                "title": "Polling & Refresh Intervals",
+                "description": "How often the integration asks Alarm.com for data it does not receive by push.",
+                "data": {
+                    "activity_poll_interval": "Activity feed poll interval",
+                    "full_state_poll_interval": "Full state refresh interval",
+                    "camera_token_refresh_interval": "Camera token refresh interval"
+                },
+                "data_description": {
+                    "activity_poll_interval": "Seconds between activity feed polls. Uses an undocumented endpoint; raise this if you see rate limiting.",
+                    "full_state_poll_interval": "Minutes between full state refreshes, a safety net for missed push events.",
+                    "camera_token_refresh_interval": "Minutes between WebRTC token refreshes for each camera. Lower it if streams stop working before the next refresh."
+                }
             }
         }
     },
