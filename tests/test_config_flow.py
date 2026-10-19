@@ -19,12 +19,12 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.alarmdotcom._pyalarmdotcomajax as pyadc
 from custom_components.alarmdotcom.const import (
-    CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
-    CONF_OPTIONS_DEFAULT,
     CONF_ARM_AWAY,
     CONF_ARM_CODE,
     CONF_ARM_HOME,
     CONF_ARM_NIGHT,
+    CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
+    CONF_OPTIONS_DEFAULT,
     CONF_OTP,
     CONF_OTP_METHOD,
     CONF_REMOVE_ARM_CODE,
