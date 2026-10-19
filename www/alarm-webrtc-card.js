@@ -49,9 +49,23 @@ class AlarmWebRTCCard extends HTMLElement {
   // matching only the literal value seen on one test camera silently does nothing for
   // every other model - matching the mixed results reported in #38, where the original
   // fix worked for some users' cameras but not others'.
+  // Some models (ADC-V724x, ADC-VDB770) send an H.264 fmtp line with no profile-level-id
+  // at all, which the decoder reads as the RFC 6184 default (Baseline 1.0) and iOS renders
+  // black, so the id is also added to any H.264 payload that lacks one (#112).
   _patchAppleOfferSdp(sdp) {
     if (!sdp) return sdp;
-    return sdp.replace(/profile-level-id=[0-9a-fA-F]{6}/g, "profile-level-id=42e01f");
+    sdp = sdp.replace(/profile-level-id=[0-9a-fA-F]{6}/g, "profile-level-id=42e01f");
+    for (const m of [...sdp.matchAll(/a=rtpmap:(\d+) H264\/90000/gi)]) {
+      const pt = m[1];
+      const fmtp = new RegExp(`a=fmtp:${pt} ([^\\r\\n]*)`);
+      const f = sdp.match(fmtp);
+      if (f) {
+        if (!/profile-level-id/i.test(f[1])) sdp = sdp.replace(fmtp, `a=fmtp:${pt} ${f[1]};profile-level-id=42e01f`);
+      } else {
+        sdp = sdp.replace(m[0], `${m[0]}\r\na=fmtp:${pt} profile-level-id=42e01f`);
+      }
+    }
+    return sdp;
   }
 
   setConfig(config) {
