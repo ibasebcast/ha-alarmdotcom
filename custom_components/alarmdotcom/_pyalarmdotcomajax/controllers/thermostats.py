@@ -147,17 +147,18 @@ class ThermostatController(BaseController[Thermostat]):
 
         msg_body: dict[str, Any] = {}
 
-        if state:
+        if state is not None:
             msg_body[ATTR_DESIRED_STATE] = state.value
         elif fan_mode is not None and fan_mode_duration is not None:
-            if fan_mode_duration not in self._resources[id].supported_fan_durations:
+            if fan_mode != ThermostatFanMode.AUTO and fan_mode_duration not in self._resources[id].supported_fan_durations:
                 raise ValueError("Requested fan duration is not supported by the device.")
             msg_body["desiredFanMode"] = fan_mode.value
             msg_body["desiredFanDuration"] = 0 if fan_mode == ThermostatFanMode.AUTO else fan_mode_duration
-        elif cool_setpoint is not None:
-            msg_body[ATTR_DESIRED_COOL_SETPOINT] = cool_setpoint
-        elif heat_setpoint is not None:
-            msg_body[ATTR_DESIRED_HEAT_SETPOINT] = heat_setpoint
+        elif cool_setpoint is not None or heat_setpoint is not None:
+            if cool_setpoint is not None:
+                msg_body[ATTR_DESIRED_COOL_SETPOINT] = cool_setpoint
+            if heat_setpoint is not None:
+                msg_body[ATTR_DESIRED_HEAT_SETPOINT] = heat_setpoint
         elif schedule_mode is not None:
             msg_body[ATTR_DESIRED_SCHEDULE_MODE] = schedule_mode.value
 
