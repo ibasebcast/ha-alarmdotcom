@@ -404,6 +404,21 @@ class AlarmBridge:
         if init_tasks:
             await asyncio.gather(*init_tasks)
 
+        # Some accounts omit Z-Wave lights from the device catalog even though
+        # the light endpoint exposes them. Query that endpoint only when catalog
+        # discovery yielded no lights, and retain normal catalog subscriptions.
+        if not self._lights.items:
+            try:
+                light_response = await self.get(ResourceType.LIGHT)
+                light_resources = (
+                    light_response.data
+                    if isinstance(light_response.data, list)
+                    else [light_response.data]
+                )
+                await self._lights._refresh(pre_fetched=light_resources)
+            except Exception as err:
+                log.debug("Direct light discovery unavailable: %s", err)
+
     async def refresh_all_resources(self) -> None:
         """
         Force a re-fetch and re-publish of state for every already-initialized resource controller.
