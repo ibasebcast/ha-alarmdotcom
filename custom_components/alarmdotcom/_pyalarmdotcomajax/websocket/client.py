@@ -281,7 +281,12 @@ class WebSocketClient:
                 raise err  # noqa: TRY201
 
             if connect_attempts >= MAX_CONNECTION_ATTEMPTS:
-                self.stop()
+                log.warning(
+                    "[EVENT READER] Reached %s consecutive WebSocket connection attempts; "
+                    "continuing recovery attempts instead of permanently stopping sensor updates.",
+                    MAX_CONNECTION_ATTEMPTS,
+                )
+                connect_attempts = MAX_CONNECTION_ATTEMPTS
 
             reconnect_wait = round(
                 min(10 * connect_attempts * random.random(), MAX_RECONNECT_WAIT_S)  # noqa: S311
