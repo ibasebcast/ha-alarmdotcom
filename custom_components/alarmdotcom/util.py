@@ -71,6 +71,6 @@ async def cleanup_orphaned_entities_and_devices(
                 else device.config_entries == {config_entry.entry_id}
             )
             and device.entry_type != DeviceEntryType.SERVICE
+            and device.id not in remaining_device_ids
         ):
-            if device.id not in remaining_device_ids:
-                device_registry.async_remove_device(device.id)
+            device_registry.async_remove_device(device.id)
