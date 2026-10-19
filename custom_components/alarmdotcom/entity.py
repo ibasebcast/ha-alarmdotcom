@@ -124,9 +124,10 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
     if isinstance(parent_resource_id, str) and parent_resource_id.strip():
         device_registry = dr.async_get(hub.hass)
         parent_device = next(
-            (device for device in device_registry.devices.values()
-             if (DOMAIN, parent_resource_id) in device.identifiers
-             and hub.config_entry.entry_id in device.config_entries),
+            (device for device in dr.async_entries_for_config_entry(
+                 device_registry, hub.config_entry.entry_id
+             )
+             if (DOMAIN, parent_resource_id) in device.identifiers),
             None,
         )
         if parent_device is not None:
