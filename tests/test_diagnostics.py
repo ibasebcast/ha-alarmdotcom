@@ -11,7 +11,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.alarmdotcom.const import DATA_HUB, DOMAIN
+from custom_components.alarmdotcom import AlarmEntryData
+from custom_components.alarmdotcom.const import DOMAIN
 from custom_components.alarmdotcom.diagnostics import (
     async_get_config_entry_diagnostics,
     async_get_device_diagnostics,
@@ -64,7 +65,12 @@ async def test_config_entry_diagnostics_redacts_credentials(hass, mock_hub_with_
     """Username/password in config entry data must never appear unredacted."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
     entry.add_to_hass(hass)
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {DATA_HUB: mock_hub_with_camera_resource}
+    entry.runtime_data = AlarmEntryData(
+        hub=mock_hub_with_camera_resource,
+        auto_off_manager=MagicMock(),
+        camera_session=None,
+        activity_feed_tracker=MagicMock(),
+    )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -82,7 +88,12 @@ async def test_config_entry_diagnostics_redacts_camera_tokens(hass, mock_hub_wit
     """
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
     entry.add_to_hass(hass)
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {DATA_HUB: mock_hub_with_camera_resource}
+    entry.runtime_data = AlarmEntryData(
+        hub=mock_hub_with_camera_resource,
+        auto_off_manager=MagicMock(),
+        camera_session=None,
+        activity_feed_tracker=MagicMock(),
+    )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -99,7 +110,12 @@ async def test_config_entry_diagnostics_includes_connection_health(hass, mock_hu
     """Connection health (available, active system) is present and not redacted."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
     entry.add_to_hass(hass)
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {DATA_HUB: mock_hub_with_camera_resource}
+    entry.runtime_data = AlarmEntryData(
+        hub=mock_hub_with_camera_resource,
+        auto_off_manager=MagicMock(),
+        camera_session=None,
+        activity_feed_tracker=MagicMock(),
+    )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -111,7 +127,12 @@ async def test_device_diagnostics_filters_to_matching_device(hass, mock_hub_with
     """Device-level diagnostics only include resources matching that device's identifiers."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
     entry.add_to_hass(hass)
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {DATA_HUB: mock_hub_with_camera_resource}
+    entry.runtime_data = AlarmEntryData(
+        hub=mock_hub_with_camera_resource,
+        auto_off_manager=MagicMock(),
+        camera_session=None,
+        activity_feed_tracker=MagicMock(),
+    )
 
     device = MagicMock()
     device.name = "Front Door Camera"
@@ -129,7 +150,12 @@ async def test_device_diagnostics_excludes_other_devices(hass, mock_hub_with_cam
     """A device page should not leak other devices' data."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
     entry.add_to_hass(hass)
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {DATA_HUB: mock_hub_with_camera_resource}
+    entry.runtime_data = AlarmEntryData(
+        hub=mock_hub_with_camera_resource,
+        auto_off_manager=MagicMock(),
+        camera_session=None,
+        activity_feed_tracker=MagicMock(),
+    )
 
     device = MagicMock()
     device.name = "Some Other Device"
@@ -186,10 +212,12 @@ async def test_config_entry_diagnostics_includes_and_redacts_camera_session_data
     """
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
     entry.add_to_hass(hass)
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        DATA_HUB: mock_hub_with_camera_resource,
-        "camera_session": mock_camera_session,
-    }
+    entry.runtime_data = AlarmEntryData(
+        hub=mock_hub_with_camera_resource,
+        auto_off_manager=MagicMock(),
+        camera_session=mock_camera_session,
+        activity_feed_tracker=MagicMock(),
+    )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -206,10 +234,12 @@ async def test_config_entry_diagnostics_camera_session_none_is_reported_cleanly(
     """No camera session (e.g. camera login never succeeded) is reported, not a crash."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
     entry.add_to_hass(hass)
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        DATA_HUB: mock_hub_with_camera_resource,
-        "camera_session": None,
-    }
+    entry.runtime_data = AlarmEntryData(
+        hub=mock_hub_with_camera_resource,
+        auto_off_manager=MagicMock(),
+        camera_session=None,
+        activity_feed_tracker=MagicMock(),
+    )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -224,10 +254,12 @@ async def test_config_entry_diagnostics_camera_fetch_failure_does_not_break_whol
     entry.add_to_hass(hass)
     failing_session = MagicMock()
     failing_session.get_camera_list = AsyncMock(side_effect=ConnectionError("boom"))
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        DATA_HUB: mock_hub_with_camera_resource,
-        "camera_session": failing_session,
-    }
+    entry.runtime_data = AlarmEntryData(
+        hub=mock_hub_with_camera_resource,
+        auto_off_manager=MagicMock(),
+        camera_session=failing_session,
+        activity_feed_tracker=MagicMock(),
+    )
 
     result = await async_get_config_entry_diagnostics(hass, entry)
 
@@ -242,10 +274,12 @@ async def test_device_diagnostics_includes_matching_camera_only(
     """A camera's own device page includes its camera session data, filtered to just that camera."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_DATA)
     entry.add_to_hass(hass)
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        DATA_HUB: mock_hub_with_camera_resource,
-        "camera_session": mock_camera_session,
-    }
+    entry.runtime_data = AlarmEntryData(
+        hub=mock_hub_with_camera_resource,
+        auto_off_manager=MagicMock(),
+        camera_session=mock_camera_session,
+        activity_feed_tracker=MagicMock(),
+    )
 
     device = MagicMock()
     device.name = "Front Door Camera"

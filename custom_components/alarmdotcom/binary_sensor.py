@@ -22,7 +22,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
 from .binary_sensor_words import LANG_DOOR, LANG_WINDOW
-from .const import DATA_HUB, DOMAIN
+from .const import DOMAIN
 from .entity import (
     AdcControllerT,
     AdcEntity,
@@ -56,7 +56,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the binary sensor platform."""
 
-    hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
+    hub: AlarmHub = config_entry.runtime_data.hub
 
     entities: list[BinarySensorEntity] = []
     for entity_description in ENTITY_DESCRIPTIONS:
