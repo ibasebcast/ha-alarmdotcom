@@ -1,3 +1,16 @@
+## 2026.10.19 (stable)
+
+### Fixed
+- Improved WebSocket reconnect and event processing resilience for intermittent sensor and panel updates (#94, #100, #114).
+- Updated device registry handling and orphan cleanup for newer Home Assistant versions (#101, #109, #116).
+- Fixed thermostat AUTO fan mode zero handling and combined heating/cooling setpoints (#99).
+- Reduced routine authentication log noise and improved session recovery (#91).
+- Preserved zero-valued arming options and corrected unsupported disarm option validation.
+- Preserved explicit zero brightness for dimmable lights.
+
+### Notes
+- Issues requiring further Alarm.com account or device diagnostics remain open, including missing lights (#115), alternate force bypass (#95), and glass-break sensor state (#111).
+
 ## 2026.8.10.1b0 (beta)
 
 ### Fixed
