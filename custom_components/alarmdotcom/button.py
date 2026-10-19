@@ -109,7 +109,11 @@ def _device_exists_in_registry(hub: AlarmHub, resource_id: str) -> bool:
     # Scoped lookup rather than a scan of device_registry.devices, whose mapping
     # interface is deprecated and stops working in HA Core 2027.9.
     return (
-        device_registry.async_get_device(identifiers={(DOMAIN, resource_id)})
+        any(
+            (DOMAIN, resource_id) in device.identifiers
+            and hub.config_entry.entry_id in device.config_entries
+            for device in device_registry.devices.values()
+        )
         is not None
     )
 
