@@ -174,7 +174,11 @@ class Thermostat(AdcDeviceResource[ThermostatAttributes]):
     def fan_mode(self) -> ThermostatFanMode:
         """The current fan mode."""
 
-        current_fan_mode = self.attributes.desired_fan_mode or self.attributes.fan_mode
+        current_fan_mode = (
+            self.attributes.desired_fan_mode
+            if self.attributes.desired_fan_mode is not None
+            else self.attributes.fan_mode
+        )
 
         if current_fan_mode in (
             ThermostatReportedFanMode.AUTO_LOW,
