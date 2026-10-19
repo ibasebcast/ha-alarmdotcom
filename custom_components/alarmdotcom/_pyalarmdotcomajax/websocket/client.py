@@ -369,8 +369,10 @@ class WebSocketClient:
                     )
 
             except Exception:
-                log.exception("[EVENT PROCESSOR] Failed to convert message.\n")
-                log.debug(json.loads(msg_json))
+                # Never parse the malformed payload again in this error handler:
+                # doing so can kill the processor and freeze subsequent sensor updates.
+                log.exception("[EVENT PROCESSOR] Failed to convert message.")
+                log.debug("[EVENT PROCESSOR] Rejected payload: %s", msg_json)
 
     async def _keep_alive(self) -> NoReturn:
         """
