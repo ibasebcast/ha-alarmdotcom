@@ -231,7 +231,7 @@ class PartitionController(BaseController[Partition]):
 
         # Disarm does not support extended arming options.
         if state == PartitionState.DISARMED and extended_arming_options:
-            UnsupportedOperation("Extended arming options not supported for disarm.")
+            raise UnsupportedOperation("Extended arming options not supported for disarm.")
 
         # Add extended arming options to body.
         # Check that each requested arming option is supported for the partition.
