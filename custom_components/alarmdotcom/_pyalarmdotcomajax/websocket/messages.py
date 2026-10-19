@@ -23,6 +23,20 @@ class ResourcePropertyChangeType(Enum):
     # Unsupported
     IrrigationStatus = 5
 
+    UNKNOWN = -1
+
+    @classmethod
+    def _missing_(cls: type, value: object) -> "ResourcePropertyChangeType":
+        """
+        Set default enum member if an unknown value is provided.
+
+        Without this, an unmapped property subtype raises ValueError inside
+        mashumaro and the event processor drops the whole message (#94:
+        "7 is not a valid ResourcePropertyChangeType"). ResourceEventType has
+        had this fallback all along.
+        """
+        return ResourcePropertyChangeType.UNKNOWN
+
 
 class ResourceEventType(Enum):
     """Enum for event types."""

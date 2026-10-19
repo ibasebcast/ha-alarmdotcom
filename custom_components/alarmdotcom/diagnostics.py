@@ -16,6 +16,7 @@ diagnostics downloads are meant to be safe to attach to a GitHub issue.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -138,7 +139,7 @@ async def _camera_diagnostics(camera_session: AlarmCameraSession | None) -> dict
 
 def _connection_health(hub: AlarmHub) -> dict[str, Any]:
     """Return connection/websocket health, independent of any specific device."""
-    return {
+    health: dict[str, Any] = {
         "available": hub.available,
         "active_system": {
             "id": hub.api.active_system.id,
@@ -147,6 +148,16 @@ def _connection_health(hub: AlarmHub) -> dict[str, Any]:
         if hub.api.active_system
         else None,
     }
+    # The WebSocket client already keeps the last 25 raw frames
+    # (websocket/client.py, `last_events`), but nothing surfaced them. Every
+    # "my sensor stopped updating" report needs exactly this to tell a
+    # transport-level miss from something dropping the message after receipt,
+    # and asking each reporter to reproduce with debug logging is a slow way to
+    # get it. Flows through the same async_redact_data(..., TO_REDACT) call as
+    # every other section.
+    with contextlib.suppress(AttributeError):
+        health["last_events"] = hub.api.ws_controller.last_events
+    return health
 
 
 async def async_get_config_entry_diagnostics(
