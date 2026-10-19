@@ -1,17 +1,17 @@
-colorlog==6.10.1
-ruff >= 0.15.20
+colorlog==6.11.0
+ruff >= 0.15.21
 # codespell>=2.4.1
 # yamllint>=1.37.0
-pre-commit>=4.6.0
-mypy>=2.2.0
+pre-commit>=4.6.1
+mypy>=2.3.0
 wheel>=0.47.0
 pathspec >= 1.1.1
-gitpython >= 3.1.50
-homeassistant >= 2026.7.1
+gitpython >= 3.1.53
+homeassistant >= 2026.7.2
 pytest == 9.0.3
-pytest-asyncio >= 0.24.0
+pytest-asyncio >= 1.4.0
 # pytest-homeassistant-custom-component's version tracks Home Assistant core
 # closely - when bumping the homeassistant pin above, check this package's
 # releases for a matching version, or tests may break due to API drift
 # between the pinned core version and what this test helper expects.
-pytest-homeassistant-custom-component >= 0.13.200
+pytest-homeassistant-custom-component >= 0.13.346
