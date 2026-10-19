@@ -176,7 +176,7 @@ class AuthenticationController:
             OtpRequired: If two-factor authentication is required.
 
         """
-        log.info("Logging in to Alarm.com")
+        log.debug("Logging in to Alarm.com")
 
         if "" in [self._username, self._password]:
             raise AuthenticationFailed("Username and password are required.")
@@ -195,13 +195,13 @@ class AuthenticationController:
 
         await self._login_submit_credentials(login_info)
 
-        log.info("Logged in to Alarm.com.")
+        log.debug("Logged in to Alarm.com.")
 
         #
         # Step 3: Determine whether OTP is required
         #
 
-        log.info("Checking MFA requirements.")
+        log.debug("Checking MFA requirements.")
 
         await self._login_otp_discovery()
 
