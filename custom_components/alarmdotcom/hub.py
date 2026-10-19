@@ -18,16 +18,20 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
+    CONF_FULL_STATE_POLL_INTERVAL,
     CONF_MFA_TOKEN,
-    DATA_HUB,
+    CONF_OPTIONS_DEFAULT,
     DOMAIN,
     PLATFORMS,
 )
 
 log = logging.getLogger(__name__)
 
-# How often to do a full state poll as a safety net against missed websocket events
-POLLING_INTERVAL = timedelta(minutes=5)
+# Default full-state poll interval (minutes), used until a user configures
+# their own via the options flow (see config_flow.py's
+# ADCOptionsFlowHandler.async_step_polling) - a safety net against missed
+# websocket events, not this integration's primary source of state.
+DEFAULT_POLLING_INTERVAL_MINUTES = CONF_OPTIONS_DEFAULT[CONF_FULL_STATE_POLL_INTERVAL]
 
 # Reconnect backoff: wait this long before reloading after a websocket death
 WS_RECONNECT_DELAY = 30  # seconds
@@ -75,8 +79,6 @@ class AlarmHub:
         self._reconnect_attempts: int = 0
         self._reconnect_task: asyncio.Task | None = None
 
-        hass.data.setdefault(DOMAIN, {})[self.config_entry.entry_id] = {DATA_HUB: self}
-
     async def login(self) -> bool:
         """Log in to alarm.com."""
         try:
@@ -121,11 +123,14 @@ class AlarmHub:
         await self.api.start_event_monitoring(self._ws_state_handler)
 
         # Periodic full state refresh as a safety net for missed websocket events
+        full_state_interval_minutes = self.config_entry.options.get(
+            CONF_FULL_STATE_POLL_INTERVAL, DEFAULT_POLLING_INTERVAL_MINUTES
+        )
         self.close_jobs.append(
             async_track_time_interval(
                 self.hass,
                 self._async_refresh_state,
-                POLLING_INTERVAL,
+                timedelta(minutes=full_state_interval_minutes),
             )
         )
 

@@ -22,8 +22,12 @@ DEBUG_REQ_EVENT = "alarmdotcom_debug_request"
 
 SERVICE_BYPASS_SENSOR = "bypass_sensor"
 SERVICE_UNBYPASS_SENSOR = "unbypass_sensor"
+SERVICE_SET_AUTO_OFF = "set_auto_off"
+SERVICE_CANCEL_AUTO_OFF = "cancel_auto_off"
 ATTR_RESOURCE_ID = "resource_id"
 ATTR_PARTITION_ID = "partition_id"
+ATTR_DURATION = "duration"
+
 
 MIGRATE_MSG_ALERT = (
     "The Alarm.com integration is now configured exclusively via Home Assistant's"
@@ -53,6 +57,17 @@ CONF_ARM_NIGHT = "arm_night_options"
 CONF_FORCE_BYPASS = "force_bypass"
 CONF_SILENT_ARM = "silent_arming"
 CONF_NO_ENTRY_DELAY = "no_entry_delay"
+
+# Polling intervals - both are user-configurable via the options flow
+# (see config_flow.py's ADCOptionsFlowHandler.async_step_polling), each
+# with its own reasonable min/max bounds enforced there. Values here are
+# just the fallback defaults used before a user has ever set an option.
+CONF_ACTIVITY_POLL_INTERVAL = "activity_poll_interval"  # seconds
+CONF_FULL_STATE_POLL_INTERVAL = "full_state_poll_interval"  # minutes
+# How often each camera re-fetches its WebRTC stream tokens. Alarm.com does
+# not document the token lifetime; 30 minutes is the value that was hardcoded
+# before this became an option (#93).
+CONF_CAMERA_TOKEN_REFRESH_INTERVAL = "camera_token_refresh_interval"  # minutes  # noqa: S105
 CONF_ARM_MODE_OPTIONS = {
     CONF_FORCE_BYPASS: "Force Bypass",
     CONF_SILENT_ARM: "Arm Silently",
@@ -64,9 +79,11 @@ CONF_OPTIONS_DEFAULT = {
     CONF_ARM_HOME: [],
     CONF_ARM_AWAY: [],
     CONF_ARM_NIGHT: [],
+    CONF_ACTIVITY_POLL_INTERVAL: 15,
+    CONF_FULL_STATE_POLL_INTERVAL: 5,
+    CONF_CAMERA_TOKEN_REFRESH_INTERVAL: 30,
 }
 
-DATA_HUB = "connection"
 
 ATTRIB_BATTERY_NORMAL = "Normal"
 ATTRIB_BATTERY_LOW = "Low"

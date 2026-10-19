@@ -8,7 +8,7 @@
   "dependencies": [],
   "documentation": "https://github.com/ibasebcast/ha-alarmdotcom",
   "integration_type": "hub",
-  "iot_class": "cloud_polling",
+  "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/ibasebcast/ha-alarmdotcom/issues",
   "requirements": [
     "beautifulsoup4>=4.10.0",
@@ -17,5 +17,5 @@
     "pyhumps~=3.8.0",
     "typer>=0.15.2"
   ],
-  "version": "2026.7.9.3"
+  "version": "2026.8.10.1b0"
 }

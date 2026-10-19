@@ -29,12 +29,14 @@ if _VENDOR_PATH not in sys.path:
     sys.path.insert(0, _VENDOR_PATH)
 
 import logging
+from dataclasses import dataclass
+from datetime import timedelta
 
 import _pyalarmdotcomajax as pyadc
 import aiohttp
 import voluptuous as vol
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
+from homeassistant.const import ATTR_ENTITY_ID, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import Event, HomeAssistant, ServiceCall
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
@@ -43,9 +45,13 @@ from homeassistant.exceptions import (
     ServiceValidationError,
 )
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 
+from .activity_history import ActivityFeedTracker
+from .auto_off import AutoOffManager
 from .camera_api import AlarmCameraSession
 from .const import (
+    ATTR_DURATION,
     ATTR_PARTITION_ID,
     ATTR_RESOURCE_ID,
     CONF_ARM_AWAY,
@@ -55,17 +61,28 @@ from .const import (
     CONF_MFA_TOKEN,
     CONF_NO_ENTRY_DELAY,
     CONF_SILENT_ARM,
-    DATA_HUB,
     DEBUG_REQ_EVENT,
     DOMAIN,
     PLATFORMS,
     SERVICE_BYPASS_SENSOR,
+    SERVICE_CANCEL_AUTO_OFF,
+    SERVICE_SET_AUTO_OFF,
     SERVICE_UNBYPASS_SENSOR,
     STARTUP_MESSAGE,
 )
 from .hub import AlarmHub
 
 LOGGER = logging.getLogger(__name__)
+
+
+@dataclass
+class AlarmEntryData:
+    """Runtime data stored on config_entry.runtime_data for this integration."""
+
+    hub: AlarmHub
+    auto_off_manager: AutoOffManager
+    camera_session: AlarmCameraSession | None
+    activity_feed_tracker: ActivityFeedTracker
 
 
 def _log_pyadc_location() -> None:
@@ -111,16 +128,16 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     except (TimeoutError, pyadc.AlarmdotcomException, aiohttp.ClientError) as ex:
         raise ConfigEntryNotReady from ex
 
-    if DOMAIN not in hass.data:
-        hass.data[DOMAIN] = {}
-    if config_entry.entry_id not in hass.data[DOMAIN]:
-        hass.data[DOMAIN][config_entry.entry_id] = {}
+    auto_off_manager = AutoOffManager(hass, config_entry.entry_id)
+    await auto_off_manager.async_load()
 
-    hass.data[DOMAIN][config_entry.entry_id][DATA_HUB] = hub
+    activity_feed_tracker = ActivityFeedTracker(hub)
+    activity_feed_tracker.async_start()
 
     # Initialize WebRTC camera session, best effort.
     # Prefer reusing the already-authenticated pyalarmdotcomajax session to
     # avoid a second login. Falls back to an independent login automatically.
+    camera_session: AlarmCameraSession | None
     try:
         camera_session = AlarmCameraSession.from_alarm_bridge(
             bridge=hub.api,
@@ -138,15 +155,20 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             LOGGER.debug(
                 "Camera session: reusing pyalarmdotcomajax session, no second login needed."
             )
-
-        hass.data[DOMAIN][config_entry.entry_id]["camera_session"] = camera_session
     except Exception as err:
         LOGGER.warning(
             "Alarm.com camera session could not be initialized: %s. "
             "Camera entities will be unavailable.",
             err,
         )
-        hass.data[DOMAIN][config_entry.entry_id]["camera_session"] = None
+        camera_session = None
+
+    config_entry.runtime_data = AlarmEntryData(
+        hub=hub,
+        auto_off_manager=auto_off_manager,
+        camera_session=camera_session,
+        activity_feed_tracker=activity_feed_tracker,
+    )
 
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
 
@@ -169,6 +191,27 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         )
 
     hass.bus.async_listen(DEBUG_REQ_EVENT, handle_alarmdotcom_debug_request_event)
+
+    _async_register_services(hass, config_entry, hub, auto_off_manager)
+
+    LOGGER.info("%s: Finished initializing Alarmdotcom from config entry.", __name__)
+    return True
+
+
+def _async_register_services(
+    hass: HomeAssistant,
+    config_entry: ConfigEntry,
+    hub: AlarmHub,
+    auto_off_manager: AutoOffManager,
+) -> None:
+    """
+    Register this config entry's bypass/unbypass and auto-off services.
+
+    Pulled out of async_setup_entry (which was otherwise growing too complex
+    for its own good) - takes the hub and auto_off_manager it needs directly
+    rather than reaching back into hass.data itself, so it stays easy to
+    reason about in isolation.
+    """
 
     async def handle_bypass_service(call: ServiceCall) -> None:
         """Handle a bypass or unbypass service request."""
@@ -195,7 +238,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             matching_partition = next(
                 (
                     partition
-                    for partition in hub.api.partitions.values()
+                    for partition in hub.api.partitions
                     if partition.system_id == sensor.system_id
                 ),
                 None,
@@ -217,7 +260,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
                 f"Failed to {'bypass' if bypass else 'unbypass'} Alarm.com sensor {resource_id}: {err}"
             ) from err
 
-    service_schema = vol.Schema(
+    bypass_schema = vol.Schema(
         {
             vol.Required(ATTR_RESOURCE_ID): cv.string,
             vol.Optional(ATTR_PARTITION_ID): cv.string,
@@ -225,23 +268,68 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     )
 
     if not hass.services.has_service(DOMAIN, SERVICE_BYPASS_SENSOR):
-        hass.services.async_register(
-            DOMAIN,
-            SERVICE_BYPASS_SENSOR,
-            handle_bypass_service,
-            schema=service_schema,
-        )
+        hass.services.async_register(DOMAIN, SERVICE_BYPASS_SENSOR, handle_bypass_service, schema=bypass_schema)
 
     if not hass.services.has_service(DOMAIN, SERVICE_UNBYPASS_SENSOR):
+        hass.services.async_register(DOMAIN, SERVICE_UNBYPASS_SENSOR, handle_bypass_service, schema=bypass_schema)
+
+    def _validate_own_light_entity_ids(entity_ids: list[str]) -> None:
+        """Raise ServiceValidationError if any entity_id isn't one of this config entry's own light entities."""
+
+        registry = er.async_get(hass)
+        for entity_id in entity_ids:
+            entry = registry.async_get(entity_id)
+            if (
+                entry is None
+                or entry.platform != DOMAIN
+                or entry.domain != "light"
+                or entry.config_entry_id != config_entry.entry_id
+            ):
+                raise ServiceValidationError(
+                    f"{entity_id} is not a light entity belonging to this Alarm.com account. "
+                    "Auto-off only supports Alarm.com light entities from this config entry."
+                )
+
+    async def handle_set_auto_off(call: ServiceCall) -> None:
+        """Schedule the target light(s) to turn off after a duration."""
+
+        entity_ids = call.data[ATTR_ENTITY_ID]
+        duration: timedelta = call.data[ATTR_DURATION]
+        _validate_own_light_entity_ids(entity_ids)
+
+        for entity_id in entity_ids:
+            off_at = await auto_off_manager.async_set(entity_id, duration)
+            LOGGER.debug("Auto-off scheduled for %s at %s", entity_id, off_at.isoformat())
+
+    async def handle_cancel_auto_off(call: ServiceCall) -> None:
+        """Cancel a pending auto-off for the target light(s)."""
+
+        entity_ids = call.data[ATTR_ENTITY_ID]
+        _validate_own_light_entity_ids(entity_ids)
+
+        for entity_id in entity_ids:
+            await auto_off_manager.async_cancel(entity_id)
+
+    if not hass.services.has_service(DOMAIN, SERVICE_SET_AUTO_OFF):
         hass.services.async_register(
             DOMAIN,
-            SERVICE_UNBYPASS_SENSOR,
-            handle_bypass_service,
-            schema=service_schema,
+            SERVICE_SET_AUTO_OFF,
+            handle_set_auto_off,
+            schema=vol.Schema(
+                {
+                    vol.Required(ATTR_ENTITY_ID): cv.entity_ids,
+                    vol.Required(ATTR_DURATION): cv.positive_time_period,
+                }
+            ),
         )
 
-    LOGGER.info("%s: Finished initializing Alarmdotcom from config entry.", __name__)
-    return True
+    if not hass.services.has_service(DOMAIN, SERVICE_CANCEL_AUTO_OFF):
+        hass.services.async_register(
+            DOMAIN,
+            SERVICE_CANCEL_AUTO_OFF,
+            handle_cancel_auto_off,
+            schema=vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.entity_ids}),
+        )
 
 
 async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
@@ -355,20 +443,30 @@ async def async_migrate_entry(hass: HomeAssistant, config_entry: ConfigEntry) ->
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
 
-    entry_data = hass.data[DOMAIN].pop(config_entry.entry_id)
-    hub: AlarmHub = entry_data[DATA_HUB]
-    camera_session: AlarmCameraSession | None = entry_data.get("camera_session")
+    entry_data: AlarmEntryData = config_entry.runtime_data
+    hub = entry_data.hub
+    camera_session = entry_data.camera_session
+    auto_off_manager = entry_data.auto_off_manager
+    activity_feed_tracker = entry_data.activity_feed_tracker
 
     if camera_session is not None:
         await camera_session.close()
 
+    await auto_off_manager.async_unload()
+    activity_feed_tracker.async_stop()
     unload_success = await hub.close()
 
-    if len(hass.data[DOMAIN]) == 0:
-        hass.data.pop(DOMAIN)
-        if hass.services.has_service(DOMAIN, SERVICE_BYPASS_SENSOR):
-            hass.services.async_remove(DOMAIN, SERVICE_BYPASS_SENSOR)
-        if hass.services.has_service(DOMAIN, SERVICE_UNBYPASS_SENSOR):
-            hass.services.async_remove(DOMAIN, SERVICE_UNBYPASS_SENSOR)
+    # LOADED, not merely present: async_entries() includes disabled and ignored
+    # entries, which have no hub and cannot serve these services. Counting them
+    # keeps the services registered against the hub closed three lines above.
+    remaining = [
+        e
+        for e in hass.config_entries.async_entries(DOMAIN)
+        if e.entry_id != config_entry.entry_id and e.state is ConfigEntryState.LOADED
+    ]
+    if not remaining:
+        for service in (SERVICE_BYPASS_SENSOR, SERVICE_UNBYPASS_SENSOR, SERVICE_SET_AUTO_OFF, SERVICE_CANCEL_AUTO_OFF):
+            if hass.services.has_service(DOMAIN, service):
+                hass.services.async_remove(DOMAIN, service)
 
     return unload_success

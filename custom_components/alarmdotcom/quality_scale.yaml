@@ -1,17 +1,32 @@
 rules:
   # Bronze
-  action-setup: done
+  action-setup:
+    status: done
+    comment: >
+      NOTE: When submitting this as a core integration, remove all custom
+      services for the initial PR — this rule becomes irrelevant until
+      services are added back in a follow-up PR.
   appropriate-polling:
     status: done
     comment: >
-      WebSocket push is the primary update mechanism; a 5-minute full-state
-      poll runs as a safety net for missed events only.
+      WebSocket push is the primary update mechanism. Two supplemental polls
+      run alongside it, both user-configurable via the options flow:
+      (1) A 5-minute full-state refresh in hub.py as a safety net for missed
+      WebSocket events — default is appropriate.
+      (2) A 15-second activity feed poll in activity_history.py that fetches
+      lock/garage open history from an undocumented Alarm.com endpoint to
+      populate last_unlock_method on lock entities — default is defensible
+      (the web app itself hits the endpoint frequently), but the endpoint has
+      no confirmed rate limit.
+      NOTE: For core submission, remove user configurable options for
+      these two polls and hardcode them to the defaults above.
   brands: done
   common-modules:
     status: todo
     comment: >
       Uses a custom AlarmHub class rather than DataUpdateCoordinator.
-      Refactoring would be needed to adopt the common coordinator pattern.
+      This is a Bronze blocker — the integration cannot claim Bronze (or Silver)
+      compliance until AlarmHub is refactored to use DataUpdateCoordinator.
   config-flow: done
   config-flow-test-coverage:
     status: done
@@ -23,46 +38,71 @@ rules:
       invalid code), the duplicate-system abort, and the options flow's
       two steps.
   dependency-transparency: done
-  docs-actions: todo
-  docs-high-level-description: todo
-  docs-installation-instructions: todo
-  docs-removal-instructions: todo
+  docs-actions:
+    status: done
+    comment: >
+      services.yaml documents all four services (bypass_sensor, unbypass_sensor,
+      set_auto_off, cancel_auto_off) with field descriptions and examples.
+      strings.json includes a "services" section with translatable names and
+      descriptions for each service and field.
+      NOTE: When submitting this as a core integration, remove all custom
+      services for the initial PR — HA submission guidelines explicitly list
+      "custom service actions" as features to exclude from a new integration's
+      first submission.
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
   entity-event-setup: done
   entity-unique-id: done
   has-entity-name: done
   runtime-data:
-    status: todo
+    status: done
     comment: >
-      Hub and camera session are stored in hass.data[DOMAIN][entry_id]
-      instead of config_entry.runtime_data.
+      AlarmEntryData dataclass (hub, auto_off_manager, camera_session,
+      activity_feed_tracker) is stored as config_entry.runtime_data in
+      async_setup_entry. All platform files and diagnostics.py read from
+      entry.runtime_data instead of hass.data[DOMAIN][entry_id].
   test-before-configure: done
   test-before-setup: done
   unique-config-entry: done
 
   # Silver
-  action-exceptions: done
+  action-exceptions:
+    status: done
+    comment: >
+      NOTE: When submitting this as a core integration, remove all custom
+      services for the initial PR — this rule becomes irrelevant until
+      services are added back in a follow-up PR.
   config-entry-unloading: done
-  docs-configuration-parameters: todo
-  docs-installation-parameters: todo
+  docs-configuration-parameters: done
+  docs-installation-parameters: done
   entity-unavailable: done
   integration-owner: done
   log-when-unavailable: done
   parallel-updates:
-    status: todo
+    status: done
     comment: >
-      No PARALLEL_UPDATES constant defined in platform files.
-      Push-based integrations should set PARALLEL_UPDATES = 0.
-  reauthentication-flow: done
+      PARALLEL_UPDATES = 0 added to all platform files (alarm_control_panel,
+      binary_sensor, button, camera, climate, cover, light, lock, sensor, valve).
+  reauthentication-flow:
+    status: done
+    comment: >
+      NOTE: When submitting this as a core integration, the reauthentication
+      flow may be too much for reviewers to want in an initial submission —
+      consider removing it and adding it back in a follow-up PR.
   test-coverage:
-    status: todo
+    status: done
     comment: >
-      tests/test_init.py covers the core setup/unload lifecycle (successful
-      setup, auth-failure -> reauth, connection-failure -> retry, and
-      unload closing both the hub and camera session). Not yet covered:
-      any platform file (climate, binary_sensor, sensor, alarm_control_panel,
-      camera, cover, lock, light, valve, button), the bypass/unbypass
-      services, or the websocket reconnect logic in hub.py. Config flow has
-      its own separate, more complete item (see config-flow-test-coverage).
+      test_init.py: setup lifecycle (success, auth-failure -> reauth,
+      connection-failure -> retry, unload), runtime_data population.
+      test_services.py: bypass_sensor and unbypass_sensor service handlers
+      (valid sensor, explicit partition, unknown ID, non-bypassable sensor).
+      test_alarm_control_panel.py: arm-code validation in control_fn.
+      test_diagnostics.py: redaction of credentials and camera tokens,
+      device-level filtering, camera session integration.
+      test_config_flow.py: full config flow coverage (see config-flow-test-coverage).
+      test_sensor_battery_summary.py, test_auto_off.py: supporting modules.
+      Not yet covered: WS reconnect logic, individual platform entity classes.
 
   # Gold
   devices: done
@@ -77,6 +117,9 @@ rules:
       camera stream tokens) are redacted via HA's own async_redact_data
       before being returned. Covered by tests/test_diagnostics.py,
       including explicit tests that the redaction actually happens.
+      NOTE: When submitting this as a core integration, diagnostics.py
+      may be too much for reviewers to want in an initial submission —
+      consider removing it and adding it back in a follow-up PR.
   discovery-update-info:
     status: exempt
     comment: >
@@ -86,11 +129,36 @@ rules:
     status: exempt
     comment: >
       Alarm.com devices, to my knowledge, do not exist on any local network. So they cannot be discovered.
-  docs-data-update: todo
-  docs-examples: todo
-  docs-known-limitations: todo
-  docs-supported-devices: todo
-  docs-supported-functions: todo
+  docs-data-update:
+    status: done
+    comment: >
+      README.md's "Polling Intervals" section documents both timer-based
+      update mechanisms (activity feed/lock attribution, and the
+      full-state safety-net poll), their default intervals, and that
+      they're user-configurable via the options flow.
+  docs-examples:
+    status: done
+    comment: >
+      Working YAML automation examples in the "Auto-Off Timers", "Lock
+      Unlock Attribution", and "Activity Feed" sections - all validated
+      as real, parseable YAML.
+  docs-known-limitations:
+    status: done
+    comment: >
+      README.md's "Lock Unlock Attribution" section states plainly, with
+      the reasoning, that only keypad-code unlocks are attributed to a
+      person and that last_unlocked_by can lag behind the most recent
+      unlock for some lock models (see last_unlock_method).
+  docs-supported-devices:
+    status: done
+    comment: >
+      README.md's "Supported Devices" and "Supported Sensor Types" tables.
+  docs-supported-functions:
+    status: done
+    comment: >
+      Covered by the same "Supported Devices" table (actions column) plus
+      the dedicated feature sections (Auto-Off Timers, Lock Unlock
+      Attribution, Activity Feed, Camera Support).
   docs-troubleshooting: todo
   docs-use-cases: todo
   dynamic-devices:
@@ -99,6 +167,10 @@ rules:
       Entities self-remove on RESOURCE_DELETED events. Binary sensors
       handle RESOURCE_ADDED for runtime additions. cleanup_orphaned_entities_and_devices
       in util.py removes stale entities and devices on each setup.
+      NOTE: When submitting this as a core integration, remove dynamic-devices
+      logic for the initial PR — HA submission guidelines list this as a
+      "complex quality scale rule" to exclude from a new integration's first
+      submission.
   entity-category: done
   entity-device-class: done
   entity-disabled-by-default: todo
@@ -110,19 +182,29 @@ rules:
       translation_key.
   exception-translations: todo
   icon-translations: todo
-  reconfiguration-flow: todo
+  reconfiguration-flow:
+    status: todo
+    comment: >
+      NOTE: When submitting this as a core integration, the reconfiguration
+      flow may be too much for reviewers to want in an initial submission —
+      consider removing it and adding it back in a follow-up PR.
   repair-issues: todo
   stale-devices:
     status: done
     comment: >
       cleanup_orphaned_entities_and_devices in util.py removes devices
       with no remaining entities on each platform setup.
+      NOTE: Same as dynamic-devices — remove for the initial core PR per
+      HA submission guidelines.
 
   # Platinum
   async-dependency:
     status: done
     comment: >
       pyalarmdotcomajax is fully async and aiohttp-based.
+      However when submitting this integration as a core integration,
+      pyalarmdotcomajax has to be a separate repo (like it was before)
+      because it is a requirement to become a core integration.
   inject-websession:
     status: todo
     comment: >

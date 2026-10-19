@@ -40,3 +40,31 @@ unbypass_sensor:
       example: "20392030"
       selector:
         text:
+set_auto_off:
+  name: Set auto-off timer
+  description: >-
+    Schedule one or more Alarm.com lights to turn off after a duration.
+    Unlike a plain automation using a "wait then turn off" action, this
+    survives a Home Assistant restart (a timer whose time already passed
+    while Home Assistant was offline fires immediately on startup; one
+    still pending is rescheduled for its remaining time) and exposes the
+    scheduled off-time as an "auto_off_at" attribute on the light itself.
+  target:
+    entity:
+      domain: light
+      integration: alarmdotcom
+  fields:
+    duration:
+      name: Duration
+      description: How long to wait before turning the light off.
+      required: true
+      example: "00:30:00"
+      selector:
+        duration:
+cancel_auto_off:
+  name: Cancel auto-off timer
+  description: Cancel a pending auto-off timer for one or more Alarm.com lights, if one is active.
+  target:
+    entity:
+      domain: light
+      integration: alarmdotcom

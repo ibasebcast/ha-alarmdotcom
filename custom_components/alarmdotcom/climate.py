@@ -22,7 +22,6 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
-from .const import DATA_HUB, DOMAIN
 from .entity import AdcControllerT, AdcEntity, AdcEntityDescription, AdcManagedDeviceT
 from .util import cleanup_orphaned_entities_and_devices
 
@@ -36,6 +35,11 @@ PRESET_MANUAL_MODE = "manual_mode"
 PRESET_SCHEDULE_MODE = "schedule_mode"
 PRESET_SMART_MODE = "smart_mode"
 
+# Entities are updated via push (websocket events), not per-entity polling -
+# PARALLEL_UPDATES has no effect on update frequency here, but setting it
+# to 0 is still the correct, explicit signal for a push-based integration.
+PARALLEL_UPDATES = 0
+
 log = logging.getLogger(__name__)
 
 
@@ -47,7 +51,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the climate platform."""
 
-    hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
+    hub: AlarmHub = config_entry.runtime_data.hub
 
     entities = [
         AdcClimateEntity(hub=hub, resource_id=device.id, description=entity_description)
@@ -281,7 +285,11 @@ async def set_hvac_mode_fn(
         HVACMode.HEAT_COOL: pyadc.thermostat.ThermostatState.AUTO,
     }
 
-    if requested_hvac_mode := state_map.get(hvac_mode):
+    # `is not None`, not truthiness: these are IntEnum members, so a mode whose
+    # value is 0 is falsy. ThermostatState.OFF is 1 today, but the same test one
+    # function below silently dropped every "auto" fan request (see #99).
+    requested_hvac_mode = state_map.get(hvac_mode)
+    if requested_hvac_mode is not None:
         await controller.set_state(thermostat_id, state=requested_hvac_mode)
 
 
@@ -298,7 +306,12 @@ async def set_fan_mode_fn(
         FAN_CIRCULATE: pyadc.thermostat.ThermostatFanMode.CIRCULATE,
     }
 
-    if requested_fan_mode := fan_mode_map.get(fan_mode):
+    # ThermostatFanMode is an IntEnum and AUTO is 0, so a truthiness test here
+    # discards exactly the mode most thermostats sit in: climate.set_fan_mode
+    # with "auto" returned without calling the API and without raising, which is
+    # what #99 saw as an automation that fires and never reaches the thermostat.
+    requested_fan_mode = fan_mode_map.get(fan_mode)
+    if requested_fan_mode is not None:
         await controller.set_state(thermostat_id, fan_mode=requested_fan_mode, fan_mode_duration=0)
 
 

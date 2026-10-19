@@ -97,6 +97,7 @@ from _pyalarmdotcomajax.models.base import (
     BaseManagedDeviceAttributes,
     ResourceType,
 )
+from _pyalarmdotcomajax.models.history_event import HistoryEvent
 from _pyalarmdotcomajax.models.jsonapi import (
     FailureDocument,
     JsonApiBaseElement,
@@ -193,6 +194,15 @@ class AlarmBridge:
         self._websession: aiohttp.ClientSession | None = None
         self.ajax_key: str | None = None
 
+        # Guards concurrent session repair. Without this, each of several concurrent pollers
+        # that hit a 403 independently calls login(), and each login() invalidates the ajax_key
+        # the previous one just obtained, producing a self-sustaining storm of real logins against
+        # Alarm.com (which can trip their account-lockout / notification systems). The generation
+        # counter lets a task that queued on the lock discover the session was already repaired by
+        # someone else while it waited, and skip its own login.
+        self._login_lock = asyncio.Lock()
+        self._login_generation = 0
+
         # Session Controllers
         self._auth_controller = AuthenticationController(
             self, username, password, mfa_token
@@ -286,6 +296,66 @@ class AlarmBridge:
         """Login to alarm.com."""
 
         return await self._auth_controller.login()
+
+    async def get_activity_history(
+        self,
+        start_time: datetime,
+        end_time: datetime | None = None,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> list[HistoryEvent]:
+        """
+        Fetch activity history events in the given time range.
+
+        Uses an entirely undocumented endpoint (`activity/activityDays`),
+        reverse-engineered from the Alarm.com web app's own Activity page
+        rather than found in any prior version of this library. Confirmed
+        directly from real captured requests, not guessed from other
+        endpoints' conventions - see the comments on individual parameters
+        below for what's actually been observed.
+
+        Unlike every other resource this library models, history events
+        have no persistent state and never arrive over the websocket -
+        they have to be actively polled, which is why this lives as a
+        plain bridge-level method rather than a BaseController subclass
+        (there is no ongoing "controller" of history events to maintain,
+        no subscribe-to-live-updates behavior that would apply here).
+
+        Args:
+            start_time: earliest event to include (inclusive), aware datetime.
+            end_time: latest event to include - omit (None) for "now",
+                matching the real web app's own behavior of leaving this
+                blank for its default view.
+            page: 1-indexed page number - confirmed real parameter, the
+                web app increments this to load older activity.
+            page_size: confirmed real parameter; the web app itself uses
+                100, kept as this method's own default to match.
+
+        Returns:
+            Every activity/history-event resource found in the response's
+            `included` array - the response's own `data` array (grouped by
+            day) is intentionally not modeled here, since nothing about
+            the day-grouping itself is needed for any current use case.
+
+        """
+
+        params: dict[str, str] = {
+            "debounceTimeMs": "1000",
+            "startTime": start_time.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+            "endTime": end_time.strftime("%Y-%m-%dT%H:%M:%S.000Z") if end_time else "",
+            "page": str(page),
+            "pageSize": str(page_size),
+            "searchString": "",
+            "showOnlyOpenEyeEvents": "false",
+        }
+
+        response = await self.get("activity/activityDays", None, params=params)
+
+        return [
+            HistoryEvent(api_resource=resource)
+            for resource in response.included
+            if resource.type == ResourceType.HISTORY_EVENT.value
+        ]
 
     async def fetch_full_state(self) -> None:
         """Fetch full state from alarm.com."""
@@ -583,6 +653,8 @@ class AlarmBridge:
 
         if self._websession:
             await self._websession.close()
+        self._websession = None
+        self._initialized = False
         log.info("Connection to alarm.com closed.")
 
     #
@@ -657,9 +729,23 @@ class AlarmBridge:
             # Ref: https://www.alarm.com/web/system/assets/addon-tree-output/@adc/ajax/services/adc-ajax.js
             # When used, AFG is not always present in the response. Prior value should carry over until a new value
             # appears.
+            #
+            # As with the MFA cookie above, aiohttp follows redirects by default and resp.cookies only
+            # exposes the Set-Cookie headers of the *last* response in the chain. Fall back to the session
+            # cookie jar when afg is not on this response, otherwise a stale ajax_key can be carried over
+            # and rejected by the server as "Invalid Anti Forgery" (403).
 
+            new_afg: str | None = None
             if afg := resp.cookies.get("afg"):
-                self.ajax_key = afg.value
+                new_afg = afg.value
+            elif self._websession is not None:
+                for jar_cookie in self._websession.cookie_jar:
+                    if jar_cookie.key == "afg" and jar_cookie.value:
+                        new_afg = jar_cookie.value
+                        break
+
+            if new_afg and new_afg != self.ajax_key:
+                self.ajax_key = new_afg
 
             # Update MFA cookie.
             # We need to store the MFA cookie locally in order to reauthenticate after a session timeout without
@@ -687,7 +773,7 @@ class AlarmBridge:
                 self._auth_controller.mfa_cookie = new_mfa_cookie
 
             # If DEBUG logging is enabled, log the request and response.
-            if log.level < logging.DEBUG:
+            if log.isEnabledFor(logging.DEBUG):
                 try:
                     resp_dump = (
                         json.dumps(await resp.json()) if resp.content_length else ""
@@ -776,6 +862,11 @@ class AlarmBridge:
         # Alarm.com's implementation violates the JSON:API spec by sometimes returning a modified error response
         # body with a non-200 response code.
         # This response still contains an "errors" object and should validate as a FailureDocument.
+
+        # Snapshot the login generation before the request goes out. If this request later hits an
+        # AuthenticationFailed, we compare against the current generation to detect whether another
+        # concurrent task has already repaired the session for us.
+        login_generation = self._login_generation
 
         log.info(
             "Requesting %s %s with %s expecting %s as %s",
@@ -878,9 +969,18 @@ class AlarmBridge:
 
         except AuthenticationFailed as err:
             if err.can_autocorrect and allow_login_repair:
-                log.info("Attempting to repair session.")
                 try:
-                    await self._auth_controller.login()
+                    async with self._login_lock:
+                        # Another task may have already repaired the session while we waited
+                        # on the lock. Only log in if nobody else has done so since we started.
+                        if login_generation == self._login_generation:
+                            log.info("Attempting to repair session.")
+                            await self._auth_controller.login()
+                            self._login_generation += 1
+                        else:
+                            log.debug(
+                                "Session already repaired by another task; retrying."
+                            )
                     return await self.request(
                         method,
                         url,

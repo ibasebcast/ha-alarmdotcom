@@ -22,7 +22,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
 from .binary_sensor_words import LANG_DOOR, LANG_WINDOW
-from .const import DATA_HUB, DOMAIN
+from .const import DOMAIN
 from .entity import (
     AdcControllerT,
     AdcEntity,
@@ -33,6 +33,11 @@ from .util import cleanup_orphaned_entities_and_devices
 
 if TYPE_CHECKING:
     from .hub import AlarmHub
+
+# Entities are updated via push (websocket events), not per-entity polling -
+# PARALLEL_UPDATES has no effect on update frequency here, but setting it
+# to 0 is still the correct, explicit signal for a push-based integration.
+PARALLEL_UPDATES = 0
 
 log = logging.getLogger(__name__)
 
@@ -51,7 +56,7 @@ async def async_setup_entry(
 ) -> None:
     """Set up the binary sensor platform."""
 
-    hub: AlarmHub = hass.data[DOMAIN][config_entry.entry_id][DATA_HUB]
+    hub: AlarmHub = config_entry.runtime_data.hub
 
     entities: list[BinarySensorEntity] = []
     for entity_description in ENTITY_DESCRIPTIONS:

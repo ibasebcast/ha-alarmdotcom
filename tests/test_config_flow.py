@@ -23,6 +23,8 @@ from custom_components.alarmdotcom.const import (
     CONF_ARM_CODE,
     CONF_ARM_HOME,
     CONF_ARM_NIGHT,
+    CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
+    CONF_OPTIONS_DEFAULT,
     CONF_OTP,
     CONF_OTP_METHOD,
     CONF_REMOVE_ARM_CODE,
@@ -208,7 +210,7 @@ async def test_duplicate_system_aborts(hass: HomeAssistant, mock_bridge_class, m
 
 
 async def test_options_flow_full_walkthrough(hass: HomeAssistant) -> None:
-    """The options flow's two steps (arm code, then arm mode profiles) both work."""
+    """The options flow's three steps (arm code, arm mode profiles, then polling intervals) all work."""
     entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_CREDS)
     entry.add_to_hass(hass)
 
@@ -227,7 +229,70 @@ async def test_options_flow_full_walkthrough(hass: HomeAssistant) -> None:
         result["flow_id"],
         {CONF_ARM_HOME: ["silent_arming"], CONF_ARM_AWAY: [], CONF_ARM_NIGHT: []},
     )
+    assert result["type"] == data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "polling"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"activity_poll_interval": 15, "full_state_poll_interval": 5},
+    )
 
     assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_ARM_CODE] == "1234"
     assert result["data"][CONF_ARM_HOME] == ["silent_arming"]
+    assert result["data"]["activity_poll_interval"] == 15
+    assert result["data"]["full_state_poll_interval"] == 5
+
+
+async def test_options_flow_polling_step_accepts_custom_intervals(hass: HomeAssistant) -> None:
+    """The polling step actually persists custom (non-default) interval values, not just the defaults."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_CREDS)
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_ARM_CODE: "", CONF_REMOVE_ARM_CODE: False}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_ARM_HOME: [], CONF_ARM_AWAY: [], CONF_ARM_NIGHT: []}
+    )
+    assert result["step_id"] == "polling"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"activity_poll_interval": 60, "full_state_poll_interval": 15},
+    )
+
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result["data"]["activity_poll_interval"] == 60
+    assert result["data"]["full_state_poll_interval"] == 15
+
+
+async def test_options_flow_polling_step_persists_camera_token_refresh(hass: HomeAssistant) -> None:
+    """The camera token refresh interval (#93) is set on the polling step and persisted."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_CREDS)
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"arm_code": "", "remove_arm_code": False}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {"arm_home_options": [], "arm_away_options": [], "arm_night_options": []},
+    )
+    assert result["step_id"] == "polling"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "activity_poll_interval": 15,
+            "full_state_poll_interval": 5,
+            "camera_token_refresh_interval": 10,
+        },
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result["data"]["camera_token_refresh_interval"] == 10
+
+
+def test_camera_token_refresh_default_is_the_previously_hardcoded_thirty_minutes() -> None:
+    """Existing installs must keep the 30-minute cadence they had before this was an option."""
+    assert CONF_OPTIONS_DEFAULT[CONF_CAMERA_TOKEN_REFRESH_INTERVAL] == 30
