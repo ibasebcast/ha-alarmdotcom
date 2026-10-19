@@ -120,9 +120,6 @@ class BaseController(ABC, Generic[AdcResourceT]):
 
         self._bridge = bridge
 
-        if target_device_ids:
-            self._target_device_ids.add(*target_device_ids)
-
         # Tracks whether the controller has been initialized.
         self._initialized: bool = False
 
@@ -141,7 +138,7 @@ class BaseController(ABC, Generic[AdcResourceT]):
 
         # Restricts this controller to specific devices. Used for controllers that only support single-serve
         # endpoints.
-        self._target_device_ids: set[str] = set({})
+        self._target_device_ids: set[str] = set(target_device_ids or [])
 
         # Holds references to asyncio tasks to prevent them from being garbage collected before completion.
         self._background_tasks: set[Task] = set()
