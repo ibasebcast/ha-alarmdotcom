@@ -123,11 +123,11 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
     # this config entry, where identifiers are unique, so the match cannot be ambiguous.
     if isinstance(parent_resource_id, str) and parent_resource_id.strip():
         device_registry = dr.async_get(hub.hass)
-        parent_device = device_registry.async_get_device_by_identifier(
-            (DOMAIN, parent_resource_id), hub.config_entry.entry_id
+        parent_device = device_registry.async_get_device(
+            identifiers={(DOMAIN, parent_resource_id)}
         )
         if parent_device is not None:
-            device_info["via_device_id"] = parent_device.id
+            device_info["via_device"] = (DOMAIN, parent_resource_id)
 
     return device_info
 
