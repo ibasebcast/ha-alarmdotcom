@@ -409,7 +409,7 @@ class AlarmBridge:
         # discovery yielded no lights, and retain normal catalog subscriptions.
         if not self._lights.items:
             try:
-                light_response = await self.get(ResourceType.LIGHT)
+                light_response = await self.get(ResourceType.LIGHT, None)
                 light_resources = (
                     light_response.data
                     if isinstance(light_response.data, list)
