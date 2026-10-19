@@ -281,7 +281,7 @@ class BaseController(ABC, Generic[AdcResourceT]):
             # Requests for single devices must use the single device format (/devices/locks/12345-098), not the
             # multi-device format (/devices/locks?id[]=12345-098).
             if resource_id or len(self._target_device_ids) == 1:
-                ids = resource_id or self._target_device_ids.pop()
+                ids = resource_id or next(iter(self._target_device_ids))
             elif self._target_device_ids:
                 ids = self._target_device_ids
             else:
