@@ -7,6 +7,7 @@
 - Reduced routine authentication log noise and improved session recovery (#91).
 - Preserved zero-valued arming options and corrected unsupported disarm option validation.
 - Preserved explicit zero brightness for dimmable lights.
+- Confirmed configurable camera token refresh is available in integration options (#93).
 
 ### Notes
 - Issues requiring further Alarm.com account or device diagnostics remain open, including missing lights (#115), alternate force bypass (#95), and glass-break sensor state (#111).
