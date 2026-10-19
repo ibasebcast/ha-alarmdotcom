@@ -2,7 +2,7 @@ colorlog==6.10.1
 ruff >= 0.15.21
 # codespell>=2.4.1
 # yamllint>=1.37.0
-pre-commit>=4.6.0
+pre-commit>=4.6.1
 mypy>=2.3.0
 wheel>=0.47.0
 pathspec >= 1.1.1
