@@ -110,8 +110,9 @@ def _device_exists_in_registry(hub: AlarmHub, resource_id: str) -> bool:
     # interface is deprecated and stops working in HA Core 2027.9.
     return any(
         (DOMAIN, resource_id) in device.identifiers
-        and hub.config_entry.entry_id in device.config_entries
-        for device in device_registry.devices.values()
+        for device in dr.async_entries_for_config_entry(
+            device_registry, hub.config_entry.entry_id
+        )
     )
 
 
