@@ -92,6 +92,18 @@ class SensorController(BaseController[Sensor]):
                 case ResourceEventType.DoorLeftOpenRestoral:
                     state = SensorState.CLOSED
 
+            # Glass-break alarms should return to idle when the panel sends a
+            # Closed/restoral event. A generic CLOSED state (1) is inactive in
+            # HA, whereas stale OPEN (2) otherwise remains detected forever.
+            if (
+                state == SensorState.CLOSED
+                and adc_resource.subtype in (
+                    SensorSubtype.GLASS_BREAK_DETECTOR,
+                    SensorSubtype.PANEL_GLASS_BREAK_DETECTOR,
+                )
+            ):
+                state = SensorState.IDLE
+
             if state:
                 adc_resource.api_resource.attributes.update(
                     {
