@@ -66,7 +66,11 @@ async def cleanup_orphaned_entities_and_devices(
         async_entries_for_config_entry(device_registry, config_entry.entry_id)
     ):
         if (
-            device.config_entries == {config_entry.entry_id}
+            (
+                device.config_entry_id == config_entry.entry_id
+                if hasattr(device, "config_entry_id")
+                else device.config_entries == {config_entry.entry_id}
+            )
             and device.entry_type != DeviceEntryType.SERVICE
         ):
             device_entities = [
