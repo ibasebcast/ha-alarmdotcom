@@ -22,11 +22,15 @@ rules:
       these two polls and hardcode them to the defaults above.
   brands: done
   common-modules:
-    status: todo
+    status: done
     comment: >
-      Uses a custom AlarmHub class rather than DataUpdateCoordinator.
-      This is a Bronze blocker — the integration cannot claim Bronze (or Silver)
-      compliance until AlarmHub is refactored to use DataUpdateCoordinator.
+      The base entity (AdcEntity) lives in entity.py. There is no
+      DataUpdateCoordinator to place in coordinator.py: state is pushed over
+      the WebSocket, which AlarmHub (hub.py) manages. The two supplemental
+      polls (see appropriate-polling) are plain async_track_time_interval
+      timers in hub.py and activity_history.py. Core's unifiprotect
+      (Platinum) uses the same pattern, a WebSocket plus a periodic poll in
+      its own hub class with no coordinator, and marks this rule done.
   config-flow: done
   config-flow-test-coverage:
     status: done
