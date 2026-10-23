@@ -1,3 +1,14 @@
+## 2026.10.23 (stable)
+
+### Fixed
+- Improved sensor state reconciliation after WebSocket reconnects (#94).
+- Corrected glass-break detection when Alarm.com reports an explicit normal status alongside a stale activated state (#111).
+- Accepted additional MFA permission values returned by Alarm.com (#133).
+- Corrected the integration manifest version (#134).
+
+### Improved
+- Added direct light-discovery diagnostics to identify missing Alarm.com lighting devices (#115).
+
 ## 2026.10.19 (stable)
 
 ### Fixed

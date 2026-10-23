@@ -141,6 +141,14 @@ def is_on_fn(hub: AlarmHub, sensor_id: str) -> bool:
     if resource is None or resource.attributes.state == pyadc.sensor.SensorState.UNKNOWN:
         return False
 
+    # Glass-break detectors may retain a stale activated state after restoration.
+    # The explicit normal status reported by the panel takes precedence.
+    if resource.attributes.device_type in (
+        pyadc.sensor.SensorSubtype.GLASS_BREAK_DETECTOR,
+        pyadc.sensor.SensorSubtype.PANEL_GLASS_BREAK_DETECTOR,
+    ) and resource.attributes.open_closed_status == 3:
+        return False
+
     return (resource.attributes.state.value % 2) == 0
 
 @callback

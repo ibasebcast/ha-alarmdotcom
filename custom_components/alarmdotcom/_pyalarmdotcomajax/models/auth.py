@@ -40,7 +40,7 @@ class TwoFactorAuthenticationAttributes(AdcResourceAttributes):
     current_device_name: str | None = field(default=None)
     selected_type_of_2fa: int | None = field(metadata=field_options(alias="selected_type_of2_fa"), default=None)
     enabled_two_factor_types: int | None = field(default=None)
-    valid2fa_permissions: list[OtpType] = field(
+    valid2fa_permissions: list[int] = field(
         metadata=field_options(alias="valid2_fa_permissions"), default_factory=list
     )
     show_suggested_setup: bool = field(default=False)
