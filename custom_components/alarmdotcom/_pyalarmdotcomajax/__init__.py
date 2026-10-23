@@ -415,9 +415,11 @@ class AlarmBridge:
                     if isinstance(light_response.data, list)
                     else [light_response.data]
                 )
+                log.debug("Direct light endpoint returned %d resources.", len(light_resources))
                 await self._lights._refresh(pre_fetched=light_resources)  # noqa: SLF001
-            except Exception as err:
-                log.debug("Direct light discovery unavailable: %s", err)
+                log.info("Direct light discovery registered %d lights.", len(self._lights.items))
+            except Exception:
+                log.exception("Direct light discovery failed.")
 
     async def refresh_all_resources(self) -> None:
         """
