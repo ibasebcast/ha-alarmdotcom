@@ -78,6 +78,7 @@ class AlarmHub:
         self.available: bool = True
         self._reconnect_attempts: int = 0
         self._reconnect_task: asyncio.Task | None = None
+        self._refresh_lock = asyncio.Lock()
 
     async def login(self) -> bool:
         """Log in to alarm.com."""
@@ -159,7 +160,8 @@ class AlarmHub:
             # calls each controller's _refresh() directly, the same mechanism used when the
             # WebSocket reconnects, so it actually re-fetches and re-publishes state every time
             # this runs instead of being a silent no-op.
-            await self.api.refresh_all_resources()
+            async with self._refresh_lock:
+                await self.api.refresh_all_resources()
         except pyadc.AuthenticationException:
             log.warning("Alarm.com: periodic refresh failed — auth error. Will attempt reconnect.")
             await self._async_handle_ws_death()
@@ -182,10 +184,13 @@ class AlarmHub:
             await self._async_handle_ws_death()
 
         elif message.current_state == pyadc.WebSocketState.CONNECTED:
-            if not self.available:
-                log.info("Alarm.com websocket reconnected.")
+            was_unavailable = not self.available
+            if was_unavailable:
+                log.info("Alarm.com websocket reconnected. Reconciling device state.")
             self.available = True
             self._reconnect_attempts = 0
+            if was_unavailable:
+                self.hass.async_create_task(self._async_refresh_state())
 
         elif message.current_state not in (
             pyadc.WebSocketState.CONNECTED,
