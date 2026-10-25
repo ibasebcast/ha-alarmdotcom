@@ -16,7 +16,6 @@ import humps
 from _pyalarmdotcomajax._version import __version__
 from _pyalarmdotcomajax.const import (
     API_URL_BASE,
-    DEBUG_REQUEST_DUMP_MAX_LEN,
     REQUEST_RETRY_LIMIT,
     SUBMIT_RETRY_LIMIT,
     URL_BASE,
