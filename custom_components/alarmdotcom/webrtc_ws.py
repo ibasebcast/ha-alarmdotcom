@@ -1,4 +1,5 @@
-"""Authenticated, on-demand Alarm.com camera WebRTC credentials.
+"""
+Authenticated, on-demand Alarm.com camera WebRTC credentials.
 
 Credentials must never be exposed as Home Assistant entity attributes.
 """
@@ -7,6 +8,7 @@ from __future__ import annotations
 import voluptuous as vol
 from homeassistant.auth.permissions.const import POLICY_READ
 from homeassistant.components import websocket_api
+from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
@@ -18,7 +20,7 @@ COMMAND = "alarmdotcom/webrtc_config"
     {vol.Required("type"): COMMAND, vol.Required("entity_id"): str}
 )
 @websocket_api.async_response
-async def async_get_webrtc_config(hass: HomeAssistant, connection, msg: dict) -> None:
+async def async_get_webrtc_config(hass: HomeAssistant, connection: ActiveConnection, msg: dict) -> None:
     """Supply ephemeral tokens only to users authorized to read this camera."""
     entity_id = msg["entity_id"]
     if not entity_id.startswith("camera."):
