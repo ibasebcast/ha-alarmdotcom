@@ -1,3 +1,13 @@
+## 2026.10.25b0 (beta)
+
+### Fixed
+- Added a direct active-system detail lookup for light IDs when initial discovery omits them (#115).
+- Reuses the existing safely encoded ID-scoped light request, avoiding unscoped endpoint restrictions.
+
+### Testing requested
+- Confirm lights missing under SuretyDIY and other providers now appear after restart or reload (#115).
+- Continue regression testing of sensor updates (#94) and camera card playback.
+
 ## 2026.10.24b0 (beta)
 
 ### Fixes for validation
