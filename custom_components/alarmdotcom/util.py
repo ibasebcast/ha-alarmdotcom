@@ -55,22 +55,6 @@ async def cleanup_orphaned_entities_and_devices(
         if not matched_by_entity_id and not matched_by_unique_id:
             entity_registry.async_remove(entry.entity_id)
 
-    # Remove orphaned devices with no entities left, but skip SERVICE devices.
-    # async_entries_for_config_entry rather than device_registry.devices, whose mapping
-    # interface is deprecated and stops working in HA Core 2027.9. The helper already
-    # narrows to devices this entry touches; the check below keeps only those it owns
-    # outright, which is the same set the previous full scan selected.
-    remaining_device_ids = {entry.device_id for entry in entity_registry.entities.values() if entry.device_id}
-    for device in list(
-        async_entries_for_config_entry(device_registry, config_entry.entry_id)
-    ):
-        if (
-            (
-                device.config_entry_id == config_entry.entry_id
-                if hasattr(device, "config_entry_id")
-                else device.config_entries == {config_entry.entry_id}
-            )
-            and device.entry_type != DeviceEntryType.SERVICE
-            and device.id not in remaining_device_ids
-        ):
-            device_registry.async_remove_device(device.id)
+    # Device removal must not run from individual platform setup. During a
+    # reload, other platforms may not have registered their entities yet.
+    # Defer cross-platform device pruning until a complete inventory is known.
