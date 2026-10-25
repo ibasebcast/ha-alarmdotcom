@@ -404,22 +404,28 @@ class AlarmBridge:
         if init_tasks:
             await asyncio.gather(*init_tasks)
 
-        # Some accounts omit Z-Wave lights from the device catalog even though
-        # the light endpoint exposes them. Query that endpoint only when catalog
-        # discovery yielded no lights, and retain normal catalog subscriptions.
+        # Some providers reject an unscoped lights request with HTTP 423.
+        # The Alarm.com web portal instead requests lights with explicit ids[].
+        # Only use IDs actually advertised by the system/catalog; never guess IDs.
         if not self._lights.items:
-            try:
-                light_response = await self.get(ResourceType.LIGHT, None)
-                light_resources = (
-                    light_response.data
-                    if isinstance(light_response.data, list)
-                    else [light_response.data]
-                )
-                log.debug("Direct light endpoint returned %d resources.", len(light_resources))
-                await self._lights._refresh(pre_fetched=light_resources)  # noqa: SLF001
-                log.info("Direct light discovery registered %d lights.", len(self._lights.items))
-            except Exception:
-                log.exception("Direct light discovery failed.")
+            light_ids = set(device_ids_by_type.get(type(self._lights), []))
+            light_ids.update(self._lights._target_device_ids)  # noqa: SLF001
+            if light_ids:
+                try:
+                    light_response = await self.get(ResourceType.LIGHT, light_ids)
+                    light_resources = (
+                        light_response.data
+                        if isinstance(light_response.data, list)
+                        else [light_response.data]
+                    )
+                    await self._lights._refresh(pre_fetched=light_resources)  # noqa: SLF001
+                    log.info("ID-scoped light discovery registered %d lights.", len(self._lights.items))
+                except Exception:
+                    log.exception("ID-scoped light discovery failed.")
+            else:
+                # The portal uses explicit IDs. Without IDs in the catalog,
+                # a bare request is known to fail for some providers (issue #115).
+                log.info("Light discovery skipped: no known light IDs; account may require ID-scoped requests.")
 
     async def refresh_all_resources(self) -> None:
         """
