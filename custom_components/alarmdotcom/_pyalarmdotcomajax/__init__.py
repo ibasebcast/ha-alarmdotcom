@@ -356,6 +356,17 @@ class AlarmBridge:
             if resource.type == ResourceType.HISTORY_EVENT.value
         ]
 
+    @staticmethod
+    def _build_light_discovery_path(light_ids: set[str]) -> str:
+        """Build an ID-scoped light request, including for a single device."""
+        from urllib.parse import urlencode
+
+        if not light_ids:
+            raise ValueError("At least one light ID is required.")
+        return "devices/lights?" + urlencode(
+            [("ids[]", device_id) for device_id in sorted(light_ids)]
+        )
+
     async def fetch_full_state(self) -> None:
         """Fetch full state from alarm.com."""
 
@@ -423,9 +434,7 @@ class AlarmBridge:
             if light_ids:
                 try:
                     # Use ids[] even for one light (not /lights/{id}).
-                    scoped_path = "devices/lights?" + "&".join(
-                        f"ids[]={device_id}" for device_id in sorted(light_ids)
-                    )
+                    scoped_path = self._build_light_discovery_path(light_ids)
                     light_response = await self.get(scoped_path, None)
                     light_resources = (
                         light_response.data
