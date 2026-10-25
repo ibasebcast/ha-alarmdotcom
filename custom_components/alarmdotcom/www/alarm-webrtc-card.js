@@ -839,4 +839,6 @@ class AlarmWebRTCCard extends HTMLElement {
   }
 }
 
-customElements.define("alarm-webrtc-card", AlarmWebRTCCard);
+if (!customElements.get("alarm-webrtc-card")) {
+  customElements.define("alarm-webrtc-card", AlarmWebRTCCard);
+}
