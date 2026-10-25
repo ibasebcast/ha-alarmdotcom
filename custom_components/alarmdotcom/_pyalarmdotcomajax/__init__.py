@@ -789,37 +789,10 @@ class AlarmBridge:
                 log.debug("Got new token from MFA cookie.")
                 self._auth_controller.mfa_cookie = new_mfa_cookie
 
-            # If DEBUG logging is enabled, log the request and response.
-            if log.isEnabledFor(logging.DEBUG):
-                try:
-                    resp_dump = (
-                        json.dumps(await resp.json()) if resp.content_length else ""
-                    )
-                except (json.JSONDecodeError, aiohttp.ContentTypeError):
-                    if resp.content_type == "text/html":
-                        resp_dump = "***OMITTING HTML OUTPUT***"
-                    else:
-                        resp_dump = await resp.text() if resp.content_length else ""
-
-                log.debug(
-                    "\n===========================Server Request (%s) / Response (%s)===========================\n"
-                    "URL: %s\n"
-                    "REQUEST HEADERS:\n%s\n"
-                    "REQUEST BODY:\n%s\n"
-                    "RESPONSE HEADERS:\n%s\n"
-                    "RESPONSE BODY:\n%s\n"
-                    "URL: %s\n"
-                    "=================================================================================\n",
-                    resp.request_info.method,
-                    resp.status,
-                    url,
-                    json.dumps(dict(resp.request_info.headers)),
-                    kwargs.get("data") or kwargs.get("json"),
-                    json.dumps(dict(resp.headers)),
-                    resp_dump[:DEBUG_REQUEST_DUMP_MAX_LEN]
-                    + "..." * (len(resp_dump) > DEBUG_REQUEST_DUMP_MAX_LEN),
-                    url,
-                )
+            # Never log HTTP headers, bodies, cookies, OTPs, or response tokens.
+            # Even DEBUG logs are routinely attached to public issue reports.
+            log.debug("Alarm.com HTTP %s completed with status %s",
+                      resp.request_info.method, resp.status)
 
             yield resp
 
@@ -889,7 +862,7 @@ class AlarmBridge:
             "Requesting %s %s with %s expecting %s as %s",
             method.upper(),
             url,
-            kwargs.get("data") or kwargs.get("json"),
+            "[REDACTED]",
             accept_types,
             success_response_class.__name__,
         )
