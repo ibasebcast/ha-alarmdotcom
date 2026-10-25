@@ -430,6 +430,36 @@ class AlarmBridge:
                 item.id for item in self._device_catalogs._included_resources  # noqa: SLF001
                 if item.type == ResourceType.LIGHT
             )
+            if not light_ids:
+                # The portal's per-system detail response may advertise lights
+                # even when the initial system collection omits that relationship.
+                # Query the active system directly before attempting an unscoped
+                # lights request, which some providers reject with HTTP 423.
+                try:
+                    system_detail = await self.get(
+                        ResourceType.SYSTEM,
+                        self._available_device_catalogs.active_system_id,
+                    )
+                    system_resources = (
+                        system_detail.data
+                        if isinstance(system_detail.data, list)
+                        else [system_detail.data]
+                    )
+                    for system_resource in system_resources:
+                        relationships = system_resource.relationships or {}
+                        lights_relationship = relationships.get("lights")
+                        if lights_relationship:
+                            light_ids.update(
+                                item.id
+                                for item in lights_relationship.data_list
+                                if item.type == ResourceType.LIGHT
+                            )
+                    log.info(
+                        "System-detail light discovery found %d light IDs.",
+                        len(light_ids),
+                    )
+                except Exception:
+                    log.exception("System-detail light ID discovery failed.")
             if light_ids:
                 try:
                     # Use ids[] even for one light (not /lights/{id}).
