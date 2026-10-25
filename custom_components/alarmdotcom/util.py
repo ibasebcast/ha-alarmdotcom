@@ -2,11 +2,6 @@
 
 from typing import TYPE_CHECKING
 
-from homeassistant.helpers.device_registry import (
-    DeviceEntryType,
-    async_entries_for_config_entry,
-)
-from homeassistant.helpers.device_registry import async_get as async_get_device_registry
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 
 if TYPE_CHECKING:
@@ -39,7 +34,6 @@ async def cleanup_orphaned_entities_and_devices(
 
     """
     entity_registry = async_get_entity_registry(hass)
-    device_registry = async_get_device_registry(hass)
 
     # Remove orphaned entities for this platform.
     # An entity is orphaned when NEITHER its entity_id NOR its unique_id is
