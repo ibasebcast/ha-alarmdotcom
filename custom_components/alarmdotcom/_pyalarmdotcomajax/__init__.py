@@ -423,9 +423,15 @@ class AlarmBridge:
                 except Exception:
                     log.exception("ID-scoped light discovery failed.")
             else:
-                # The portal uses explicit IDs. Without IDs in the catalog,
-                # a bare request is known to fail for some providers (issue #115).
-                log.info("Light discovery skipped: no known light IDs; account may require ID-scoped requests.")
+                # Preserve unscoped discovery for accounts where it works.
+                # Some providers return HTTP 423, which is nonfatal.
+                try:
+                    response = await self.get(ResourceType.LIGHT, None)
+                    resources = response.data if isinstance(response.data, list) else [response.data]
+                    await self._lights._refresh(pre_fetched=resources)  # noqa: SLF001
+                    log.info("Unscoped light discovery registered %d lights.", len(self._lights.items))
+                except Exception:
+                    log.warning("Unscoped light discovery unavailable; no known light IDs for scoped retry.")
 
     async def refresh_all_resources(self) -> None:
         """
