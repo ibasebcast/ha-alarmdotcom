@@ -529,21 +529,9 @@ class AlarmCameraSession:
         )
         body = await resp.json()
 
-        # Off by default, regardless of the main camera_api logger's level -
-        # this fires on every WebRTC token refresh (roughly every 20-30
-        # seconds per camera) and the raw response contains live session
-        # credentials. Enable via configuration.yaml:
-        #   logger:
-        #     logs:
-        #       custom_components.alarmdotcom.camera_api.raw_responses: debug   # full, unredacted
-        #       custom_components.alarmdotcom.camera_api.raw_responses: info    # redacted summary
-        if _RAW_RESPONSE_LOGGER.isEnabledFor(logging.DEBUG):
-            _RAW_RESPONSE_LOGGER.debug(
-                "get_stream_info raw response for camera %s: %s",
-                camera_id,
-                body,
-            )
-        elif _RAW_RESPONSE_LOGGER.isEnabledFor(logging.INFO):
+        # Stream responses contain short-lived authentication secrets. Never
+        # emit raw responses, even when DEBUG logging is explicitly enabled.
+        if _RAW_RESPONSE_LOGGER.isEnabledFor(logging.INFO):
             _RAW_RESPONSE_LOGGER.info(
                 "get_stream_info response for camera %s (redacted): %s",
                 camera_id,
