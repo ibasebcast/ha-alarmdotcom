@@ -409,9 +409,24 @@ class AlarmBridge:
         if not self._lights.items:
             light_ids = set(device_ids_by_type.get(type(self._lights), []))
             light_ids.update(self._lights._target_device_ids)  # noqa: SLF001
+            # Some accounts advertise light IDs in catalog relationships.
+            for catalog in self._device_catalogs.items:
+                for relationship in (catalog.api_resource.relationships or {}).values():
+                    light_ids.update(
+                        item.id for item in relationship.data_list
+                        if item.type == ResourceType.LIGHT
+                    )
+            light_ids.update(
+                item.id for item in self._device_catalogs._included_resources  # noqa: SLF001
+                if item.type == ResourceType.LIGHT
+            )
             if light_ids:
                 try:
-                    light_response = await self.get(ResourceType.LIGHT, light_ids)
+                    # Use ids[] even for one light (not /lights/{id}).
+                    scoped_path = "devices/lights?" + "&".join(
+                        f"ids[]={device_id}" for device_id in sorted(light_ids)
+                    )
+                    light_response = await self.get(scoped_path, None)
                     light_resources = (
                         light_response.data
                         if isinstance(light_response.data, list)
