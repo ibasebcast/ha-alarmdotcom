@@ -167,16 +167,14 @@ https://github.com/ibasebcast/ha-alarmdotcom/issues
 
 # Camera Support
 
+**HACS status:** Official HACS inclusion is under maintainer review. This does not indicate approval or a confirmed inclusion date.
+
 This integration includes WebRTC live-streaming support for Alarm.com cameras.
 
 ## Setup
 
-1. Copy `www/alarm-webrtc-card.js` from this repository to your Home Assistant `www/` folder.
-2. Add it as a Lovelace resource:
-   - Go to **Settings → Dashboards → Resources**
-   - Click **Add Resource**
-   - URL: `/local/alarm-webrtc-card.js`
-   - Type: **JavaScript module**
+1. The camera card is bundled with the integration and served from `/alarmdotcom/alarm-webrtc-card.js`.
+2. In storage-mode dashboards the integration attempts to register the JavaScript module automatically. If you manage resources in YAML or automatic registration is unavailable, add that URL as a **JavaScript module** in your dashboard resources.
 3. Add the card to any Lovelace dashboard:
 
 ```yaml
@@ -186,7 +184,7 @@ entity: camera.your_camera_name
 
 ## How it works
 
-When the card loads it calls the `camera.turn_on` service which fetches a fresh set of WebRTC tokens from Alarm.com. Tokens are refreshed automatically every 30 minutes in the background so the stream is always ready. If a token expires before the next scheduled refresh the card requests new tokens automatically.
+When the card loads it requests WebRTC credentials through an authenticated Home Assistant websocket command, with camera entity read-permission checks. Tokens are never exposed as entity attributes or stored in recorder history. The card requests refreshed credentials when reconnecting.
 
 Still image snapshots are also available, which means the camera will display a thumbnail in the Home Assistant media browser and picture-glance dashboard cards.
 
