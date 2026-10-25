@@ -1,6 +1,10 @@
 {
   "domain": "alarmdotcom",
   "name": "Alarm.com",
+  "after_dependencies": [
+    "http",
+    "lovelace"
+  ],
   "codeowners": [
     "@ibasebcast"
   ],
@@ -18,9 +22,5 @@
     "pyhumps~=3.8.0",
     "typer>=0.15.2"
   ],
-  "version": "2026.10.24b0",
-  "after_dependencies": [
-    "http",
-    "lovelace"
-  ]
+  "version": "2026.10.24b0"
 }
