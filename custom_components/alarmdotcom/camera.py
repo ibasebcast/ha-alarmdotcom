@@ -242,8 +242,8 @@ class AlarmDotComCamera(Camera):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return state attributes including the WebRTC config."""
-        return {"webrtc_config": self._webrtc_config}
+        """Never expose ephemeral stream credentials in HA state or recorder."""
+        return {}
 
     async def stream_source(self) -> str | None:
         """
