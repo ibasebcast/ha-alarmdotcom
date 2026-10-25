@@ -18,5 +18,9 @@
     "pyhumps~=3.8.0",
     "typer>=0.15.2"
   ],
-  "version": "2026.10.24b0"
+  "version": "2026.10.24b0",
+  "after_dependencies": [
+    "http",
+    "lovelace"
+  ]
 }
