@@ -26,7 +26,7 @@ import sys
 # relative imports.
 _VENDOR_PATH = os.path.dirname(__file__)
 if _VENDOR_PATH not in sys.path:
-    sys.path.insert(0, _VENDOR_PATH)
+    sys.path.append(_VENDOR_PATH)
 
 import logging
 from dataclasses import dataclass
