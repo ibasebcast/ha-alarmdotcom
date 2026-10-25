@@ -8,6 +8,7 @@ class AlarmWebRTCCard extends HTMLElement {
     this._requesting = false;
     this._currentConfig = null;
     this._secureConfig = null;
+    this._requestSerial = 0;
     this._requestTimeout = null;
     this._retryTimer = null;
     this._retryCount = 0;
@@ -74,6 +75,7 @@ class AlarmWebRTCCard extends HTMLElement {
     if (!config.entity) throw new Error("Entity required");
     this.config = config;
     this._entityId = config.entity;
+    this._requestSerial += 1;
     this._secureConfig = null;
     this._log("setConfig");
   }
@@ -241,8 +243,11 @@ class AlarmWebRTCCard extends HTMLElement {
 
     clearTimeout(this._requestTimeout);
     const requestEntity = this.config.entity;
+    const requestSerial = ++this._requestSerial;
     this._requestTimeout = setTimeout(() => {
+      if (requestSerial !== this._requestSerial) return;
       this._log("Token request timed out");
+      this._requestSerial += 1;
       this._requesting = false;
       this._scheduleRetry("Token timeout");
     }, 15000);
@@ -251,7 +256,7 @@ class AlarmWebRTCCard extends HTMLElement {
       type: "alarmdotcom/webrtc_config",
       entity_id: requestEntity,
     }).then((config) => {
-      if (this.config.entity !== requestEntity) return;
+      if (this.config.entity !== requestEntity || requestSerial !== this._requestSerial) return;
       clearTimeout(this._requestTimeout);
       this._requesting = false;
       if (!this.isConfigValid(config)) {
