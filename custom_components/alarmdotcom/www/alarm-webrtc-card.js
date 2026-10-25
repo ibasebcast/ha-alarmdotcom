@@ -74,7 +74,8 @@ class AlarmWebRTCCard extends HTMLElement {
     if (!config.entity) throw new Error("Entity required");
     this.config = config;
     this._entityId = config.entity;
-    this._log("setConfig", config);
+    this._secureConfig = null;
+    this._log("setConfig");
   }
 
   set hass(hass) {
@@ -239,6 +240,7 @@ class AlarmWebRTCCard extends HTMLElement {
     this._requesting = true;
 
     clearTimeout(this._requestTimeout);
+    const requestEntity = this.config.entity;
     this._requestTimeout = setTimeout(() => {
       this._log("Token request timed out");
       this._requesting = false;
@@ -247,8 +249,9 @@ class AlarmWebRTCCard extends HTMLElement {
 
     this._hass.connection.sendMessagePromise({
       type: "alarmdotcom/webrtc_config",
-      entity_id: this.config.entity,
+      entity_id: requestEntity,
     }).then((config) => {
+      if (this.config.entity !== requestEntity) return;
       clearTimeout(this._requestTimeout);
       this._requesting = false;
       if (!this.isConfigValid(config)) {
@@ -257,7 +260,8 @@ class AlarmWebRTCCard extends HTMLElement {
       }
       this._secureConfig = config;
       this.hass = this._hass;
-    }).catch((err) => {
+    }).catch(() => {
+      if (this.config.entity !== requestEntity) return;
       clearTimeout(this._requestTimeout);
       this._log("WebRTC credential request failed");
       this._requesting = false;
