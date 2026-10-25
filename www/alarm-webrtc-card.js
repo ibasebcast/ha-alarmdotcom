@@ -1,4 +1,4 @@
-console.error("ALARM WEBRTC CARD LOADED v2026.7.6");
+// Alarm.com WebRTC card: tokens are retrieved over authenticated HA websocket.
 
 class AlarmWebRTCCard extends HTMLElement {
   constructor() {
@@ -7,6 +7,8 @@ class AlarmWebRTCCard extends HTMLElement {
     this._connecting = false;
     this._requesting = false;
     this._currentConfig = null;
+    this._secureConfig = null;
+    this._requestSerial = 0;
     this._requestTimeout = null;
     this._retryTimer = null;
     this._retryCount = 0;
@@ -20,7 +22,8 @@ class AlarmWebRTCCard extends HTMLElement {
   }
 
   _log(...args) {
-    console.error(`[AlarmWebRTC ${this._entityId || "unknown"}]`, ...args);
+    // Never print stream configuration, tokens, or signaling payloads.
+    if (this.config?.debug) console.debug(`[AlarmWebRTC ${this._entityId || "unknown"}]`, args.length ? String(args[0]) : "event");
   }
 
   // Several Alarm.com camera models offer H.264 at a profile-level-id (e.g. 4d4028,
@@ -72,7 +75,9 @@ class AlarmWebRTCCard extends HTMLElement {
     if (!config.entity) throw new Error("Entity required");
     this.config = config;
     this._entityId = config.entity;
-    this._log("setConfig", config);
+    this._requestSerial += 1;
+    this._secureConfig = null;
+    this._log("setConfig");
   }
 
   set hass(hass) {
@@ -88,7 +93,7 @@ class AlarmWebRTCCard extends HTMLElement {
       return;
     }
 
-    let config = stateObj.attributes?.webrtc_config;
+    let config = this._secureConfig;
     // Allow card config to override the Janus stream ID (useful for cameras
     // where the API doesn't expose the correct mountpoint ID).
     if (config && this.config?.janusStreamId != null) {
@@ -237,21 +242,36 @@ class AlarmWebRTCCard extends HTMLElement {
     this._requesting = true;
 
     clearTimeout(this._requestTimeout);
+    const requestEntity = this.config.entity;
+    const requestSerial = ++this._requestSerial;
     this._requestTimeout = setTimeout(() => {
+      if (requestSerial !== this._requestSerial) return;
       this._log("Token request timed out");
+      this._requestSerial += 1;
       this._requesting = false;
       this._scheduleRetry("Token timeout");
     }, 15000);
 
-    this._hass
-      .callService("camera", "turn_on", {
-        entity_id: this.config.entity,
-      })
-      .catch((err) => {
-        this._log("turn_on failed", err);
-        this._requesting = false;
-        this._scheduleRetry("turn_on failed");
-      });
+    this._hass.connection.sendMessagePromise({
+      type: "alarmdotcom/webrtc_config",
+      entity_id: requestEntity,
+    }).then((config) => {
+      if (this.config.entity !== requestEntity || requestSerial !== this._requestSerial) return;
+      clearTimeout(this._requestTimeout);
+      this._requesting = false;
+      if (!this.isConfigValid(config)) {
+        this._scheduleRetry("Invalid stream configuration");
+        return;
+      }
+      this._secureConfig = config;
+      this.hass = this._hass;
+    }).catch(() => {
+      if (this.config.entity !== requestEntity) return;
+      clearTimeout(this._requestTimeout);
+      this._log("WebRTC credential request failed");
+      this._requesting = false;
+      this._scheduleRetry("Credential request failed");
+    });
 
     this.renderPlaceholder("Refreshing session...");
   }
@@ -305,7 +325,7 @@ class AlarmWebRTCCard extends HTMLElement {
     this._connecting = true;
     this._currentConfig = config;
 
-    this._log("Starting stream", config);
+    this._log("Starting stream");
 
     try {
       if (config.streamType === "janus" || config.janusGatewayUrl) {
