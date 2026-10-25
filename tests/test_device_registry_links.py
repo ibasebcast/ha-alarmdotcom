@@ -139,19 +139,10 @@ def test_device_exists_in_registry_is_scoped_to_this_entry(hass: HomeAssistant, 
     assert _device_exists_in_registry(hub, "never-created") is False
 
 
-async def test_orphan_cleanup_reaches_the_same_devices_as_the_old_full_scan(
+async def test_platform_cleanup_does_not_remove_devices_from_other_platforms(
     hass: HomeAssistant,
 ) -> None:
-    """
-    The orphan sweep must select the same devices it selected through the old scan.
-
-    It previously walked ``device_registry.devices.values()`` — every device in the
-    installation — and filtered afterwards. That mapping access raises on HA Core
-    2026.9 betas and is removed in 2027.9, so the walk now starts from this entry's
-    own devices. Narrowing the walk must not narrow the outcome: our own orphan still
-    goes, a device that still has a live entity stays, and another entry's orphan was
-    never ours to remove.
-    """
+    """A per-platform sweep must not remove another platform's devices (#136)."""
     entry = MockConfigEntry(domain=DOMAIN, data={}, title="Alarm.com")
     entry.add_to_hass(hass)
     other = MockConfigEntry(domain=DOMAIN, data={}, title="Second account")
@@ -164,16 +155,15 @@ async def test_orphan_cleanup_reaches_the_same_devices_as_the_old_full_scan(
 
     entity_registry = er.async_get(hass)
     live = entity_registry.async_get_or_create(
-        "sensor",
-        DOMAIN,
-        "ours-live-sensor",
-        config_entry=entry,
-        device_id=ours_live.id,
+        "sensor", DOMAIN, "ours-live-sensor", config_entry=entry, device_id=ours_live.id
     )
 
-    await cleanup_orphaned_entities_and_devices(hass, entry, {live.entity_id}, {"ours-live-sensor"}, "sensor")
+    await cleanup_orphaned_entities_and_devices(
+        hass, entry, {live.entity_id}, {"ours-live-sensor"}, "sensor"
+    )
 
-    assert registry.async_get(ours_orphan.id) is None, "our own orphan should be swept"
-    assert registry.async_get(ours_live.id) is not None, "a device with a live entity stays"
-    assert registry.async_get(theirs_orphan.id) is not None, "another entry's device is not ours"
+    # Device cleanup cannot happen safely before all platforms have loaded.
+    assert registry.async_get(ours_orphan.id) is not None
+    assert registry.async_get(ours_live.id) is not None
+    assert registry.async_get(theirs_orphan.id) is not None
     assert entity_registry.async_get(live.entity_id) is not None
