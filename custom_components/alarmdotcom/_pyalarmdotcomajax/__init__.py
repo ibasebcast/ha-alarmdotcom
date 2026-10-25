@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator, Callable
 from datetime import datetime
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Literal, TypeVar, overload
+from urllib.parse import urlencode
 
 import aiohttp
 import humps
@@ -359,8 +360,6 @@ class AlarmBridge:
     @staticmethod
     def _build_light_discovery_path(light_ids: set[str]) -> str:
         """Build an ID-scoped light request, including for a single device."""
-        from urllib.parse import urlencode
-
         if not light_ids:
             raise ValueError("At least one light ID is required.")
         return "devices/lights?" + urlencode(
