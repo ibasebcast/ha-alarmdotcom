@@ -184,10 +184,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             )
             return
 
+        # Resource JSON can contain account details and authentication fields.
+        # Never dump it into Home Assistant logs, even on a debug request.
         LOGGER.warning(
-            "ALARM.COM DEBUG DATA FOR %s: %s",
+            "ALARM.COM DEBUG DATA FOR %s: resource present (payload omitted for security)",
             str(event_resource.attributes.description).upper(),
-            event_resource.api_resource.to_json(),
         )
 
     hass.bus.async_listen(DEBUG_REQ_EVENT, handle_alarmdotcom_debug_request_event)
