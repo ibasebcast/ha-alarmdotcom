@@ -55,7 +55,7 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Beta testing:** The current test version is `2026.10.24b0`. This prerelease targets intermittent sensor updates (#94), missing lights (#115), and garage-door entities disappearing after reload (#136). Back up your Home Assistant configuration before testing. Report results and redacted logs in the corresponding GitHub issue. The prerelease must be published before users can install it.
+**Beta testing:** The current test version is `2026.10.25b0`. This prerelease targets intermittent sensor updates (#94), missing lights (#115), and garage-door entities disappearing after reload (#136). Back up your Home Assistant configuration before testing. Report results and redacted logs in the corresponding GitHub issue. The prerelease must be published before users can install it.
 
 
 ### Install Using HACS (Recommended)
