@@ -403,9 +403,9 @@ This fork exists to provide:
 
 # License
 
-This project is licensed under the MIT License.
+This project's original contributions are licensed under Apache-2.0. The vendored upstream pyalarmdotcom/alarmdotcom and pyalarmdotcom/pyalarmdotcomajax code retains its MIT license and Copyright (c) 2020 Justin Wong.
 
-See the **LICENSE** file for details.
+See **LICENSE** (Apache-2.0) and **LICENSE-upstream** (MIT) for details.
 
 <!--
   DEVELOPER NOTE: What needs to happen before submitting this as a HA core integration.
