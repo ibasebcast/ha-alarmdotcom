@@ -1,3 +1,20 @@
+## 2026.10.24b0 (beta)
+
+### Fixes for validation
+- Improved WebSocket reconnection state refresh for intermittent sensor updates (#94).
+- Expanded light discovery using known device IDs and safely encoded scoped queries (#115).
+- Improved garage-door entity registry cleanup on integration reload (#136).
+- Added light-discovery regression tests.
+- Corrected HACS packaging configuration to avoid a nonexistent release ZIP asset.
+
+### Testing requested
+- Confirm sensor state updates remain reliable after reconnects (#94).
+- Confirm previously missing lights appear (#115).
+- Confirm garage-door entities survive integration reloads (#136).
+- Verify bundled WebRTC camera card loads without manually copying the JavaScript file.
+
+These fixes are pending real-world validation; related issues remain open.
+
 ## 2026.10.23 (stable)
 
 ### Fixed
