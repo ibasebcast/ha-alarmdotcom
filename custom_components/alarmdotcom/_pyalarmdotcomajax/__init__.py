@@ -431,22 +431,26 @@ class AlarmBridge:
                 if item.type == ResourceType.LIGHT
             )
             if not light_ids:
-                # The portal's per-system detail response may advertise lights
-                # even when the initial system collection omits that relationship.
-                # Query the active system directly before attempting an unscoped
-                # lights request, which some providers reject with HTTP 423.
+                # Some system collection responses omit the lights relationship.
+                # Request the active system's detail endpoint explicitly, matching
+                # the Alarm.com web portal's light discovery sequence.
                 try:
+                    system_id = self._available_device_catalogs.active_system_id
+                    log.warning(
+                        "Light discovery: requesting active system detail for light IDs."
+                    )
                     system_detail = await self.get(
-                        ResourceType.SYSTEM,
-                        self._available_device_catalogs.active_system_id,
+                        "systems/systems", system_id,
                     )
                     system_resources = (
                         system_detail.data
                         if isinstance(system_detail.data, list)
                         else [system_detail.data]
                     )
+                    relationship_keys: set[str] = set()
                     for system_resource in system_resources:
                         relationships = system_resource.relationships or {}
+                        relationship_keys.update(relationships)
                         lights_relationship = relationships.get("lights")
                         if lights_relationship:
                             light_ids.update(
@@ -454,12 +458,18 @@ class AlarmBridge:
                                 for item in lights_relationship.data_list
                                 if item.type == ResourceType.LIGHT
                             )
-                    log.info(
-                        "System-detail light discovery found %d light IDs.",
+                    log.warning(
+                        "Light discovery: system detail returned %d light IDs; "
+                        "lights relationship present: %s; relationship count: %d.",
                         len(light_ids),
+                        "lights" in relationship_keys,
+                        len(relationship_keys),
                     )
-                except Exception:
-                    log.exception("System-detail light ID discovery failed.")
+                except Exception as err:
+                    log.warning(
+                        "Light discovery: active system detail lookup failed (%s).",
+                        type(err).__name__,
+                    )
             if light_ids:
                 try:
                     # Use ids[] even for one light (not /lights/{id}).
