@@ -128,6 +128,19 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             )
         ])
         hass.data[DOMAIN + "_card_static_registered"] = True
+        # Storage-mode dashboards can register the card automatically. YAML
+        # dashboards manage resources in YAML and are left untouched.
+        try:
+            lovelace = hass.data.get("lovelace")
+            resources = getattr(lovelace, "resources", None)
+            if resources is not None and hasattr(resources, "async_load"):
+                await resources.async_load()
+                url = "/alarmdotcom/alarm-webrtc-card.js"
+                existing = resources.async_items()
+                if not any(item.get("url", "").split("?")[0] == url for item in existing):
+                    await resources.async_create_item({"url": url, "res_type": "module"})
+        except Exception as err:
+            LOGGER.debug("Automatic camera card resource registration unavailable: %s", err)
     LOGGER.info("%s: Initializing Alarmdotcom from config entry.", __name__)
     LOGGER.info(STARTUP_MESSAGE)
     _log_pyadc_location()
