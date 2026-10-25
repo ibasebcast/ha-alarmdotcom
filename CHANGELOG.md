@@ -1,3 +1,13 @@
+## 2026.10.25b1 (beta)
+
+### Fixed
+- Added privacy-safe diagnostics for the active-system light discovery lookup (#115), including whether the lights relationship is present and how many light IDs were found.
+- Prevented duplicate registration errors when the bundled WebRTC card and an older manually installed card are both loaded.
+
+### Testing requested
+- Confirm light discovery diagnostic messages and whether previously missing lights appear (#115).
+- Confirm WebRTC card loads without duplicate registration errors.
+
 ## 2026.10.25b0 (beta)
 
 ### Fixed
