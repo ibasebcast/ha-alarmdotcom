@@ -135,6 +135,7 @@ class AlarmDotComCamera(Camera):
     async def async_added_to_hass(self) -> None:
         """Start periodic token refresh when entity is added."""
         await super().async_added_to_hass()
+        self.hass.data.setdefault(DOMAIN + '_camera_entities', {})[self.entity_id] = self
 
         await self._fetch_stream_info()
 
@@ -146,6 +147,7 @@ class AlarmDotComCamera(Camera):
 
     async def async_will_remove_from_hass(self) -> None:
         """Cancel periodic refresh when entity is removed."""
+        self.hass.data.get(DOMAIN + '_camera_entities', {}).pop(self.entity_id, None)
         if self._remove_refresh is not None:
             self._remove_refresh()
             self._remove_refresh = None
@@ -245,12 +247,18 @@ class AlarmDotComCamera(Camera):
         """Never expose ephemeral stream credentials in HA state or recorder."""
         return {}
 
+    async def async_get_webrtc_config(self) -> dict | None:
+        """Return stream configuration on demand to an authorized websocket caller."""
+        if self._webrtc_config is None:
+            await self._fetch_stream_info()
+        return self._webrtc_config
+
     async def stream_source(self) -> str | None:
         """
         Return a native HA stream source.
 
-        Alarm.com cameras in this integration use WebRTC config delivered
-        through entity attributes, not a native HLS or RTSP stream URL.
+        Alarm.com cameras use WebRTC configuration retrieved via an
+        authenticated websocket command, not a native HLS or RTSP URL.
         Returning None prevents Home Assistant from treating the config dict
         like a native stream object.
         """
