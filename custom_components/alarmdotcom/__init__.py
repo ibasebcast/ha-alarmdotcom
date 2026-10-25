@@ -71,6 +71,7 @@ from .const import (
     STARTUP_MESSAGE,
 )
 from .hub import AlarmHub
+from .webrtc_ws import async_register as async_register_webrtc
 
 LOGGER = logging.getLogger(__name__)
 
@@ -115,6 +116,7 @@ def _log_pyadc_location() -> None:
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up alarmdotcom hub from a config entry."""
 
+    async_register_webrtc(hass)
     LOGGER.info("%s: Initializing Alarmdotcom from config entry.", __name__)
     LOGGER.info(STARTUP_MESSAGE)
     _log_pyadc_location()
