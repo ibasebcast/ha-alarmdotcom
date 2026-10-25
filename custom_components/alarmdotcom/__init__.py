@@ -119,7 +119,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     """Set up alarmdotcom hub from a config entry."""
 
     async_register_webrtc(hass)
-    if not hass.data.get(DOMAIN + "_card_static_registered"):
+    if hass.http is not None and not hass.data.get(DOMAIN + "_card_static_registered"):
         await hass.http.async_register_static_paths([
             StaticPathConfig(
                 "/alarmdotcom/alarm-webrtc-card.js",
