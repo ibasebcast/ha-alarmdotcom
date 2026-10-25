@@ -28,7 +28,7 @@ def _session_with_one_camera() -> MagicMock:
 async def _setup(hass: HomeAssistant, options: dict) -> list[AlarmDotComCamera]:
     entry = MockConfigEntry(domain=DOMAIN, data={}, options=options, title="Alarm.com")
     entry.add_to_hass(hass)
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {"camera_session": _session_with_one_camera()}
+    entry.runtime_data = MagicMock(camera_session=_session_with_one_camera())
     added: list[AlarmDotComCamera] = []
     await async_setup_entry(hass, entry, added.extend)
     return added
