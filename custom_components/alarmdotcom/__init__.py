@@ -2,6 +2,7 @@
 
 import os
 import sys
+from pathlib import Path
 
 # pyalarmdotcomajax is vendored directly in this directory, as the
 # _pyalarmdotcomajax package (custom_components/alarmdotcom/_pyalarmdotcomajax/),
@@ -35,6 +36,7 @@ from datetime import timedelta
 import _pyalarmdotcomajax as pyadc
 import aiohttp
 import voluptuous as vol
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import Event, HomeAssistant, ServiceCall
@@ -117,6 +119,15 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     """Set up alarmdotcom hub from a config entry."""
 
     async_register_webrtc(hass)
+    if not hass.data.get(DOMAIN + "_card_static_registered"):
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(
+                "/alarmdotcom/alarm-webrtc-card.js",
+                str(Path(__file__).parent / "www" / "alarm-webrtc-card.js"),
+                cache_headers=True,
+            )
+        ])
+        hass.data[DOMAIN + "_card_static_registered"] = True
     LOGGER.info("%s: Initializing Alarmdotcom from config entry.", __name__)
     LOGGER.info(STARTUP_MESSAGE)
     _log_pyadc_location()
