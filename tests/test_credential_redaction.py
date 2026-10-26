@@ -8,6 +8,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.alarmdotcom._pyalarmdotcomajax import AlarmBridge
+from custom_components.alarmdotcom._pyalarmdotcomajax.exceptions import (
+    AuthenticationFailed,
+    NotAuthorized,
+    UnexpectedResponse,
+)
+from custom_components.alarmdotcom.camera_api import _redact_stream_info
 
 SECRETS = {
     "txtPassword": "fake-password-SECURITY-TEST",
@@ -40,7 +46,7 @@ async def test_request_errors_never_expose_credentials(caplog, error_code):
         patch.object(bridge, "create_request", side_effect=fake_request),
         caplog.at_level(logging.DEBUG),
     ):
-        with pytest.raises(Exception) as raised:
+        with pytest.raises((AuthenticationFailed, NotAuthorized, UnexpectedResponse)) as raised:
             await bridge.request(
                 "POST",
                 "https://www.alarm.com/web/api/test",
@@ -56,8 +62,6 @@ async def test_request_errors_never_expose_credentials(caplog, error_code):
 
 def test_camera_stream_response_redacts_credentials():
     """Even the opt-in raw-response logger must not expose WebRTC secrets."""
-    from custom_components.alarmdotcom.camera_api import _redact_stream_info
-
     secrets = {
         "janusToken": "fake-janus-SECURITY-TEST",
         "cameraAuthToken": "fake-camera-SECURITY-TEST",
