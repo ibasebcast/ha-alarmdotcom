@@ -5,10 +5,10 @@ import logging
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, patch
 
+import _pyalarmdotcomajax.exceptions as adc_exceptions
 import pytest
 
 from custom_components.alarmdotcom._pyalarmdotcomajax import AlarmBridge
-import _pyalarmdotcomajax.exceptions as adc_exceptions
 from custom_components.alarmdotcom.camera_api import _redact_stream_info
 
 SECRETS = {
