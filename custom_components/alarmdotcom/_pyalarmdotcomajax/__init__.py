@@ -996,14 +996,14 @@ class AlarmBridge:
                         )
                         raise NotAuthorized(
                             f"Method: {method}\nURL: {url}\nStatus Codes: "
-                            f"{error_codes}\nRequest Body: {kwargs.get('data')}"
+                            f"{error_codes}"
                         )
 
                     # 401: Logged Out, 403: Invalid Anti Forgery
                     if any(x in [401, 403] for x in error_codes):
                         raise AuthenticationFailed(
                             f"Method: {method}\nURL: {url}\nStatus Codes: "
-                            f"{error_codes}\nRequest Body: {kwargs.get('data')}",
+                            f"{error_codes}",
                             can_autocorrect=True,
                         )
 
@@ -1011,19 +1011,19 @@ class AlarmBridge:
                     if 409 in error_codes:
                         raise AuthenticationFailed(
                             f"Two factor authentication required.\nMethod: {method}\nURL: {url}\nStatus Codes: "
-                            f"{error_codes}\nRequest Body: {kwargs.get('data')}"
+                            f"{error_codes}"
                         )
 
                     # 422: Wrong Two Factor Authentication Code
                     if 422 in error_codes:
                         raise AuthenticationFailed(
                             f"Method: {method}\nURL: {url}\nStatus Codes: "
-                            f"{error_codes}\nRequest Body: {kwargs.get('data')}"
+                            f"{error_codes}"
                         )
 
                     raise UnexpectedResponse(
                         f"Method: {method}\nURL: {url}\nStatus Codes: "
-                        f"{error_codes}\nRequest Body: {kwargs.get('data')}"
+                        f"{error_codes}"
                     )
 
                 raw_resp.raise_for_status()
