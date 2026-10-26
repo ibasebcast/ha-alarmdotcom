@@ -1,3 +1,20 @@
+## 2026.10.26 (stable)
+
+### Security
+- Removed sensitive request payloads from HTTP exception messages and prevented credentials from being logged in API requests.
+- Redacted sensitive camera stream response tokens and TURN credentials from diagnostics; removed WebRTC credentials from camera entity attributes in favor of an authenticated, permission-checked WebSocket request.
+- Added automated regression tests covering credential redaction in API error paths and camera stream responses.
+
+### Improvements
+- Bundled the WebRTC card with the integration and registered its Lovelace resource automatically for storage-mode dashboards; guarded against duplicate custom element registration.
+- Preserved upstream MIT license notices alongside this fork's Apache-2.0 licensing.
+- Avoided prepending vendored code to Python's import search path.
+- Added privacy-safe diagnostics for missing Alarm.com lights.
+
+### Known issues
+- Missing Z-Wave lights on some providers (#115) are still being investigated; light discovery has not been confirmed fixed. Please provide feedback and redacted logs in the issue.
+- Beta light discovery, sensor updates (#94), and garage-door reload changes (#136) still need real-world confirmation where applicable.
+
 ## 2026.10.25b1 (beta)
 
 ### Fixed
