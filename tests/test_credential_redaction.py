@@ -8,11 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from custom_components.alarmdotcom._pyalarmdotcomajax import AlarmBridge
-from custom_components.alarmdotcom._pyalarmdotcomajax.exceptions import (
-    AuthenticationFailed,
-    NotAuthorized,
-    UnexpectedResponse,
-)
+import _pyalarmdotcomajax.exceptions as adc_exceptions
 from custom_components.alarmdotcom.camera_api import _redact_stream_info
 
 SECRETS = {
@@ -45,15 +41,17 @@ async def test_request_errors_never_expose_credentials(caplog, error_code):
     with (
         patch.object(bridge, "create_request", side_effect=fake_request),
         caplog.at_level(logging.DEBUG),
+        pytest.raises(
+            (adc_exceptions.AuthenticationFailed, adc_exceptions.NotAuthorized, adc_exceptions.UnexpectedResponse)
+        ) as raised,
     ):
-        with pytest.raises((AuthenticationFailed, NotAuthorized, UnexpectedResponse)) as raised:
-            await bridge.request(
-                "POST",
-                "https://www.alarm.com/web/api/test",
-                allow_login_repair=False,
-                data=payload,
-                headers={"Cookie": SECRETS["Cookie"]},
-            )
+        await bridge.request(
+            "POST",
+            "https://www.alarm.com/web/api/test",
+            allow_login_repair=False,
+            data=payload,
+            headers={"Cookie": SECRETS["Cookie"]},
+        )
 
     emitted = str(raised.value) + "\n" + caplog.text
     for secret in SECRETS.values():
