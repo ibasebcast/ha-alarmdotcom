@@ -55,7 +55,7 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Beta testing:** The current test version is `2026.10.25b1`. This prerelease targets intermittent sensor updates (#94), missing lights (#115), and garage-door entities disappearing after reload (#136). Back up your Home Assistant configuration before testing. Report results and redacted logs in the corresponding GitHub issue. The prerelease must be published before users can install it.
+**Latest stable release:** `2026.10.26`. Includes security hardening, credential-redaction regression tests, and bundled WebRTC card improvements. Light discovery (#115) remains under investigation and has not been confirmed fixed. Back up your Home Assistant configuration before updating.
 
 
 ### Install Using HACS (Recommended)
