@@ -436,7 +436,7 @@ class AlarmBridge:
                 # the Alarm.com web portal's light discovery sequence.
                 try:
                     system_id = self._available_device_catalogs.active_system_id
-                    log.warning(
+                    log.debug(
                         "Light discovery: requesting active system detail for light IDs."
                     )
                     system_detail = await self.get(
@@ -458,7 +458,7 @@ class AlarmBridge:
                                 for item in lights_relationship.data_list
                                 if item.type == ResourceType.LIGHT
                             )
-                    log.warning(
+                    log.debug(
                         "Light discovery: system detail returned %d light IDs; "
                         "lights relationship present: %s; relationship count: %d.",
                         len(light_ids),
