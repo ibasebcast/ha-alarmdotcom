@@ -132,7 +132,17 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
         if parent_device is not None:
             parent_device_id = parent_device.id
 
-    return DeviceInfo(\n        identifiers={(DOMAIN, resource_id)},\n        name=resource.name,\n        connections=connections,\n        manufacturer=manufacturer,\n        model=model,\n        via_device_id=parent_device_id,\n    )\n\n\n@dataclass(frozen=True, kw_only=True)
+    return DeviceInfo(
+        identifiers={(DOMAIN, resource_id)},
+        name=resource.name,
+        connections=connections,
+        manufacturer=manufacturer,
+        model=model,
+        via_device_id=parent_device_id,
+    )
+
+
+@dataclass(frozen=True, kw_only=True)
 class AdcEntityDescription(
     EntityDescription,
     Generic[AdcManagedDeviceT, AdcControllerT],
