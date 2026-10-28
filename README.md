@@ -55,7 +55,7 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Latest stable release:** [2026.10.26](https://github.com/ibasebcast/ha-alarmdotcom/releases/tag/2026.10.26)  
+**Latest stable release:** [2026.10.26](https://github.com/ibasebcast/ha-alarmdotcom/releases/tag/2026.10.26)
 **Latest beta:** [2026.10.28b2](https://github.com/ibasebcast/ha-alarmdotcom/releases/tag/2026.10.28b2)
 
 Beta b2 includes Home Assistant 2026.11 compatibility fixes for device metadata, configuration schemas, and thermostat temperature handling, alongside credential-log protections and bundled WebRTC camera card improvements. It remains a prerelease for live testing before stable promotion.
