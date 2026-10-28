@@ -1,3 +1,16 @@
+## 2026.10.28b3 (beta)
+
+### Light discovery (#115)
+- Use nonempty device IDs advertised by the active system's named `lights` relationship without discarding them because of a differing resource type label.
+- Keep the ID-scoped `ids[]` request and exclude IDs from unrelated relationships.
+- Add the parsed lights-relationship entry count to diagnostic messages without logging IDs, credentials, or response payloads.
+- Add regression tests for canonical and alternate type labels, following system-detail deserialization through the scoped four-light discovery request.
+
+### Status and testing
+- Candidate fix only: the reported JSON structure parses correctly in local reproduction, so a type-label mismatch is not yet confirmed as the cause. Issue #115 remains open until the reporter confirms all four installed lights appear.
+- Retains the Home Assistant 2026.11 compatibility and credential protections from b2.
+- After installing b3, restart Home Assistant or reload Alarm.com and check for the expected light entities. If still missing, temporarily enable `_pyalarmdotcomajax: debug` and share only the `Light discovery:` lines, especially `lights relationship entries`. Disable debug logging afterward.
+
 ## 2026.10.28b2 (beta)
 
 ### Fixes
