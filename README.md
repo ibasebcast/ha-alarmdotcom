@@ -55,28 +55,35 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Latest stable release:** [2026.10.26](https://github.com/ibasebcast/ha-alarmdotcom/releases/tag/2026.10.26)
-**Latest beta:** [2026.10.28b2](https://github.com/ibasebcast/ha-alarmdotcom/releases/tag/2026.10.28b2)
+**Release version:** `2026.10.28` (stable).
 
-**Next beta (in preparation):** `2026.10.28b3`. Candidate light-discovery fix for #115: use IDs from the named `lights` relationship even when resource type labels differ, with an additional privacy-safe entry count for troubleshooting. This is not a confirmed fix; reporter testing is still required.
+This release consolidates all changes since stable `2026.10.26`, including the b0–b3 beta work. See [CHANGELOG.md](CHANGELOG.md) for the complete release history.
 
-Beta b2 includes Home Assistant 2026.11 compatibility fixes for device metadata, configuration schemas, and thermostat temperature handling, alongside credential-log protections and bundled WebRTC camera card improvements. It remains a prerelease for live testing before stable promotion.
+### What's changed since 2026.10.26
 
-**HACS status:** [The default-catalog submission](https://github.com/hacs/default/pull/12316) is under maintainer review. Install through a custom repository using the steps below until inclusion is approved.
+- **Sensor events:** quick combined open/close events produce a cancellable two-second contact/motion pulse for history and automations. Newer sensor events and API refreshes take precedence; glass-break restoral handling is retained.
+- **WebSocket reliability:** sessions rotate before token expiry, connection handshakes are bounded, and recent diagnostic event history grows from 25 to 500 frames.
+- **Home Assistant compatibility:** fix climate imports, support November's DeviceInfo dataclass and Probatio schemas, and migrate thermostat temperatures to the native API while preserving earlier releases' behavior.
+- **Camera behavior:** throttle missing-stream warnings, improve credential-free failure diagnostics, and clarify device-dependent snapshots and bundled-card setup.
+- **Credential protection:** remove stream-response dumps, request URLs in custom API errors/logs, and payload-bearing parser tracebacks. Camera tokens remain outside entity state and recorder history, delivered only through permission-checked WebSocket requests.
+- **Light discovery:** use IDs advertised by the named system lights relationship even when resource type labels vary, retain ID-scoped requests, and add privacy-safe entry counts. Normal no-light accounts no longer generate discovery warnings.
+- **Validation:** add HTTP credential, camera permission, sensor pulse, light discovery, core compatibility, and release-version regressions. Keep the manifest and bundled library version aligned.
 
-### Home Assistant compatibility and beta testing
+### Home Assistant compatibility
 
-The automated full suite passes on Home Assistant 2026.10.4. Dedicated compatibility checks also pass against 2026.11.0b0, covering device metadata and parent links, configuration and WebSocket schemas, thermostat temperatures and units, camera state secrecy, and platform unloading. November checks use the beta's actual core APIs independently of the published test-helper package, which still targets October.
+The automated full suite targets Home Assistant 2026.10.4. Independent compatibility checks pass against 2026.11.0b0 using its actual core APIs, covering device metadata and parent links, configuration and WebSocket schemas, thermostat temperatures and units, camera state secrecy, and platform unloading. November's published custom-component test-helper package is not yet available, so these checks run independently of the October full-suite helper.
 
-To test b2, back up your Home Assistant configuration, select `2026.10.28b2` from the integration's available HACS download versions (enable prereleases if needed), and restart Home Assistant. Verify:
+Home Assistant 2026.11.0b0 is still an upstream beta. These checks do not claim validation against the final November release or every hardware/provider combination.
 
-- Login and MFA, integration reloads, and device availability.
-- Panel, sensor, lock, and thermostat behavior for devices installed on your account.
-- Thermostat current temperature, units, setpoints, and live updates.
-- Camera playback and reconnection for physically installed, online cameras.
+### Updating and known limitations
 
-Later Home Assistant beta changes may require another compatibility check before stable promotion. [Light discovery #115](https://github.com/ibasebcast/ha-alarmdotcom/issues/115) remains under investigation; b2 does not claim to resolve it.
+Back up your Home Assistant configuration, install the stable version through HACS when it is published, and restart Home Assistant. Verify login/MFA, integration reloads, live sensor events, and controls for the devices installed on your account.
 
+[Light discovery #115](https://github.com/ibasebcast/ha-alarmdotcom/issues/115) remains under investigation. The relationship-ID change is a candidate fix, not a confirmed resolution; reporter confirmation is still needed. If installed lights remain missing, temporarily enable `_pyalarmdotcomajax: debug` and share only redacted `Light discovery:` lines, including the parsed relationship-entry count. Disable debug logging afterward.
+
+Camera playback requires an installed, online camera. A listed camera that is not installed or online can return empty stream information without indicating an integration startup failure. Snapshot availability depends on the camera and account.
+
+**HACS status:** [The default-catalog submission](https://github.com/hacs/default/pull/12316) is under maintainer review. Use the custom-repository installation steps below until inclusion is approved.
 
 ### Install Using HACS (Recommended)
 
@@ -363,13 +370,13 @@ This integration is under active maintenance.
 
 Recent improvements include:
 
-* Published beta b2 with Home Assistant 2026.11 device metadata, schema, and thermostat compatibility updates.
+* Prepared stable 2026.10.28 with the b0–b3 device metadata, schema, thermostat, sensor-event, and WebSocket updates.
 * Added separate October full-suite and November compatibility CI checks.
 * Hardened credential logging and kept camera stream tokens out of entity state and recorder history.
 * Bundled the WebRTC camera card with authenticated, permission-checked credential delivery.
 * Improved device registry handling and websocket reliability.
 
-Beta testing is ongoing. Missing light discovery (#115) remains an open investigation.
+Missing light discovery (#115) remains an open investigation. Home Assistant 2026.11 compatibility testing currently targets 2026.11.0b0.
 
 ---
 

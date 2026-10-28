@@ -1,3 +1,43 @@
+## 2026.10.28 (stable)
+
+Changes since stable 2026.10.26, including beta builds 2026.10.28b0 through b3.
+
+### Sensor events and WebSocket reliability
+- Replay Alarm.com's combined quick open/close events (EventType 100) as a two-second contact/motion pulse so history and automations can observe them (#142, #94).
+- Cancel a pending pulse when a newer event arrives, and avoid overwriting a newer API refresh. Preserve the existing glass-break restoral handling (#111).
+- Rotate WebSocket sessions before token expiry and limit connection handshakes to 10 seconds to reduce gaps in live sensor updates (#94).
+- Expand the recent WebSocket diagnostic history from 25 to 500 frames for troubleshooting. Review diagnostic exports before sharing; they can contain sensitive account and location information.
+
+### Home Assistant compatibility
+- Fix climate-platform loading by importing UnitOfTemperature from homeassistant.const, including accounts with no thermostats.
+- Support November's DeviceInfo dataclass using separately typed constructor arguments. Preserve device identifiers, manufacturer/model information, MAC connections, and valid parent links; omit unresolved parents.
+- Use Probatio configuration, service, and WebSocket schemas when available, with a Voluptuous fallback for older installations.
+- Use the native-temperature climate API for initialization and live updates. Preserve the older temperature API with cached-property invalidation on earlier Home Assistant releases, including Celsius/Fahrenheit units and single/range setpoints.
+- Verify that hub shutdown unloads platforms once; no duplicate unload call is added.
+
+### Camera behavior and credential protection
+- Throttle missing-stream warnings to at most once per 30 minutes per camera, resetting the throttle after a successful stream response. Cameras that are not installed or online may legitimately return no stream.
+- Improve missing-stream diagnostics with field names and credential-presence indicators rather than credential values.
+- Remove stream-response payload dumps entirely, including from the opt-in response logger, so unknown future credential fields cannot leak through that dump.
+- Remove request URLs from custom API logs/errors and suppress payload-bearing parser tracebacks. Preserve b2/b3's token-free camera entity state and permission-checked WebSocket credential delivery.
+- Add regression coverage for actual HTTP-wrapper password/OTP/cookie/MFA handling and allowed/denied camera credential access.
+
+### Light discovery
+- Avoid warnings for normal accounts with no lights (#139); retain discovery details at debug level.
+- Use nonempty IDs in the active system's named lights relationship without rejecting them solely because a provider uses a different resource type label (#115).
+- Keep encoded ID-scoped requests and exclude unrelated relationships. Add a privacy-safe parsed light-entry count and regression coverage from system-detail deserialization through scoped requests.
+
+### Validation, release metadata, and documentation
+- Run the complete suite against Home Assistant 2026.10.4, with matched test-helper versions and the camera test dependency installed.
+- Add independent compatibility checks against actual Home Assistant 2026.11.0b0 APIs because the published full-suite helper still targets October. Type-check the integration against November's beta APIs.
+- Add a regression test requiring the integration manifest and bundled library version to match.
+- Update installation/release guidance, HACS review status, bundled camera-card and snapshot documentation, and device-dependent sensor event reporting.
+
+### Known limitations
+- Missing Z-Wave lights on some accounts (#115) remain unconfirmed: the published response structure parses locally, and a provider type-label mismatch is only a candidate explanation. Keep the issue open until the reporter verifies all expected installed lights.
+- Home Assistant 2026.11 compatibility is checked against 2026.11.0b0, not a final November release; later upstream changes may require follow-up.
+- Camera snapshots depend on device/account support. Live playback requires an installed, online camera and the bundled custom card.
+
 ## 2026.10.28b3 (beta)
 
 ### Light discovery (#115)
