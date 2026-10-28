@@ -1,3 +1,19 @@
+## 2026.10.28b2 (beta)
+
+### Fixes
+- Construct shared Home Assistant DeviceInfo metadata with keyword arguments instead of dictionary mutations for compatibility with Home Assistant 2026.11. Preserve existing device identifiers, manufacturer/model metadata, MAC connections, and resolved parent-device links.
+- Reduce repeated camera stream warnings: retain a warning on missing stream info at most once every 30 minutes per camera, and reset the warning after a successful stream response. Keep detailed WebRTC response diagnostics at debug level.
+
+### Compatibility review
+- Confirmed the climate UnitOfTemperature import fix from b1 remains in place.
+- Verified platform unloading is already handled by AlarmHub.close(); no duplicate platform-unload call was added.
+- Missing Z-Wave lights (#115) remain under investigation; this beta does not claim a discovery fix.
+
+### Testing requested
+- Reload the integration and restart Home Assistant 2026.11 beta; confirm panel, sensors, locks, and camera entities appear without device metadata errors.
+- Confirm missing-stream camera warnings no longer repeat on every token refresh, and playback still recovers when stream data becomes available.
+- Confirm existing devices retain their names and registry relationships after reload.
+
 ## 2026.10.28b1 (beta)
 
 ### Fixes
