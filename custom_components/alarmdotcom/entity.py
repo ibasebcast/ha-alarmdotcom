@@ -87,17 +87,14 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
     if entity_name:
         return DeviceInfo(identifiers={(DOMAIN, resource.id)})
 
-    device_info = DeviceInfo(identifiers={(DOMAIN, resource_id)}, name=resource.name)
-
-    if resource.attributes.mac_address:
-        device_info["connections"] = {(CONNECTION_NETWORK_MAC, resource.attributes.mac_address)}
-    else:
-        device_info["connections"] = set()
-
-    if resource.attributes.manufacturer is not None:
-        device_info["manufacturer"] = resource.attributes.manufacturer
-    if resource.attributes.device_model is not None:
-        device_info["model"] = resource.attributes.device_model
+    # DeviceInfo is a dataclass in newer Home Assistant releases. Collect
+    # optional values before constructing it rather than mutating it like a dict.
+    connections = (
+        {(CONNECTION_NETWORK_MAC, resource.attributes.mac_address)}
+        if resource.attributes.mac_address else set()
+    )
+    manufacturer = resource.attributes.manufacturer
+    model = resource.attributes.device_model
 
     # Determine parent device candidate (prefer system device). This is the parent's
     # Alarm.com resource id, i.e. the second half of its (DOMAIN, ...) identifier - not
@@ -118,6 +115,8 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
             else:
                 parent_resource_id = system_id
 
+    parent_device_id: str | None = None
+
     # Only publish the parent link when the referenced device actually exists, and publish
     # it as the parent's registry id. async_get_device_by_identifier scopes the lookup to
     # this config entry, where identifiers are unique, so the match cannot be ambiguous.
@@ -131,12 +130,9 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
             None,
         )
         if parent_device is not None:
-            device_info["via_device_id"] = parent_device.id  # type: ignore[typeddict-unknown-key]
+            parent_device_id = parent_device.id
 
-    return device_info
-
-
-@dataclass(frozen=True, kw_only=True)
+    return DeviceInfo(\n        identifiers={(DOMAIN, resource_id)},\n        name=resource.name,\n        connections=connections,\n        manufacturer=manufacturer,\n        model=model,\n        via_device_id=parent_device_id,\n    )\n\n\n@dataclass(frozen=True, kw_only=True)
 class AdcEntityDescription(
     EntityDescription,
     Generic[AdcManagedDeviceT, AdcControllerT],
