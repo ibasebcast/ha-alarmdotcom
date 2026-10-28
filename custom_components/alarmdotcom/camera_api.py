@@ -619,8 +619,15 @@ class AlarmCameraSession:
 
         _LOGGER.warning(
             "No WebRTC config found for camera %s. "
+            "errorEnum=%s, isMjpeg=%s, janusGatewayUrl=%s, "
+            "janusToken=%s, proxyUrl=%s. "
             "included types: %s. Top-level keys: %s",
             camera_id,
+            top_attrs.get("errorEnum"),
+            top_attrs.get("isMjpeg"),
+            "set" if top_attrs.get("janusGatewayUrl") else "empty",
+            "set" if top_attrs.get("janusToken") else "empty",
+            "set" if top_attrs.get("proxyUrl") else "empty",
             [inc.get("type") for inc in included],
             list(top_attrs.keys()),
         )
