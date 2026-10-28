@@ -6,7 +6,6 @@ from typing import Any, Literal
 
 import _pyalarmdotcomajax as pyadc
 import aiohttp
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
@@ -38,6 +37,7 @@ from .const import (
     CONF_REMOVE_ARM_CODE,
     DOMAIN,
 )
+from .schema import vol
 
 LOGGER = logging.getLogger(__name__)
 LegacyArmingOptions = Literal["home", "away", "true", "false"]

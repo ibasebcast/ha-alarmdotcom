@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, NotRequired, TypedDict, TypeVar
 
 import _pyalarmdotcomajax as pyadc
 from homeassistant.core import callback
@@ -68,6 +68,17 @@ def available_fn(hub: AlarmHub, resource_id: str) -> bool:
     )
 
 
+class _DeviceInfoKwargs(TypedDict):
+    """Constructor fields shared by dictionary and dataclass DeviceInfo APIs."""
+
+    identifiers: set[tuple[str, str]]
+    name: str | None
+    connections: set[tuple[str, str]]
+    manufacturer: str | None
+    model: str | None
+    via_device_id: NotRequired[str]
+
+
 @callback
 def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> DeviceInfo:
     """
@@ -87,8 +98,8 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
     if entity_name:
         return DeviceInfo(identifiers={(DOMAIN, resource.id)})
 
-    # DeviceInfo is a dataclass in newer Home Assistant releases. Collect
-    # optional values before constructing it rather than mutating it like a dict.
+    # Collect constructor arguments separately so optional fields can be omitted.
+    # This also avoids mutating DeviceInfo if it becomes a dataclass.
     connections = (
         {(CONNECTION_NETWORK_MAC, resource.attributes.mac_address)}
         if resource.attributes.mac_address else set()
@@ -132,14 +143,16 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
         if parent_device is not None:
             parent_device_id = parent_device.id
 
-    return DeviceInfo(
-        identifiers={(DOMAIN, resource_id)},
-        name=resource.name,
-        connections=connections,
-        manufacturer=manufacturer,
-        model=model,
-        via_device_id=parent_device_id,
-    )
+    device_info_kwargs: _DeviceInfoKwargs = {
+        "identifiers": {(DOMAIN, resource_id)},
+        "name": resource.name,
+        "connections": connections,
+        "manufacturer": manufacturer,
+        "model": model,
+    }
+    if parent_device_id is not None:
+        device_info_kwargs["via_device_id"] = parent_device_id
+    return DeviceInfo(**device_info_kwargs)
 
 
 @dataclass(frozen=True, kw_only=True)

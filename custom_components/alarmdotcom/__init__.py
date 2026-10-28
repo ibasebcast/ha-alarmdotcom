@@ -35,7 +35,6 @@ from datetime import timedelta
 
 import _pyalarmdotcomajax as pyadc
 import aiohttp
-import voluptuous as vol
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID, CONF_PASSWORD, CONF_USERNAME
@@ -73,6 +72,7 @@ from .const import (
     STARTUP_MESSAGE,
 )
 from .hub import AlarmHub
+from .schema import vol
 from .webrtc_ws import async_register as async_register_webrtc
 
 LOGGER = logging.getLogger(__name__)

@@ -2,9 +2,14 @@
 
 ### Fixes
 - Construct shared Home Assistant DeviceInfo metadata with keyword arguments instead of dictionary mutations for compatibility with Home Assistant 2026.11. Preserve existing device identifiers, manufacturer/model metadata, MAC connections, and resolved parent-device links.
-- Reduce repeated camera stream warnings: retain a warning on missing stream info at most once every 30 minutes per camera, and reset the warning after a successful stream response. Keep detailed WebRTC response diagnostics at debug level.
+- Reduce repeated camera stream warnings: retain a warning on missing stream info at most once every 30 minutes per camera, and reset the warning after a successful stream response. Keep stream-response payloads out of logs at every level.
 
 ### Compatibility review
+- Test against Home Assistant 2026.11.0b0 with a dedicated CI job using the beta's real core APIs, alongside the full 2026.10.4 suite. The published custom-component fixture package still targets October, so November runs focused compatibility tests independently of that fixture package.
+- Use Probatio schemas for configuration, services, and WebSocket commands when available, with a Voluptuous fallback for older Home Assistant installations.
+- Move thermostat initialization and push updates to the native-temperature attributes introduced in November, while retaining the legacy values on older releases. Cover Celsius/Fahrenheit units, temperatures, and single/range setpoints.
+- Construct DeviceInfo from separately typed keyword arguments and omit unresolved parent links, supporting both the old TypedDict and November's dataclass without deprecated mapping mutations.
+- Preserve the HACS security fixes. Remove stream-response payload dumps, request URLs from custom API errors/logs, and payload-bearing parser tracebacks; add credential and camera-permission regressions.
 - Confirmed the climate UnitOfTemperature import fix from b1 remains in place.
 - Verified platform unloading is already handled by AlarmHub.close(); no duplicate platform-unload call was added.
 - Missing Z-Wave lights (#115) remain under investigation; this beta does not claim a discovery fix.

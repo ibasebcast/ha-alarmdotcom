@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from time import monotonic
 from datetime import timedelta
+from time import monotonic
 from typing import TYPE_CHECKING, Any
 
 import aiohttp

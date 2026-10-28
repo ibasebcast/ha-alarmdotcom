@@ -3,7 +3,7 @@
 import json
 import logging
 from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import _pyalarmdotcomajax.exceptions as adc_exceptions
 import pytest
@@ -47,14 +47,14 @@ async def test_request_errors_never_expose_credentials(caplog, error_code):
     ):
         await bridge.request(
             "POST",
-            "https://www.alarm.com/web/api/test",
+            "https://www.alarm.com/web/api/test?token=fake-url-SECURITY-TEST",
             allow_login_repair=False,
             data=payload,
             headers={"Cookie": SECRETS["Cookie"]},
         )
 
     emitted = str(raised.value) + "\n" + caplog.text
-    for secret in SECRETS.values():
+    for secret in (*SECRETS.values(), "fake-url-SECURITY-TEST"):
         assert secret not in emitted
 
 
@@ -85,3 +85,31 @@ def test_camera_stream_response_redacts_credentials():
     for secret in (*secrets.values(), "fake-turn-user-SECURITY-TEST", "fake-turn-password-SECURITY-TEST"):
         assert secret not in emitted
     assert original["data"]["attributes"]["janusToken"] == secrets["janusToken"]
+
+
+async def test_create_request_logs_no_headers_or_body(caplog):
+    """Exercise the actual HTTP wrapper, including MFA cookie injection."""
+    bridge = AlarmBridge()
+    response = AsyncMock()
+    response.cookies = {}
+    response.status = 200
+    response.request_info.method = "POST"
+
+    @asynccontextmanager
+    async def fake_request(*args, **kwargs):
+        yield response
+
+    session = MagicMock()
+    session.request.side_effect = fake_request
+    session.cookie_jar = []
+    bridge._websession = session
+    bridge._auth_controller.mfa_cookie = SECRETS["twoFactorAuthenticationId"]
+    with caplog.at_level(logging.DEBUG):
+        async with bridge.create_request(
+            "POST", "https://example.invalid/login",
+            data={"txtPassword": SECRETS["txtPassword"], "code": SECRETS["otp"]},
+            headers={"Cookie": SECRETS["Cookie"]},
+        ):
+            pass
+    for secret in SECRETS.values():
+        assert secret not in caplog.text

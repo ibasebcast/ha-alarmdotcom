@@ -5,13 +5,13 @@ Credentials must never be exposed as Home Assistant entity attributes.
 """
 from __future__ import annotations
 
-import voluptuous as vol
 from homeassistant.auth.permissions.const import POLICY_READ
 from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
+from .schema import vol
 
 COMMAND = "alarmdotcom/webrtc_config"
 

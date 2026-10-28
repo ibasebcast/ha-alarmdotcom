@@ -440,19 +440,20 @@ class AdcClimateEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], ClimateEnti
 
         # fmt: off
         self._attr_hvac_mode = self.entity_description.hvac_mode_fn(self.controller, self.resource_id)
-        self._attr_current_temperature = self.entity_description.temperature_fn(self.controller, self.resource_id)
+        self._attr_native_current_temperature = self.entity_description.temperature_fn(self.controller, self.resource_id)
         self._attr_fan_mode = self.entity_description.fan_mode_fn(self.controller, self.resource_id)
         self._attr_fan_modes = self.entity_description.fan_modes_fn(self.controller, self.resource_id)
         self._attr_current_humidity = self.entity_description.current_humidity_fn(self.controller, self.resource_id)
-        self._attr_target_temperature_low = self.entity_description.target_temperature_low_fn(self.controller, self.resource_id)
-        self._attr_target_temperature_high = self.entity_description.target_temperature_high_fn(self.controller, self.resource_id)
-        self._attr_target_temperature = self.entity_description.target_temperature_fn(self.controller, self.resource_id)
+        self._attr_native_target_temperature_low = self.entity_description.target_temperature_low_fn(self.controller, self.resource_id)
+        self._attr_native_target_temperature_high = self.entity_description.target_temperature_high_fn(self.controller, self.resource_id)
+        self._attr_native_target_temperature = self.entity_description.target_temperature_fn(self.controller, self.resource_id)
         self._attr_supported_features = self.entity_description.supported_features_fn(self.controller, self.resource_id)
         self._attr_hvac_modes = self.entity_description.hvac_modes_fn(self.controller, self.resource_id)
-        self._attr_temperature_unit = UnitOfTemperature.FAHRENHEIT if not self.entity_description.uses_celsius_fn(self.controller, self.resource_id) else UnitOfTemperature.CELSIUS
+        self._attr_native_temperature_unit = UnitOfTemperature.FAHRENHEIT if not self.entity_description.uses_celsius_fn(self.controller, self.resource_id) else UnitOfTemperature.CELSIUS
         self._attr_target_temperature_step = self.entity_description.target_temperature_step_fn(self.controller, self.resource_id)
         # fmt: on
 
+        self._sync_legacy_temperatures()
         super().initiate_state()
 
     @callback
@@ -462,15 +463,33 @@ class AdcClimateEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], ClimateEnti
         if isinstance(message, pyadc.ResourceEventMessage):
             # fmt: off
             self._attr_hvac_mode = self.entity_description.hvac_mode_fn(self.controller, self.resource_id)
-            self._attr_current_temperature = self.entity_description.temperature_fn(self.controller, self.resource_id)
+            self._attr_native_current_temperature = self.entity_description.temperature_fn(self.controller, self.resource_id)
             self._attr_fan_mode = self.entity_description.fan_mode_fn(self.controller, self.resource_id)
             self._attr_fan_modes = self.entity_description.fan_modes_fn(self.controller, self.resource_id)
             self._attr_current_humidity = self.entity_description.current_humidity_fn(self.controller, self.resource_id)
             self._attr_supported_features = self.entity_description.supported_features_fn(self.controller, self.resource_id)
-            self._attr_target_temperature_high = self.entity_description.target_temperature_high_fn(self.controller, self.resource_id)
-            self._attr_target_temperature_low = self.entity_description.target_temperature_low_fn(self.controller, self.resource_id)
-            self._attr_target_temperature = self.entity_description.target_temperature_fn(self.controller, self.resource_id)
+            self._attr_native_target_temperature_high = self.entity_description.target_temperature_high_fn(self.controller, self.resource_id)
+            self._attr_native_target_temperature_low = self.entity_description.target_temperature_low_fn(self.controller, self.resource_id)
+            self._attr_native_target_temperature = self.entity_description.target_temperature_fn(self.controller, self.resource_id)
             # fmt: on
+
+            self._sync_legacy_temperatures()
+
+    @callback
+    def _sync_legacy_temperatures(self) -> None:
+        """Keep the pre-2026.11 API working without touching deprecated members."""
+        if not hasattr(ClimateEntity, "native_current_temperature"):
+            legacy_values = {
+                "_attr_current_temperature": self._attr_native_current_temperature,
+                "_attr_target_temperature": self._attr_native_target_temperature,
+                "_attr_target_temperature_high": self._attr_native_target_temperature_high,
+                "_attr_target_temperature_low": self._attr_native_target_temperature_low,
+                "_attr_temperature_unit": self._attr_native_temperature_unit,
+            }
+            for name, value in legacy_values.items():
+                # Assignment must go through Entity.__setattr__ to invalidate
+                # the cached properties used by older ClimateEntity releases.
+                setattr(self, name, value)
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set the HVAC mode."""
