@@ -55,7 +55,7 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Latest stable release:** `2026.10.26`. Includes security hardening, credential-redaction regression tests, and bundled WebRTC card improvements. Light discovery (#115) remains under investigation and has not been confirmed fixed. Back up your Home Assistant configuration before updating.
+**Latest stable release:** `2026.10.26`. **Upcoming beta:** `2026.10.28b0`. Includes security hardening, credential-redaction regression tests, and bundled WebRTC card improvements. Light discovery (#115) remains under investigation and has not been confirmed fixed. Back up your Home Assistant configuration before updating.
 
 
 ### Install Using HACS (Recommended)
