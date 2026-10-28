@@ -44,6 +44,7 @@ from custom_components.alarmdotcom.activity_history import (
 def _sensor(subtype: SensorSubtype) -> Sensor:
     """Build a Sensor stub carrying only what _handle_event touches."""
     resource = MagicMock(spec=Sensor)
+    resource.id = "test-sensor-1"
     resource.subtype = subtype
     resource.api_resource = SimpleNamespace(attributes={})
     return resource
