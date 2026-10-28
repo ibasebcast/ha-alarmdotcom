@@ -55,7 +55,25 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Latest stable release:** `2026.10.26`. **Next beta (in preparation):** `2026.10.28b2`. Includes security hardening, credential-redaction regression tests, and bundled WebRTC card improvements. Light discovery (#115) remains under investigation and has not been confirmed fixed. Back up your Home Assistant configuration before updating.
+**Latest stable release:** [2026.10.26](https://github.com/ibasebcast/ha-alarmdotcom/releases/tag/2026.10.26)
+**Latest beta:** [2026.10.28b2](https://github.com/ibasebcast/ha-alarmdotcom/releases/tag/2026.10.28b2)
+
+Beta b2 includes Home Assistant 2026.11 compatibility fixes for device metadata, configuration schemas, and thermostat temperature handling, alongside credential-log protections and bundled WebRTC camera card improvements. It remains a prerelease for live testing before stable promotion.
+
+**HACS status:** [The default-catalog submission](https://github.com/hacs/default/pull/12316) is under maintainer review. Install through a custom repository using the steps below until inclusion is approved.
+
+### Home Assistant compatibility and beta testing
+
+The automated full suite passes on Home Assistant 2026.10.4. Dedicated compatibility checks also pass against 2026.11.0b0, covering device metadata and parent links, configuration and WebSocket schemas, thermostat temperatures and units, camera state secrecy, and platform unloading. November checks use the beta's actual core APIs independently of the published test-helper package, which still targets October.
+
+To test b2, back up your Home Assistant configuration, select `2026.10.28b2` from the integration's available HACS download versions (enable prereleases if needed), and restart Home Assistant. Verify:
+
+- Login and MFA, integration reloads, and device availability.
+- Panel, sensor, lock, and thermostat behavior for devices installed on your account.
+- Thermostat current temperature, units, setpoints, and live updates.
+- Camera playback and reconnection for physically installed, online cameras.
+
+Later Home Assistant beta changes may require another compatibility check before stable promotion. [Light discovery #115](https://github.com/ibasebcast/ha-alarmdotcom/issues/115) remains under investigation; b2 does not claim to resolve it.
 
 
 ### Install Using HACS (Recommended)
@@ -137,9 +155,9 @@ This integration exposes the following services, callable from **Developer Tools
 | Gate         | Open, Close                           | ✔      | ✔           | ✔           | See MyQ note below                                                        |
 | Light        | On / Off / Brightness                 | ✔      | ✔           | ✔           |                                                                           |
 | Lock         | Lock, Unlock                          | ✔      | ✔           | ✔           |                                                                           |
-| Sensor       | None                                  | ✔      | ✔           | ✔           | Contact sensors will not report repeated changes within a 3 minute window |
+| Sensor       | None                                  | ✔      | ✔           | ✔           | Updates depend on the device events reported by Alarm.com |
 | Thermostat   | Heat, Cool, Auto, Fan                 | ✔      | ✔           | ✔           | Fan-only mode runs for the maximum duration supported by Alarm.com        |
-| Camera       | Live WebRTC stream, Snapshot          | ✔      | -           |-           | Requires the `www/alarm-webrtc-card.js` Lovelace card                    |
+| Camera       | Live WebRTC stream, Snapshot          | ✔      | -           |-           | Live playback uses the bundled `custom:alarm-webrtc-card`; snapshots depend on camera support                    |
 
 > [!NOTE]
 > **Garage Doors (MyQ):** MyQ garage doors don't natively integrate with Home Assistant, but they do through Alarm.com, making this integration useful if that's what you have. A dedicated local solution like [RATGDO](https://paulwieland.github.io/ratgdo/) is generally preferable for local control.
@@ -170,8 +188,6 @@ https://github.com/ibasebcast/ha-alarmdotcom/issues
 
 # Camera Support
 
-**HACS status:** Official HACS inclusion is under maintainer review. This does not indicate approval or a confirmed inclusion date.
-
 This integration includes WebRTC live-streaming support for Alarm.com cameras.
 
 ## Setup
@@ -189,7 +205,9 @@ entity: camera.your_camera_name
 
 When the card loads it requests WebRTC credentials through an authenticated Home Assistant websocket command, with camera entity read-permission checks. Tokens are never exposed as entity attributes or stored in recorder history. The card requests refreshed credentials when reconnecting.
 
-Still image snapshots are also available, which means the camera will display a thumbnail in the Home Assistant media browser and picture-glance dashboard cards.
+Still-image snapshots are requested when supported by the camera and Alarm.com endpoint. Snapshot availability varies by device and account.
+
+A camera listed in the Alarm.com account may not yet be physically installed or online. In that case, an `Empty stream info returned` warning can occur because no usable stream is available. The warning is throttled per camera. It does not by itself indicate an integration setup failure. If an installed camera streams in the Alarm.com app but not Home Assistant, report that separately.
 
 ---
 
@@ -343,10 +361,13 @@ This integration is under active maintenance.
 
 Recent improvements include:
 
-* Restored compatibility with modern Home Assistant releases
-* Fixed entities becoming unavailable
-* Updated device registry usage to comply with upcoming Home Assistant requirements
-* Improved websocket connection reliability
+* Published beta b2 with Home Assistant 2026.11 device metadata, schema, and thermostat compatibility updates.
+* Added separate October full-suite and November compatibility CI checks.
+* Hardened credential logging and kept camera stream tokens out of entity state and recorder history.
+* Bundled the WebRTC camera card with authenticated, permission-checked credential delivery.
+* Improved device registry handling and websocket reliability.
+
+Beta testing is ongoing. Missing light discovery (#115) remains an open investigation.
 
 ---
 
