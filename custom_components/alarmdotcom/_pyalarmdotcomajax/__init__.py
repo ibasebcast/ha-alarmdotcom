@@ -448,22 +448,29 @@ class AlarmBridge:
                         else [system_detail.data]
                     )
                     relationship_keys: set[str] = set()
+                    light_entry_count = 0
                     for system_resource in system_resources:
                         relationships = system_resource.relationships or {}
                         relationship_keys.update(relationships)
                         lights_relationship = relationships.get("lights")
                         if lights_relationship:
+                            entries = lights_relationship.data_list
+                            light_entry_count += len(entries)
+                            # The named lights relationship defines the device
+                            # category. Do not discard its advertised IDs just
+                            # because a provider uses a different type label.
                             light_ids.update(
-                                item.id
-                                for item in lights_relationship.data_list
-                                if item.type == ResourceType.LIGHT
+                                item.id for item in entries
+                                if isinstance(item.id, str) and item.id.strip()
                             )
                     log.debug(
                         "Light discovery: system detail returned %d light IDs; "
-                        "lights relationship present: %s; relationship count: %d.",
+                        "lights relationship present: %s; relationship count: %d; "
+                        "lights relationship entries: %d.",
                         len(light_ids),
                         "lights" in relationship_keys,
                         len(relationship_keys),
+                        light_entry_count,
                     )
                 except Exception as err:
                     log.warning(
