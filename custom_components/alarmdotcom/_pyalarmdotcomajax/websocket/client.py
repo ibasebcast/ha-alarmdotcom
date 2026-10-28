@@ -5,6 +5,7 @@ import contextlib
 import json
 import logging
 import random
+import time
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -42,6 +43,9 @@ ALL_TOKEN_T = Literal["*"]
 
 KEEP_ALIVE_SIGNAL_INTERVAL_S = 60
 MAX_RECONNECT_WAIT_S = 30 * 60
+WS_TOKEN_LIFETIME_S = 4 * 60 + 30
+WS_CONNECT_TIMEOUT_S = 10
+EVENT_HISTORY_MAXLEN = 500
 DEFAULT_SIGNALS_PER_SESSION_REFRESH = 1
 MAX_CONNECTION_ATTEMPTS = 25
 
@@ -107,7 +111,7 @@ class WebSocketClient:
         self._last_session_refresh: datetime | None = None
         self._session_refresh_interval_ms: int | None = None
         self._keep_alive_url: str | None = None
-        self._event_history: deque = deque(maxlen=25)
+        self._event_history: deque = deque(maxlen=EVENT_HISTORY_MAXLEN)
 
         self._initialized = False
 
@@ -210,43 +214,41 @@ class WebSocketClient:
 
                 log.info("[EVENT READER] Connecting to Alarm.com WebSocket endpoint...")
 
-                async with self._bridge.ws_connect(f"{self._ws_endpoint}/?f=1&auth={self._token}") as websocket:
+                # The token's lifetime starts when it is issued, not when
+                # the WebSocket handshake completes.
+                token_issued_at = time.monotonic()
+                planned_refresh = False
+                async with contextlib.AsyncExitStack() as connection:
+                    async with asyncio.timeout(WS_CONNECT_TIMEOUT_S):
+                        websocket = await connection.enter_async_context(
+                            self._bridge.ws_connect(
+                                f"{self._ws_endpoint}/?f=1&auth={self._token}"
+                            )
+                        )
                     self._set_state(
                         WebSocketState.CONNECTED if connect_attempts == 1 else WebSocketState.RECONNECTED,
                     )
                     connect_attempts = 1
-
                     log.info("[EVENT READER] Connected to WebSocket")
+                    remaining = max(0, WS_TOKEN_LIFETIME_S - (time.monotonic() - token_issued_at))
+                    try:
+                        async with asyncio.timeout(remaining) as deadline:
+                            await self._read_messages(websocket)
+                    except TimeoutError:
+                        if not deadline.expired():
+                            raise
+                        planned_refresh = True
+                        log.debug("[EVENT READER] Rotating WebSocket before token expiry.")
 
-                    async for msg in websocket:
-                        if msg.type == aiohttp.WSMsgType.CLOSED:
-                            log.info(
-                                "[EVENT READER]aiohttp WebSocket connection closed: Code: %s, Message: '%s'",
-                                msg.data,
-                                msg.extra,
-                            )
-                            continue
-
-                        if msg.type == aiohttp.WSMsgType.ERROR:
-                            log.info("[EVENT READER]aiohttp WebSocket error: '%s'", msg.data)
-                            continue
-
-                        if msg.type != aiohttp.WSMsgType.TEXT:
-                            log.debug(
-                                "[EVENT READER]Got non-text WebSocket message: '%s'",
-                                msg.data,
-                            )
-                            continue
-
-                        self._event_queue.put_nowait(msg.data)
-                        self._event_history.append(msg.data)
+                if planned_refresh:
+                    connect_attempts = 0
+                    continue
 
                 if log.isEnabledFor(logging.DEBUG):
                     close_code: aiohttp.WSCloseCode | int | None = websocket.close_code
                     with contextlib.suppress(AttributeError):
                         if websocket.close_code:
-                            # TODO: Close code 1008 means rejected token. Adc web portal initiated immediate
-                            # reconnect.
+                            # Code 1008 indicates token rejection; proactive rotation should preempt it.
                             close_code = aiohttp.WSCloseCode(int(websocket.close_code))
 
                     log.debug("[EVENT READER] WebSocket Connection Closed (%s)", close_code)
@@ -311,6 +313,24 @@ class WebSocketClient:
             self._set_state(WebSocketState.WAITING)
 
             await asyncio.sleep(reconnect_wait)
+
+    async def _read_messages(self, websocket: aiohttp.ClientWebSocketResponse) -> None:
+        """Read and retain WebSocket events until disconnected or rotated."""
+        async for msg in websocket:
+            if msg.type == aiohttp.WSMsgType.CLOSED:
+                log.info(
+                    "[EVENT READER] WebSocket closed: Code: %s, Message: '%s'",
+                    msg.data, msg.extra,
+                )
+                continue
+            if msg.type == aiohttp.WSMsgType.ERROR:
+                log.info("[EVENT READER] WebSocket error: '%s'", msg.data)
+                continue
+            if msg.type != aiohttp.WSMsgType.TEXT:
+                log.debug("[EVENT READER] Non-text WebSocket message: '%s'", msg.data)
+                continue
+            self._event_queue.put_nowait(msg.data)
+            self._event_history.append(msg.data)
 
     async def _event_processor(self) -> NoReturn:
         """Process incoming events."""
