@@ -1,3 +1,13 @@
+## 2026.10.28b1 (beta)
+
+### Fixes
+- Fix Home Assistant 2026.11 climate-platform setup failure by importing UnitOfTemperature from homeassistant.const (PR #143). This also prevents the climate import error from blocking the entire integration on accounts without thermostats.
+- Fix remaining normal no-light discovery warning by lowering the unscoped fallback message to debug (#139).
+
+### Testing feedback
+- Quick open/close sensor events now register in beta b0 according to initial reporter testing (#142); the event pulse behavior is unchanged in this build.
+- Missing Z-Wave lights remain unresolved (#115); no new light-discovery fix is claimed in this beta.
+
 ## 2026.10.28b0 (beta)
 
 ### Fixes and improvements
