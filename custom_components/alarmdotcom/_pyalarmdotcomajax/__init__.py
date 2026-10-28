@@ -493,7 +493,7 @@ class AlarmBridge:
                     await self._lights._refresh(pre_fetched=resources)  # noqa: SLF001
                     log.info("Unscoped light discovery registered %d lights.", len(self._lights.items))
                 except Exception:
-                    log.warning("Unscoped light discovery unavailable; no known light IDs for scoped retry.")
+                    log.debug("Unscoped light discovery unavailable; no known light IDs for scoped retry.")
 
     async def refresh_all_resources(self) -> None:
         """
