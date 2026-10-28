@@ -617,7 +617,7 @@ class AlarmCameraSession:
             )
             return config
 
-        _LOGGER.warning(
+        _LOGGER.debug(
             "No WebRTC config found for camera %s. "
             "errorEnum=%s, isMjpeg=%s, janusGatewayUrl=%s, "
             "janusToken=%s, proxyUrl=%s. "
