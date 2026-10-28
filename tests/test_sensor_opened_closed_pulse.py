@@ -30,9 +30,7 @@ from _pyalarmdotcomajax.controllers.sensors import (
     SENSOR_EVENT_STATE_MAP,
     SensorController,
 )
-from _pyalarmdotcomajax.models.jsonapi import Resource
 from _pyalarmdotcomajax.models.sensor import Sensor, SensorState, SensorSubtype
-from _pyalarmdotcomajax.websocket.client import RawResourceEventMessage
 from _pyalarmdotcomajax.websocket.messages import EventWSMessage, ResourceEventType
 
 
@@ -203,5 +201,3 @@ async def test_pulse_defers_to_a_state_set_elsewhere(
     await asyncio.sleep(0)
 
     controller._register_or_update_resource.assert_not_awaited()
-
-
