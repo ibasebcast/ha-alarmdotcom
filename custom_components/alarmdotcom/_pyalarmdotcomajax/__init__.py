@@ -933,10 +933,8 @@ class AlarmBridge:
         login_generation = self._login_generation
 
         log.info(
-            "Requesting %s %s with %s expecting %s as %s",
+            "Requesting %s expecting %s as %s",
             method.upper(),
-            url,
-            "[REDACTED]",
             accept_types,
             success_response_class.__name__,
         )
@@ -953,9 +951,9 @@ class AlarmBridge:
 
                 try:
                     response = success_response_class.from_json(await raw_resp.text())
-                except json.JSONDecodeError as err:
+                except json.JSONDecodeError:
                     # Triggered when the response is not valid JSON.
-                    raise UnexpectedResponse("Response was not valid JSON.") from err
+                    raise UnexpectedResponse("Response was not valid JSON.") from None
                 except (ValueError, MissingField):
                     # Triggered when discriminator resolution fails or if field is missing in response.
                     pass
@@ -966,11 +964,11 @@ class AlarmBridge:
                 # JsonAPI and AdcMini failure responses evaluate to the standard JSON:API FailureDocument.
                 try:
                     response = FailureDocument.from_json(await raw_resp.text())
-                except (ValueError, MissingField) as err:
-                    log.exception("Failed to parse response as FailureDocument.")
+                except (ValueError, MissingField):
+                    log.warning("Failed to parse response as FailureDocument.")
                     raise UnexpectedResponse(
                         "Response did not match requested schema definition."
-                    ) from err
+                    ) from None
 
                 # "Successful" FailureDocument requests always return a 200 response code. Non-200 responses
                 # indicate server failure.
@@ -995,14 +993,14 @@ class AlarmBridge:
                             "device type disabled for this system."
                         )
                         raise NotAuthorized(
-                            f"Method: {method}\nURL: {url}\nStatus Codes: "
+                            f"Method: {method}\nStatus Codes: "
                             f"{error_codes}"
                         )
 
                     # 401: Logged Out, 403: Invalid Anti Forgery
                     if any(x in [401, 403] for x in error_codes):
                         raise AuthenticationFailed(
-                            f"Method: {method}\nURL: {url}\nStatus Codes: "
+                            f"Method: {method}\nStatus Codes: "
                             f"{error_codes}",
                             can_autocorrect=True,
                         )
@@ -1010,19 +1008,19 @@ class AlarmBridge:
                     # 409: Two Factor Authentication Required
                     if 409 in error_codes:
                         raise AuthenticationFailed(
-                            f"Two factor authentication required.\nMethod: {method}\nURL: {url}\nStatus Codes: "
+                            f"Two factor authentication required.\nMethod: {method}\nStatus Codes: "
                             f"{error_codes}"
                         )
 
                     # 422: Wrong Two Factor Authentication Code
                     if 422 in error_codes:
                         raise AuthenticationFailed(
-                            f"Method: {method}\nURL: {url}\nStatus Codes: "
+                            f"Method: {method}\nStatus Codes: "
                             f"{error_codes}"
                         )
 
                     raise UnexpectedResponse(
-                        f"Method: {method}\nURL: {url}\nStatus Codes: "
+                        f"Method: {method}\nStatus Codes: "
                         f"{error_codes}"
                     )
 

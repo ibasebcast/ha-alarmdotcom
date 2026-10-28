@@ -533,9 +533,8 @@ class AlarmCameraSession:
         # emit raw responses, even when DEBUG logging is explicitly enabled.
         if _RAW_RESPONSE_LOGGER.isEnabledFor(logging.INFO):
             _RAW_RESPONSE_LOGGER.info(
-                "get_stream_info response for camera %s (redacted): %s",
+                "get_stream_info response received for camera %s",
                 camera_id,
-                _redact_stream_info(body),
             )
 
         top_attrs = body.get("data", {}).get("attributes", {})
