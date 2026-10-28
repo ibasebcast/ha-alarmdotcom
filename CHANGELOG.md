@@ -1,3 +1,12 @@
+## 2026.10.28b0 (beta)
+
+### Fixes and improvements
+- Fix quick open/close sensor events (EventType 100) by publishing a cancellable two-second contact/motion pulse (#142, #94).
+- Rotate WebSocket sessions before token expiry and bound connection handshakes to 10 seconds to reduce missed events (#94).
+- Retain up to 500 recent WebSocket frames for troubleshooting; diagnostic exports may contain sensitive location information and should not be shared publicly without review.
+- Avoid warnings for normal no-light accounts (#139); improve camera stream diagnostics without exposing credentials.
+- Continue investigation of scoped Z-Wave light discovery (#115); not yet confirmed resolved.
+
 ## 2026.10.26 (stable)
 
 ### Security
