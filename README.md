@@ -58,6 +58,8 @@ Because this integration communicates with Alarm.com cloud services, functionali
 **Latest stable release:** [2026.10.26](https://github.com/ibasebcast/ha-alarmdotcom/releases/tag/2026.10.26)
 **Latest beta:** [2026.10.28b2](https://github.com/ibasebcast/ha-alarmdotcom/releases/tag/2026.10.28b2)
 
+**Next beta (in preparation):** `2026.10.28b3`. Candidate light-discovery fix for #115: use IDs from the named `lights` relationship even when resource type labels differ, with an additional privacy-safe entry count for troubleshooting. This is not a confirmed fix; reporter testing is still required.
+
 Beta b2 includes Home Assistant 2026.11 compatibility fixes for device metadata, configuration schemas, and thermostat temperature handling, alongside credential-log protections and bundled WebRTC camera card improvements. It remains a prerelease for live testing before stable promotion.
 
 **HACS status:** [The default-catalog submission](https://github.com/hacs/default/pull/12316) is under maintainer review. Install through a custom repository using the steps below until inclusion is approved.
