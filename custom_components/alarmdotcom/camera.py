@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from time import monotonic
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
@@ -120,6 +121,7 @@ class AlarmDotComCamera(Camera):
         self._attr_unique_id = f"{entry_id}_camera_{self._id}"
         self._attr_name = self._name
         self._webrtc_config: dict | None = None
+        self._last_empty_stream_warning: float | None = None
         self._remove_refresh: CALLBACK_TYPE | None = None
 
         self._attr_device_info = DeviceInfo(
@@ -229,10 +231,15 @@ class AlarmDotComCamera(Camera):
                 return
 
         if not config:
-            _LOGGER.warning("Empty stream info returned for camera %s", self._id)
+            now = monotonic()
+            if (self._last_empty_stream_warning is None
+                    or now - self._last_empty_stream_warning >= 1800):
+                _LOGGER.warning("Empty stream info returned for camera %s", self._id)
+                self._last_empty_stream_warning = now
             self._webrtc_config = None
         else:
             self._webrtc_config = config
+            self._last_empty_stream_warning = None
             _LOGGER.debug("WebRTC tokens refreshed for camera %s", self._id)
 
         self.async_write_ha_state()
