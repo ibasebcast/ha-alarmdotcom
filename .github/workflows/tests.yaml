@@ -19,3 +19,23 @@ jobs:
         pip install beautifulsoup4 mashumaro phonenumbers pyhumps typer click rich
     - name: Run tests
       run: pytest tests/ -v
+
+  november-compatibility:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v3
+      with:
+        python-version: "3.14"
+    - name: Install November beta and compatibility-test dependencies
+      run: >-
+        pip install "homeassistant==2026.11.0b0" "pytest==9.0.3"
+        "PyTurboJPEG==1.8.2" beautifulsoup4 mashumaro phonenumbers pyhumps typer click rich
+    - name: Test actual November core APIs without the October-only test helper
+      env:
+        PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+      run: >-
+        python -c 'import homeassistant; import pytest;
+        raise SystemExit(pytest.main(["--noconftest", "-c", "/dev/null",
+        "tests/test_core_compatibility.py", "-v",
+        "-W", "error::DeprecationWarning:custom_components"]))'

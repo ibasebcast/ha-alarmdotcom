@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, NotRequired, TypedDict, TypeVar
 
 import _pyalarmdotcomajax as pyadc
 from homeassistant.core import callback
@@ -66,6 +66,17 @@ def available_fn(hub: AlarmHub, resource_id: str) -> bool:
             or resource.attributes.state.name != "UNKNOWN"
         )
     )
+
+
+class _DeviceInfoKwargs(TypedDict):
+    """Constructor fields shared by dictionary and dataclass DeviceInfo APIs."""
+
+    identifiers: set[tuple[str, str]]
+    name: str | None
+    connections: set[tuple[str, str]]
+    manufacturer: str | None
+    model: str | None
+    via_device_id: NotRequired[str]
 
 
 @callback
@@ -132,7 +143,7 @@ def device_info_fn(hub: AlarmHub, resource_id: str, entity_name: str | None) -> 
         if parent_device is not None:
             parent_device_id = parent_device.id
 
-    device_info_kwargs: DeviceInfo = {
+    device_info_kwargs: _DeviceInfoKwargs = {
         "identifiers": {(DOMAIN, resource_id)},
         "name": resource.name,
         "connections": connections,
