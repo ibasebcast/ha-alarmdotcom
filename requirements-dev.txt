@@ -15,4 +15,4 @@ pytest-asyncio >= 1.4.0
 # releases for a matching version, or tests may break due to API drift
 # between the pinned core version and what this test helper expects.
 pytest-homeassistant-custom-component == 0.13.375
-PyTurboJPEG==1.8.2
+PyTurboJPEG==2.6.1
