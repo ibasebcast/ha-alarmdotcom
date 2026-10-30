@@ -87,6 +87,29 @@ def build_access_payload(resource: dict[str, Any], user_id: str, begin: str, end
     return payload
 
 
+def access_dates_match(resource: dict[str, Any], user_id: str, begin: str, end: str) -> bool:
+    """Compare timezone-aware instants, accepting equivalent server formatting."""
+    if str(resource.get("id")) != user_id or resource.get("type") != "users/access/device-access":
+        return False
+    attributes = resource.get("attributes")
+    schedule = attributes.get("temporarySchedule") if isinstance(attributes, dict) else None
+    if not isinstance(schedule, dict):
+        return False
+    for key, expected in (("beginDateTime", begin), ("endDateTime", end)):
+        actual = schedule.get(key)
+        if not isinstance(actual, str):
+            return False
+        try:
+            parsed = datetime.fromisoformat(actual)
+            requested = datetime.fromisoformat(expected)
+        except ValueError:
+            return False
+        # Never assign a machine-local zone to an ambiguous server timestamp.
+        if parsed.utcoffset() is None or parsed.astimezone(UTC) != requested.astimezone(UTC):
+            return False
+    return True
+
+
 class DeviceAccessManager:
     """Perform serialized read-modify-write operations without retaining access data."""
 
@@ -117,8 +140,13 @@ class DeviceAccessManager:
             )
             # A 200 response confirms the server saved dates, not that every
             # panel/lock has finished synchronizing the credential.
-            result = updated.data
-            if (str(result.get("id")) != user_id
-                    or result.get("type") != "users/access/device-access"
-                    or result.get("attributes", {}).get("temporarySchedule") != payload["temporarySchedule"]):
+            if access_dates_match(updated.data, user_id, start, finish):
+                return
+            # Some writes return a stale representation. Read the requested user
+            # once to verify persisted dates, without replaying the credential PUT.
+            confirmed = await self._bridge.request(
+                "get", url, success_response_class=AccessDocument,
+                headers={"context-id": system_id},
+            )
+            if not access_dates_match(confirmed.data, user_id, start, finish):
                 raise AccessValidationError("Alarm.com did not confirm the requested access dates. Check the portal before retrying.")

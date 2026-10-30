@@ -8,7 +8,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from _pyalarmdotcomajax import AlarmBridge
-from _pyalarmdotcomajax.access import AccessDocument, AccessValidationError, build_access_payload, validate_period
+from _pyalarmdotcomajax.access import (
+    AccessDocument,
+    AccessValidationError,
+    access_dates_match,
+    build_access_payload,
+    validate_period,
+)
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -120,7 +126,9 @@ async def test_unconfirmed_save_is_reported():
     bridge.request = AsyncMock(return_value=AccessDocument.from_dict({"data": resource()}))
     with pytest.raises(ValueError, match="did not confirm"):
         await bridge.device_access.set_temporary_access(USER, SYSTEM, datetime.fromisoformat(START), datetime.fromisoformat(END))
-    assert bridge.request.call_args.kwargs["allow_login_repair"] is False
+    writes = [call for call in bridge.request.call_args_list if call.args[0] == "put"]
+    assert len(writes) == 1
+    assert writes[0].kwargs["allow_login_repair"] is False
 
 
 def account(hass, title):
@@ -159,3 +167,32 @@ async def test_action_blocks_wrong_system_and_hides_private_errors(hass):
     with pytest.raises(HomeAssistantError) as error:
         await hass.services.async_call(DOMAIN, "set_temporary_access", data, blocking=True)
     assert "private-pin-sentinel" not in str(error.value)
+
+
+@pytest.mark.parametrize(("begin", "end", "matches"), [
+    ("2027-01-05T17:00:00Z", "2027-01-10T17:00:00+00:00", True),
+    ("2027-01-05T12:00:00-05:00", "2027-01-10T12:00:00-05:00", True),
+    ("2027-01-05T17:00:00.001Z", END, False),
+    ("2027-01-05T17:00:00", END, False),
+    ("invalid", END, False),
+    (START, "2027-01-10T18:00:00Z", False),
+])
+def test_confirmation_compares_instants_not_strings(begin, end, matches):
+    """Formatting differences are allowed; changed instants are never accepted."""
+    body = resource()
+    body["attributes"]["temporarySchedule"] = {"beginDateTime": begin, "endDateTime": end}
+    assert access_dates_match(body, USER, START, END) is matches
+    assert not access_dates_match(body, "900099", START, END)
+
+
+async def test_stale_put_response_is_confirmed_with_one_read_only_request():
+    """Check persisted state without issuing a second credential write."""
+    bridge = AlarmBridge()
+    before = resource()
+    after = resource()
+    after["attributes"]["temporarySchedule"] = {
+        "beginDateTime": "2027-01-05T17:00:00Z", "endDateTime": "2027-01-10T17:00:00Z",
+    }
+    bridge.request = AsyncMock(side_effect=[AccessDocument(data=body) for body in (before, before, after)])
+    await bridge.device_access.set_temporary_access(USER, SYSTEM, datetime.fromisoformat(START), datetime.fromisoformat(END))
+    assert [call.args[0] for call in bridge.request.call_args_list] == ["get", "put", "get"]

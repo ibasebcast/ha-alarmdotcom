@@ -71,3 +71,15 @@ not credential synchronization at every panel and lock.
 
 All-times/restricted transitions, read-only status entities, schedule clearing,
 and user creation remain outside this implementation.
+
+## Follow-up: confirming equivalent timestamps
+
+A b1 hardware test returned the confirmation error after the PUT. The original
+comparison required identical timestamp strings, so equivalent instants formatted
+with different fractional seconds or UTC offsets could be rejected. This is a
+confirmed validation weakness, not yet the confirmed cause of that live result.
+
+The follow-up compares timezone-aware instants without rounding away differences.
+A mismatched PUT representation triggers one GET of the requested user to verify
+persisted dates. It never resends the credential PUT. A missing schedule, naive
+server timestamp, wrong identity, or different instant remains unconfirmed.
