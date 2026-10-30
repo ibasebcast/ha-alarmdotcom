@@ -5,10 +5,12 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from abc import ABC
-from asyncio import Task, iscoroutinefunction
+from asyncio import Task
 from collections.abc import Awaitable, Callable, Iterator
 from enum import Enum
+from inspect import iscoroutinefunction
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
@@ -40,6 +42,11 @@ if TYPE_CHECKING:
     from _pyalarmdotcomajax.models.jsonapi import Resource
 
 log = logging.getLogger(__name__)
+
+# How many refreshes in a row a device must be missing from before it is unregistered. Unregistering removes its
+# Home Assistant entities from the entity registry (and with them any names, areas and labels set on them), so one
+# incomplete response must not be enough; a device really removed from the account goes after this many polls.
+MISSING_REFRESHES_BEFORE_REMOVAL = 3
 
 # Declared locally rather than imported from _pyalarmdotcomajax.models, even
 # though it's the same conceptual type variable used throughout the codebase.
@@ -134,14 +141,23 @@ class BaseController(ABC, Generic[AdcResourceT]):
         self._api_data_unsubscribe: Callable | None = None
 
         # Dict of callbacks for controllers that depend on the current controller for API updates.
-        self._api_data_receivers: dict[ResourceType, list[Callable[[list[Resource]], Awaitable | None]]] = {}
+        # Receivers are sub-controllers' _refresh methods, called as callback(resources, fetch_started=...).
+        self._api_data_receivers: dict[ResourceType, list[Callable[..., Awaitable | None]]] = {}
 
         # Restricts this controller to specific devices. Used for controllers that only support single-serve
         # endpoints.
         self._target_device_ids: set[str] = set(target_device_ids or [])
+        self._has_no_devices = False
 
         # Holds references to asyncio tasks to prevent them from being garbage collected before completion.
         self._background_tasks: set[Task] = set()
+
+        # When a WebSocket event last changed each resource (time.monotonic()). A refresh whose request was
+        # sent before that moment carries an older snapshot and must not overwrite the event; see _refresh.
+        self._last_event_at: dict[str, float] = {}
+
+        # Consecutive refreshes each registered resource has been missing from; see MISSING_REFRESHES_BEFORE_REMOVAL.
+        self._missing_refreshes: dict[str, int] = {}
 
     @property
     def items(self) -> list[AdcResourceT]:
@@ -195,6 +211,7 @@ class BaseController(ABC, Generic[AdcResourceT]):
             # If this is a device controller and no device IDs are provided, mark as initialized and skip
             if getattr(self, "_is_device_controller", False) and not self._target_device_ids:
                 self._initialized = True
+                self._has_no_devices = True
                 return
 
         self._initialized = True
@@ -205,6 +222,7 @@ class BaseController(ABC, Generic[AdcResourceT]):
         """Add a device ID to the controller's list of targets."""
 
         self._target_device_ids.add(resource_id)
+        self._has_no_devices = False
 
         await self._refresh(resource_id=resource_id)
 
@@ -237,7 +255,12 @@ class BaseController(ABC, Generic[AdcResourceT]):
             json={"statePollOnly": False, **msg_body},
         )
 
-    async def _refresh(self, pre_fetched: list[Resource] | None = None, resource_id: str | None = None) -> None:
+    async def _refresh(
+        self,
+        pre_fetched: list[Resource] | None = None,
+        resource_id: str | None = None,
+        fetch_started: float | None = None,
+    ) -> None:
         """
         Initialize controllers using API response data, either fetched here or by another controller.
 
@@ -262,21 +285,33 @@ class BaseController(ABC, Generic[AdcResourceT]):
             resource_id = None
 
             Any missing resources previously registered by this controller will be unregistered.
+
+        fetch_started is the time.monotonic() at which the data was requested. A resource that a WebSocket event
+        changed after that moment keeps the event's state: the response may predate the event, and applying it
+        would put back the state the event just replaced (a door opened mid-request would read closed again).
         """
 
         log.info("[%s] Refreshing controller...", self.resource_type.name)
 
-        if pre_fetched and resource_id:
+        if pre_fetched is not None and resource_id:
             raise NotImplementedError
 
-        if (self._api_data_provider and not pre_fetched) or (self._requires_target_ids and not self._target_device_ids):
+        if (self._api_data_provider and pre_fetched is None) or (self._requires_target_ids and not self._target_device_ids):
             return
 
-        if not pre_fetched:
+        # initialize() skips a device controller that has no devices; the periodic refresh has to as well. Asking
+        # for a device type the system does not have can earn a 423 (image sensors do), every five minutes.
+        if pre_fetched is None and not resource_id and self._has_no_devices:
+            return
+
+        if pre_fetched is None:
             ids: str | set[str] | None = None
 
             # Requests for single devices must use the single device format (/devices/locks/12345-098), not the
             # multi-device format (/devices/locks?id[]=12345-098).
+            # Read the id without removing it: pop() emptied the set on the first refresh, so every later
+            # refresh of a single-target controller (the device catalog, which feeds every device controller)
+            # returned at the guard above without a request.
             if resource_id or len(self._target_device_ids) == 1:
                 ids = resource_id or next(iter(self._target_device_ids))
             elif self._target_device_ids:
@@ -284,6 +319,7 @@ class BaseController(ABC, Generic[AdcResourceT]):
             else:
                 ids = None
 
+            fetch_started = time.monotonic()
             response = await self._bridge.get(self._resource_url_override or self.resource_type, ids)
 
             response.data = self._device_filter(response.data)
@@ -302,14 +338,14 @@ class BaseController(ABC, Generic[AdcResourceT]):
                     for included_resource in self._included_resources
                     if included_resource.type == resource_type
                 ]
-                if included_resources:
+                if response.included is not None:
                     for callback in callbacks:
                         if iscoroutinefunction(callback):
-                            task = asyncio.create_task(callback(included_resources))
+                            task = asyncio.create_task(callback(included_resources, fetch_started=fetch_started))
                             self._background_tasks.add(task)
                             task.add_done_callback(self._background_tasks.discard)
                         else:
-                            callback(included_resources)
+                            callback(included_resources, fetch_started=fetch_started)
 
             # Return normalized response data for current resource type.
             pre_fetched = [*(response.data if isinstance(response.data, list) else [response.data])]
@@ -317,18 +353,72 @@ class BaseController(ABC, Generic[AdcResourceT]):
         # Find and instantiate supported devices.
         discovered_resource_ids = set({})
         for resource in pre_fetched:
-            if resource.type == self.resource_type and await self._register_or_update_resource(resource) is not None:
+            if resource.type != self.resource_type:
+                continue
+            if self._superseded_by_event(resource.id, fetch_started) or self._keep_local_state(resource):
+                # Still present on the account, so it must not be unregistered below.
+                discovered_resource_ids.add(resource.id)
+                continue
+            if await self._register_or_update_resource(resource) is not None:
                 discovered_resource_ids.update({resource.id})
 
         # Unregister devices that failed to be instantiated or (in the case of multi-device endpoints) appeared in
-        # a previous API response but not the current one.
-        if resource_id:
-            # If we retrieved data for a specific device
-            if resource_id not in discovered_resource_ids:
-                await self._unregister_resource(resource_id)
-        else:
-            for missing_resource_id in self._resources.keys() - discovered_resource_ids:
-                await self._unregister_resource(missing_resource_id)
+        # a previous API response but not the current one - once they have been missing for several refreshes.
+        missing = {resource_id} - discovered_resource_ids if resource_id else self._resources.keys() - discovered_resource_ids
+
+        for found_id in discovered_resource_ids:
+            self._missing_refreshes.pop(found_id, None)
+
+        for missing_resource_id in list(missing):
+            if missing_resource_id not in self._resources:
+                continue
+
+            count = self._missing_refreshes.get(missing_resource_id, 0) + 1
+
+            if count < MISSING_REFRESHES_BEFORE_REMOVAL:
+                self._missing_refreshes[missing_resource_id] = count
+                log.warning(
+                    "[%s] %s was missing from Alarm.com's response (%s of %s before it is removed).",
+                    self.resource_type.name,
+                    missing_resource_id,
+                    count,
+                    MISSING_REFRESHES_BEFORE_REMOVAL,
+                )
+                continue
+
+            self._missing_refreshes.pop(missing_resource_id, None)
+            await self._unregister_resource(missing_resource_id)
+
+    def _superseded_by_event(self, resource_id: str, fetch_started: float | None) -> bool:
+        """Whether a WebSocket event changed this resource after the data being applied was requested."""
+
+        if fetch_started is None or resource_id not in self._resources:
+            return False
+
+        if self._last_event_at.get(resource_id, float("-inf")) < fetch_started:
+            return False
+
+        log.debug(
+            "[%s] Keeping event state for %s; the refresh was requested before the event arrived.",
+            self.resource_type.name,
+            resource_id,
+        )
+        return True
+
+    def _keep_local_state(self, resource: Resource) -> bool:
+        """
+        Whether a refresh should leave this already-registered resource as it is.
+
+        Intended to be overridden: the sensor controller keeps a motion sensor it cleared locally, because
+        Alarm.com goes on reporting "activated" for up to an hour after the motion stopped.
+        """
+        return False
+
+    def _request_reconcile(self, reason: str) -> None:
+        """Ask the bridge to re-fetch device state shortly, so an assumed or possibly missed state gets checked."""
+
+        if (request := getattr(self._bridge, "request_reconcile", None)) is not None:
+            request(reason)
 
     #############################
     # WEBSOCKET UPDATE HANDLERS #
@@ -357,6 +447,10 @@ class BaseController(ABC, Generic[AdcResourceT]):
         adc_resource = self.get(message.ws_message.full_device_id) or self.get(str(message.ws_message.device_id))
         if not adc_resource:
             return None
+
+        # Stamped before anything is applied, so a refresh response processed while this handler awaits below
+        # already knows it is older than this event.
+        self._last_event_at[adc_resource.id] = time.monotonic()
 
         # Handle state updates for all controllers that have a state map.
         if (
@@ -396,7 +490,7 @@ class BaseController(ABC, Generic[AdcResourceT]):
     async def subcontroller_data_subscribe(
         self,
         resource_types: list[ResourceType],
-        callback: Callable[[list[Resource]], Awaitable | None],
+        callback: Callable[..., Awaitable | None],
     ) -> Callable:
         """Register controller that depends on this controller for API updates."""
 
@@ -461,6 +555,7 @@ class BaseController(ABC, Generic[AdcResourceT]):
             return resource.id
 
         try:
+            self._has_no_devices = False
             self._resources.update({resource.id: new_adc_resource})
         except Exception:
             log.exception(

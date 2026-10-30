@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any, Generic, Literal
 import _pyalarmdotcomajax as pyadc
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS,
+    ATTR_COLOR_TEMP_KELVIN,
+    ATTR_RGB_COLOR,
     ColorMode,
     LightEntity,
     LightEntityDescription,
@@ -30,6 +32,10 @@ if TYPE_CHECKING:
     from .hub import AlarmHub
 
 BRIGHTNESS_SCALE = (1, 99)
+# ADC reports white warmth as a percentage rather than physical Kelvin bounds.
+# Map that relative range onto HA's conventional white-light slider.
+MIN_COLOR_TEMP_KELVIN = 2700
+MAX_COLOR_TEMP_KELVIN = 6500
 
 # Entities are updated via push (websocket events), not per-entity polling -
 # PARALLEL_UPDATES has no effect on update frequency here, but setting it
@@ -70,7 +76,7 @@ def is_on_fn(hub: AlarmHub, light_id: str) -> bool:
     """Return whether the light is on."""
 
     resource = hub.api.lights[light_id]
-    return resource.attributes.state == pyadc.light.LightState.ON
+    return resource.attributes.state in (pyadc.light.LightState.ON, pyadc.light.LightState.LEVEL_CHANGE)
 
 
 @callback
@@ -98,7 +104,12 @@ def color_mode_fn(hub: AlarmHub, light_id: str) -> ColorMode:
     if resource is None:
         return ColorMode.UNKNOWN
 
-    return ColorMode.BRIGHTNESS if resource.attributes.is_dimmer else ColorMode.ONOFF
+    if resource.attributes.light_color_format == pyadc.light.LightColorFormat.WARM_TO_COOL and resource.attributes.supports_white_light_color_control:
+        return ColorMode.COLOR_TEMP
+    modes = supported_color_modes_fn(hub.api.lights, light_id)
+    if ColorMode.RGB in modes:
+        return ColorMode.RGB
+    return next(iter(modes))
 
 
 @callback
@@ -109,7 +120,12 @@ def supported_color_modes_fn(controller: pyadc.LightController, light_id: str) -
     if resource is None:
         return {ColorMode.UNKNOWN}
 
-    return {ColorMode.BRIGHTNESS} if resource.attributes.is_dimmer else {ColorMode.ONOFF}
+    modes = set()
+    if resource.attributes.supports_rgb_color_control:
+        modes.add(ColorMode.RGB)
+    if resource.attributes.supports_white_light_color_control:
+        modes.add(ColorMode.COLOR_TEMP)
+    return modes or ({ColorMode.BRIGHTNESS} if resource.attributes.is_dimmer else {ColorMode.ONOFF})
 
 
 @callback
@@ -125,10 +141,18 @@ async def control_fn(
 
     try:
         if command == "turn_on":
+            if brightness == 0:
+                await controller.turn_off(light_id)
+                return
             if brightness is not None:
                 await controller.set_brightness(light_id, math.ceil(brightness_to_value(BRIGHTNESS_SCALE, brightness)))
             else:
                 await controller.turn_on(light_id)
+            if (rgb := options.get(ATTR_RGB_COLOR)) is not None:
+                await controller.set_color(light_id, hex_color="#{:02X}{:02X}{:02X}".format(*rgb))
+            elif (kelvin := options.get(ATTR_COLOR_TEMP_KELVIN)) is not None:
+                fraction = (MAX_COLOR_TEMP_KELVIN - kelvin) / (MAX_COLOR_TEMP_KELVIN - MIN_COLOR_TEMP_KELVIN)
+                await controller.set_color(light_id, percent_warmth=round(max(0, min(1, fraction)) * 100))
         elif command == "turn_off":
             await controller.turn_off(light_id)
         else:
@@ -180,6 +204,25 @@ class AdcLightEntity(AdcEntity[AdcManagedDeviceT, AdcControllerT], LightEntity):
     """Base Alarm.com light entity."""
 
     entity_description: AdcLightEntityDescription
+    _attr_min_color_temp_kelvin = MIN_COLOR_TEMP_KELVIN
+    _attr_max_color_temp_kelvin = MAX_COLOR_TEMP_KELVIN
+
+    @property
+    def rgb_color(self) -> tuple[int, int, int] | None:
+        """Decode the current RGB hex value without discarding invalid updates."""
+        value = self.controller[self.resource_id].attributes.hex_color
+        if not isinstance(value, str) or len(value.lstrip("#")) != 6:
+            return None
+        try:
+            return tuple(bytes.fromhex(value.lstrip("#")))
+        except ValueError:
+            return None
+
+    @property
+    def color_temp_kelvin(self) -> int | None:
+        """Represent ADC's relative white warmth on the HA slider."""
+        warmth = self.controller[self.resource_id].attributes.percent_warmth
+        return round(MAX_COLOR_TEMP_KELVIN - max(0, min(100, warmth)) / 100 * (MAX_COLOR_TEMP_KELVIN - MIN_COLOR_TEMP_KELVIN))
 
     def __init__(
         self,

@@ -39,6 +39,7 @@ class CameraController(BaseController[Camera]):
         self,
         pre_fetched: list[Resource] | None = None,
         resource_id: str | None = None,
+        fetch_started: float | None = None,
     ) -> None:
         """Refresh controller directly from the camera endpoint."""
         url = f"{API_URL_BASE}{self._resource_url_override}"

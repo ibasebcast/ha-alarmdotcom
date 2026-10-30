@@ -55,7 +55,9 @@ def entity_name_fn(hub: AlarmHub, resource_id: str, entity_suffix: str | None) -
 def available_fn(hub: AlarmHub, resource_id: str) -> bool:
     """Check if device is available."""
 
-    resource = hub.api.managed_devices[resource_id]
+    # Gone from Alarm.com: its entities are about to be removed, and until then they are simply unavailable.
+    if (resource := hub.api.managed_devices.get(resource_id)) is None:
+        return False
 
     return (
         hub.available
@@ -196,6 +198,7 @@ class AdcEntity(Entity, Generic[AdcManagedDeviceT, AdcControllerT]):
 
     entity_description: AdcEntityDescription[AdcManagedDeviceT, AdcControllerT]
     controller: AdcControllerT
+    _removal_requested: bool = False
 
     def __init__(
         self,
@@ -258,14 +261,28 @@ class AdcEntity(Entity, Generic[AdcManagedDeviceT, AdcControllerT]):
     async def remove(self) -> None:
         """Remove entity from Home Assistant."""
 
-        if self.registry_entry:
-            er.async_get(self.hass).async_remove(self.entity_id)
-        else:
+        if self._removal_requested:
+            return
+        self._removal_requested = True
+
+        if not self.registry_entry:
             await self.async_remove(force_remove=True)
+            return
+
+        registry = er.async_get(self.hass)
+        # The hub removes a deleted resource's whole device, which takes this registry entry (and this entity) with
+        # it. Removing an entry that is already gone raises.
+        if registry.async_get(self.entity_id) is not None:
+            registry.async_remove(self.entity_id)
 
     @callback
     def event_handler(self, message: pyadc.EventBrokerMessage) -> None:
         """Handle event message."""
+
+        if self.resource_id not in self.hub.api.managed_devices:
+            # Deleted, or the delete was missed: every handler below reads the resource and would raise.
+            self.hass.async_create_task(self.remove())
+            return
 
         if message.topic in [
             pyadc.EventBrokerTopic.RESOURCE_ADDED,

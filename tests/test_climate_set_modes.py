@@ -30,6 +30,7 @@ def controller() -> MagicMock:
     """Build a thermostat controller whose set_state records what it was asked for."""
     c = MagicMock()
     c.set_state = AsyncMock(return_value=None)
+    c.get.return_value.supported_fan_durations = [0, 60, 180]
     return c
 
 
@@ -88,3 +89,12 @@ def test_the_zero_valued_member_that_caused_this_is_still_zero() -> None:
     """If AUTO stops being 0 the bug is gone, and so is the reason for these tests."""
     assert pyadc.thermostat.ThermostatFanMode.AUTO == 0
     assert not pyadc.thermostat.ThermostatFanMode.AUTO
+
+
+async def test_fan_on_uses_shortest_supported_positive_duration(controller):
+    """A thermostat without indefinite operation must receive a supported timer."""
+    controller.get.return_value.supported_fan_durations = [180, 60, 1440]
+    await set_fan_mode_fn(controller, "thermostat-1", FAN_ON)
+    controller.set_state.assert_awaited_once_with(
+        "thermostat-1", fan_mode=pyadc.thermostat.ThermostatFanMode.ON, fan_mode_duration=60,
+    )

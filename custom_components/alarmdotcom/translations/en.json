@@ -90,5 +90,17 @@
                 "email": "Email Address"
             }
         }
+    },
+    "device_automation": {
+        "trigger_type": {
+            "scene_action": "Scene action on {subtype}"
+        },
+        "trigger_subtype": {
+            "scene_001": "Scene 001 (on button)",
+            "scene_002": "Scene 002 (off button)"
+        },
+        "extra_fields": {
+            "value": "Value"
+        }
     }
 }

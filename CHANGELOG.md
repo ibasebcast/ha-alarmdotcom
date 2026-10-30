@@ -1,3 +1,19 @@
+## 2026.10.30b0 (beta)
+
+- Keep HTTP session keep-alive running after a WebSocket reconnect; cap reconnect waits and token fetch time.
+- Harden login repair with a timeout, shared failure results, backoff, and correct separation of outages, rejected credentials, and unsupported endpoints.
+- Isolate failed event subscribers, including asynchronous callbacks, and safely remove all entities of a genuinely deleted device.
+- Reconcile device state after connection changes and quick open/close events; keep older polling responses from overwriting newer WebSocket state.
+- Require three consecutive missing refreshes before removing a device, including when the last device disappears; reset the count when it returns.
+- Choose a supported thermostat fan duration, preserving indefinite operation only where the thermostat supports it.
+- Add Scene 001/002 event entities and device automation triggers for supported Z-Wave switch taps, multiple taps, holds, and releases.
+- Expose RGB and relative white color-temperature controls on capable lights, preserving brightness, device metadata, and existing light IDs.
+- Add ten-second person, vehicle, animal, and package detection pulses from supported camera analytics. Repeated detections extend the pulse.
+- Add camera fullscreen controls and preserve live streams through brief Lovelace reparenting during phone rotation. Guard late callbacks against replacing newer streams.
+- Preserve authenticated WebSocket delivery of camera credentials and the existing policy of omitting HTTP payloads from logs.
+
+Adapted from SeloraHomes, obrint, scottm5443, HA-ADC/alarmdotcom-ha, and HA-ADC/pyadc. See the beta release notes for attribution and hardware testing limitations.
+
 ## 2026.10.28 (stable)
 
 Changes since stable 2026.10.26, including beta builds 2026.10.28b0 through b3.

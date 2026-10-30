@@ -19,6 +19,7 @@ from homeassistant.components.climate import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import UnitOfTemperature
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
@@ -312,7 +313,16 @@ async def set_fan_mode_fn(
     # what #99 saw as an automation that fires and never reaches the thermostat.
     requested_fan_mode = fan_mode_map.get(fan_mode)
     if requested_fan_mode is not None:
-        await controller.set_state(thermostat_id, fan_mode=requested_fan_mode, fan_mode_duration=0)
+        resource = controller.get(thermostat_id)
+        duration = 0
+        if requested_fan_mode != pyadc.thermostat.ThermostatFanMode.AUTO:
+            durations = resource.supported_fan_durations
+            if 0 not in durations:
+                positive = [value for value in durations if value > 0]
+                if not positive:
+                    raise ServiceValidationError("Thermostat does not report a supported fan duration.")
+                duration = min(positive)
+        await controller.set_state(thermostat_id, fan_mode=requested_fan_mode, fan_mode_duration=duration)
 
 
 # @callback

@@ -55,9 +55,9 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Release version:** `2026.10.28` (stable).
+**Beta version:** `2026.10.30b0`, developed on `beta/2026.10.30`.
 
-This release consolidates all changes since stable `2026.10.26`, including the b0–b3 beta work. See [CHANGELOG.md](CHANGELOG.md) for the complete release history.
+This beta adapts reliability fixes and device features from the community forks. The stable release remains `2026.10.28`. See [beta notes](release-notes/2026.10.30b0.md) for the changes and testing details.
 
 ### What's changed since 2026.10.26
 

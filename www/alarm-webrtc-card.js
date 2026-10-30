@@ -19,6 +19,8 @@ class AlarmWebRTCCard extends HTMLElement {
     this.remoteId = null;
     this._janusKeepalive = null;
     this._entityId = null;
+    this._disconnectGrace = null;
+    this._streamGeneration = 0;
   }
 
   _log(...args) {
@@ -180,10 +182,29 @@ class AlarmWebRTCCard extends HTMLElement {
 
   renderVideo() {
     this.innerHTML = `
-      <ha-card>
-        <video autoplay playsinline muted style="width:100%;height:auto;background:#000"></video>
+      <ha-card style="position:relative;background:#000">
+        <style>
+          ha-card:fullscreen { width:100vw; height:100vh; display:flex; align-items:center; }
+          ha-card:fullscreen video { max-height:100vh; object-fit:contain; }
+        </style>
+        <video autoplay playsinline muted style="width:100%;height:auto;background:#000;display:block"></video>
+        <button type="button" aria-label="Toggle fullscreen" title="Toggle fullscreen"
+          style="position:absolute;right:8px;bottom:8px;padding:8px;border:0;border-radius:4px;background:#0009;color:#fff;cursor:pointer">⛶</button>
       </ha-card>
     `;
+    this.querySelector("button").addEventListener("click", () => this._toggleFullscreen());
+  }
+
+  async _toggleFullscreen() {
+    const frame = this.querySelector("ha-card");
+    const video = this.querySelector("video");
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (frame?.requestFullscreen) await frame.requestFullscreen();
+      else if (video?.webkitEnterFullscreen) video.webkitEnterFullscreen();
+    } catch {
+      this._log("Fullscreen unavailable");
+    }
   }
 
   _showReconnectButton(message = "Stream unavailable") {
@@ -266,7 +287,7 @@ class AlarmWebRTCCard extends HTMLElement {
       this._secureConfig = config;
       this.hass = this._hass;
     }).catch(() => {
-      if (this.config.entity !== requestEntity) return;
+      if (this.config.entity !== requestEntity || requestSerial !== this._requestSerial) return;
       clearTimeout(this._requestTimeout);
       this._log("WebRTC credential request failed");
       this._requesting = false;
@@ -277,6 +298,8 @@ class AlarmWebRTCCard extends HTMLElement {
   }
 
   _teardownStream(resetConfig = true) {
+    // Invalidate old callbacks before closing: a late close must not kill a replacement stream.
+    this._streamGeneration += 1;
     if (this._janusKeepalive) {
       clearInterval(this._janusKeepalive);
       this._janusKeepalive = null;
@@ -284,6 +307,9 @@ class AlarmWebRTCCard extends HTMLElement {
 
     if (this.pc) {
       try {
+        this.pc.ontrack = null;
+        this.pc.onicecandidate = null;
+        this.pc.oniceconnectionstatechange = null;
         this.pc.close();
       } catch (e) {}
       this.pc = null;
@@ -291,6 +317,9 @@ class AlarmWebRTCCard extends HTMLElement {
 
     if (this.ws) {
       try {
+        this.ws.onclose = null;
+        this.ws.onmessage = null;
+        this.ws.onerror = null;
         this.ws.close();
       } catch (e) {}
       this.ws = null;
@@ -323,6 +352,7 @@ class AlarmWebRTCCard extends HTMLElement {
     if (this._connecting) return;
 
     this._connecting = true;
+    const generation = this._streamGeneration;
     this._currentConfig = config;
 
     this._log("Starting stream");
@@ -336,6 +366,7 @@ class AlarmWebRTCCard extends HTMLElement {
         await this._startLegacy(config);
       }
     } catch (err) {
+      if (generation !== this._streamGeneration) return;
       this._log("startStream failed", err);
       this._teardownStream(false);
       this._requesting = false;
@@ -344,6 +375,7 @@ class AlarmWebRTCCard extends HTMLElement {
   }
 
   async _startLegacy(config) {
+    const generation = this._streamGeneration;
     const pc = new RTCPeerConnection({
       iceServers: config.iceServers || [],
     });
@@ -364,6 +396,7 @@ class AlarmWebRTCCard extends HTMLElement {
     };
 
     pc.ontrack = (e) => {
+      if (generation !== this._streamGeneration) return;
       if (!video.srcObject) {
         video.srcObject = e.streams[0];
         this._markConnected();
@@ -373,6 +406,7 @@ class AlarmWebRTCCard extends HTMLElement {
     };
 
     pc.oniceconnectionstatechange = () => {
+      if (generation !== this._streamGeneration) return;
       const s = pc.iceConnectionState;
       this._log("Legacy ICE state", s);
       if (s === "disconnected" || s === "failed" || s === "closed") {
@@ -387,6 +421,7 @@ class AlarmWebRTCCard extends HTMLElement {
     this.ws = ws;
 
     ws.onopen = () => {
+      if (generation !== this._streamGeneration) return;
       this._log("Legacy WS connected");
       ws.send("HELLO 2.0.1");
     };
@@ -396,6 +431,7 @@ class AlarmWebRTCCard extends HTMLElement {
     };
 
     ws.onmessage = async (msg) => {
+      if (generation !== this._streamGeneration) return;
       if (msg.data.startsWith("HELLO")) {
         ws.send(`START_SESSION ${config.cameraAuthToken}`);
         return;
@@ -424,8 +460,11 @@ class AlarmWebRTCCard extends HTMLElement {
         }
 
         await pc.setRemoteDescription(remoteOffer);
+        if (generation !== this._streamGeneration) return;
         const answer = await pc.createAnswer();
+        if (generation !== this._streamGeneration) return;
         await pc.setLocalDescription(answer);
+        if (generation !== this._streamGeneration) return;
 
         // Wait for ICE gathering to complete before sending answer,
         // so the SDP includes TURN relay candidates.
@@ -456,6 +495,7 @@ class AlarmWebRTCCard extends HTMLElement {
       if (data.ice) {
         try {
           await pc.addIceCandidate(data.ice);
+        if (generation !== this._streamGeneration) return;
         } catch (e) {
           this._log("Failed to add ICE candidate", e);
         }
@@ -463,6 +503,7 @@ class AlarmWebRTCCard extends HTMLElement {
     };
 
     ws.onclose = () => {
+      if (generation !== this._streamGeneration) return;
       const wasConnected = this._connected;
       this._log("Legacy WS closed");
       this._connected = false;
@@ -561,6 +602,7 @@ class AlarmWebRTCCard extends HTMLElement {
   }
 
   async _startJanus(config) {
+    const generation = this._streamGeneration;
     const pc = new RTCPeerConnection({
       iceServers: config.iceServers || [],
     });
@@ -581,6 +623,7 @@ class AlarmWebRTCCard extends HTMLElement {
     };
 
     pc.ontrack = (e) => {
+      if (generation !== this._streamGeneration) return;
       if (!video.srcObject) {
         video.srcObject = e.streams[0];
         this._markConnected();
@@ -590,6 +633,7 @@ class AlarmWebRTCCard extends HTMLElement {
     };
 
     pc.oniceconnectionstatechange = () => {
+      if (generation !== this._streamGeneration) return;
       const s = pc.iceConnectionState;
       this._log("Janus ICE state", s);
       if (s === "disconnected" || s === "failed" || s === "closed") {
@@ -599,6 +643,10 @@ class AlarmWebRTCCard extends HTMLElement {
     };
 
     const ws = await this._openJanusWebSocket(config);
+    if (generation !== this._streamGeneration) {
+      ws.close();
+      return;
+    }
     this.ws = ws;
 
     let sessionId = null;
@@ -630,6 +678,7 @@ class AlarmWebRTCCard extends HTMLElement {
     };
 
     ws.onmessage = async (event) => {
+      if (generation !== this._streamGeneration) return;
       let msg;
       try {
         msg = JSON.parse(event.data);
@@ -746,9 +795,12 @@ class AlarmWebRTCCard extends HTMLElement {
         }
 
         await pc.setRemoteDescription(remoteJsep);
+        if (generation !== this._streamGeneration) return;
 
         const answer = await pc.createAnswer();
+        if (generation !== this._streamGeneration) return;
         await pc.setLocalDescription(answer);
+        if (generation !== this._streamGeneration) return;
 
         send({
           janus: "message",
@@ -763,6 +815,7 @@ class AlarmWebRTCCard extends HTMLElement {
       if (msg.candidate) {
         try {
           await pc.addIceCandidate(msg.candidate);
+        if (generation !== this._streamGeneration) return;
         } catch (err) {
           this._log("Failed to add Janus candidate", err);
         }
@@ -802,6 +855,7 @@ class AlarmWebRTCCard extends HTMLElement {
     };
 
     pc.onicecandidate = (e) => {
+      if (generation !== this._streamGeneration) return;
       if (e.candidate && sessionId && handleId) {
         send({
           janus: "trickle",
@@ -813,6 +867,7 @@ class AlarmWebRTCCard extends HTMLElement {
     };
 
     ws.onclose = () => {
+      if (generation !== this._streamGeneration) return;
       const wasConnected = this._connected;
       this._log("Janus WS closed");
       this._connected = false;
@@ -825,17 +880,30 @@ class AlarmWebRTCCard extends HTMLElement {
     };
   }
 
-  disconnectedCallback() {
-    clearTimeout(this._requestTimeout);
+  connectedCallback() {
+    // Lovelace reparents cards during phone rotation. Keep the peer connection
+    // alive if the same card returns within one second, then resume playback.
+    clearTimeout(this._disconnectGrace);
+    this._disconnectGrace = null;
+    const video = this.querySelector("video");
+    if (video?.srcObject && video.paused) video.play().catch(() => {});
+    if (this._hass) this.hass = this._hass;
+  }
 
-    if (this._retryTimer) {
+  disconnectedCallback() {
+    clearTimeout(this._disconnectGrace);
+    this._disconnectGrace = setTimeout(() => {
+      this._disconnectGrace = null;
+      if (this.isConnected) return;
+      clearTimeout(this._requestTimeout);
       clearTimeout(this._retryTimer);
       this._retryTimer = null;
-    }
-
-    this._teardownStream();
-    this._requesting = false;
-    this._connecting = false;
+      this._requestSerial += 1;
+      this._secureConfig = null;
+      this._teardownStream();
+      this._requesting = false;
+      this._connecting = false;
+    }, 1000);
   }
 }
 
