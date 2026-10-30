@@ -1,3 +1,12 @@
+## 2026.10.30b1 (beta)
+
+- Add count-only raw-versus-parsed light-discovery diagnostics for #115, including numeric system-ID and metadata-count normalization. Discovery behavior is unchanged; this is not a confirmed fix.
+- Apply live thermostat ambient-temperature events and display the forwarded/effective temperature when available, preserving paired averages until the coalesced API refresh confirms them.
+- Add `alarmdotcom.set_temporary_access` for existing users, with explicit account/system routing, timezone-aware date validation, fresh PIN-preserving updates, and server-response verification (#108).
+- Keep weekly schedules, access plans, user creation, and schedule clearing outside the initial temporary-access action.
+- Add focused #115 testing instructions and synthetic regression coverage. Extend independent November compatibility checks to 2026.11.0b1 as well as b0.
+- Align manifest/library versions and prepare tag-driven prerelease packaging with `alarmdotcom.zip` and version-specific notes. Published b0 remains unchanged.
+
 ## 2026.10.30b0 (beta)
 
 - Keep HTTP session keep-alive running after a WebSocket reconnect; cap reconnect waits and token fetch time.

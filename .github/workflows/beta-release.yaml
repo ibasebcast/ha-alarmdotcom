@@ -31,6 +31,9 @@ jobs:
         uses: pre-commit/action@v3.0.1
 
   november:
+    strategy:
+      matrix:
+        core: ["2026.11.0b0", "2026.11.0b1"]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,7 +42,7 @@ jobs:
           python-version: '3.14'
       - name: Install November compatibility dependencies
         run: >-
-          pip install "homeassistant==2026.11.0b0" "pytest==9.0.3"
+          pip install "homeassistant==${{ matrix.core }}" "pytest==9.0.3"
           "PyTurboJPEG==2.6.1" beautifulsoup4 mashumaro phonenumbers pyhumps typer click rich
       - name: November compatibility checks
         env:

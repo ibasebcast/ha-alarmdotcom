@@ -120,6 +120,32 @@
         "cancel_auto_off": {
             "name": "Cancel auto-off timer",
             "description": "Cancel a pending auto-off timer for one or more Alarm.com lights."
+        },
+        "set_temporary_access": {
+            "name": "Set temporary user access",
+            "description": "Set start and end dates for an existing user. Preserves the PIN. Device synchronization may take additional time.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Alarm.com account",
+                    "description": "Select the loaded Alarm.com configuration entry."
+                },
+                "system_id": {
+                    "name": "System ID",
+                    "description": "System ID belonging to the selected account."
+                },
+                "user_id": {
+                    "name": "User ID",
+                    "description": "Existing user ID from the portal user page URL."
+                },
+                "begin": {
+                    "name": "Access start",
+                    "description": "ISO 8601 date and time including Z or an explicit UTC offset."
+                },
+                "end": {
+                    "name": "Access end",
+                    "description": "ISO 8601 date and time including Z or an explicit UTC offset, after the start."
+                }
+            }
         }
     },
     "selector": {

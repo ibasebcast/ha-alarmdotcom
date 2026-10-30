@@ -82,7 +82,10 @@ def current_temperature_fn(controller: pyadc.ThermostatController, thermostat_id
     resource = controller.get(thermostat_id)
     if resource is None:
         return None
-    return resource.attributes.ambient_temp
+    # The portal displays the effective reading, which may include paired
+    # remote sensors. Zero is valid, so fall back only when it is absent.
+    forwarded = resource.attributes.forwarding_ambient_temp
+    return forwarded if forwarded is not None else resource.attributes.ambient_temp
 
 
 @callback
