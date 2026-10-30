@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.alarmdotcom import async_unload_entry
+from custom_components.alarmdotcom.access_service import SERVICE_SET_TEMPORARY_ACCESS
 from custom_components.alarmdotcom.const import DOMAIN, SERVICE_BYPASS_SENSOR
 
 
@@ -33,11 +34,13 @@ async def test_services_are_removed_when_the_last_loaded_entry_unloads(
     """The ordinary case: nothing else is loaded, so the services must go."""
     entry = _loaded_entry(hass)
     hass.services.async_register(DOMAIN, SERVICE_BYPASS_SENSOR, AsyncMock())
+    hass.services.async_register(DOMAIN, SERVICE_SET_TEMPORARY_ACCESS, AsyncMock())
 
     with patch.object(hass.config_entries, "async_unload_platforms", AsyncMock(return_value=True)):
         await async_unload_entry(hass, entry)
 
     assert not hass.services.has_service(DOMAIN, SERVICE_BYPASS_SENSOR)
+    assert not hass.services.has_service(DOMAIN, SERVICE_SET_TEMPORARY_ACCESS)
 
 
 async def test_a_disabled_sibling_must_not_keep_the_services_registered(
@@ -58,6 +61,7 @@ async def test_a_disabled_sibling_must_not_keep_the_services_registered(
     disabled.add_to_hass(hass)
 
     hass.services.async_register(DOMAIN, SERVICE_BYPASS_SENSOR, AsyncMock())
+    hass.services.async_register(DOMAIN, SERVICE_SET_TEMPORARY_ACCESS, AsyncMock())
 
     with patch.object(hass.config_entries, "async_unload_platforms", AsyncMock(return_value=True)):
         await async_unload_entry(hass, entry)

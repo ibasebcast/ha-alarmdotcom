@@ -48,6 +48,7 @@ from homeassistant.exceptions import (
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 
+from .access_service import SERVICE_SET_TEMPORARY_ACCESS, async_register_access_service
 from .activity_history import ActivityFeedTracker
 from .auto_off import AutoOffManager
 from .camera_api import AlarmCameraSession
@@ -219,6 +220,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     hass.bus.async_listen(DEBUG_REQ_EVENT, handle_alarmdotcom_debug_request_event)
 
+    async_register_access_service(hass)
     _async_register_services(hass, config_entry, hub, auto_off_manager)
 
     LOGGER.info("%s: Finished initializing Alarmdotcom from config entry.", __name__)
@@ -492,7 +494,10 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
         if e.entry_id != config_entry.entry_id and e.state is ConfigEntryState.LOADED
     ]
     if not remaining:
-        for service in (SERVICE_BYPASS_SENSOR, SERVICE_UNBYPASS_SENSOR, SERVICE_SET_AUTO_OFF, SERVICE_CANCEL_AUTO_OFF):
+        for service in (
+            SERVICE_BYPASS_SENSOR, SERVICE_UNBYPASS_SENSOR, SERVICE_SET_AUTO_OFF,
+            SERVICE_CANCEL_AUTO_OFF, SERVICE_SET_TEMPORARY_ACCESS,
+        ):
             if hass.services.has_service(DOMAIN, service):
                 hass.services.async_remove(DOMAIN, service)
 

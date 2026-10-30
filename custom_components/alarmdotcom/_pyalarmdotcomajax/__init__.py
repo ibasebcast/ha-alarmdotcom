@@ -17,6 +17,7 @@ from urllib.parse import urlencode
 import aiohttp
 import humps
 from _pyalarmdotcomajax._version import __version__
+from _pyalarmdotcomajax.access import DeviceAccessManager
 from _pyalarmdotcomajax.const import (
     API_URL_BASE,
     REQUEST_RETRY_LIMIT,
@@ -205,6 +206,7 @@ class AlarmBridge:
         # (but not initialized) AlarmBridge to populate the adc cli command list.
 
         self._initialized = False
+        self.device_access = DeviceAccessManager(self)
 
         # Event Broker
         self.events = EventBroker()
