@@ -187,7 +187,21 @@ class ThermostatController(BaseController[Thermostat]):
             if self._bridge.auth_controller.use_celsius:
                 adjusted_value = round(((adjusted_value - 32) * 5 / 9), 1)
 
-            if message.subtype == ResourcePropertyChangeType.CoolSetPoint:
+            if message.subtype == ResourcePropertyChangeType.AmbientTemperature:
+                updated_data["ambientTemp"] = adjusted_value
+                # A body-probe event does not establish the remote-sensor
+                # average. Preserve a distinct/paired reading until the
+                # coalesced API refresh returns the authoritative value.
+                attributes = adc_resource.attributes
+                forwarded = attributes.forwarding_ambient_temp
+                uses_remote_reading = attributes.is_paired or (
+                    forwarded is not None and forwarded != attributes.ambient_temp
+                )
+                if not uses_remote_reading and forwarded is not None:
+                    updated_data["forwardingAmbientTemp"] = adjusted_value
+                self._request_reconcile("thermostat temperature changed")
+
+            elif message.subtype == ResourcePropertyChangeType.CoolSetPoint:
                 updated_data[ATTR_COOL_SETPOINT] = adjusted_value
                 updated_data[ATTR_DESIRED_COOL_SETPOINT] = adjusted_value
 

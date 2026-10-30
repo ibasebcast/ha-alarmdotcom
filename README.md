@@ -55,9 +55,9 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Beta version:** `2026.10.30b0`, developed on `beta/2026.10.30`.
+**Beta prepared for release:** `2026.10.30b1`, developed on `release/2026.10.30b1`.
 
-This beta adapts reliability fixes and device features from the community forks. The stable release remains `2026.10.28`. See [beta notes](release-notes/2026.10.30b0.md) for the changes and testing details.
+This beta adds targeted light-discovery diagnostics for #115, temporary user-access scheduling, and thermostat temperature fixes on top of b0. The stable release remains `2026.10.28`. See [beta notes](release-notes/2026.10.30b1.md) for changes, limitations, and testing steps.
 
 ### What's changed since 2026.10.26
 
@@ -71,7 +71,7 @@ This beta adapts reliability fixes and device features from the community forks.
 
 ### Home Assistant compatibility
 
-The automated full suite targets Home Assistant 2026.10.4. Independent compatibility checks pass against 2026.11.0b0 using its actual core APIs, covering device metadata and parent links, configuration and WebSocket schemas, thermostat temperatures and units, camera state secrecy, and platform unloading. November's published custom-component test-helper package is not yet available, so these checks run independently of the October full-suite helper.
+The automated full suite targets Home Assistant 2026.10.4. Independent compatibility checks pass against 2026.11.0b0 and 2026.11.0b1 using their actual core APIs, covering device metadata and parent links, configuration and WebSocket schemas, thermostat temperatures and units, camera state secrecy, and platform unloading. November's published custom-component test-helper package is not yet available, so these checks run independently of the October full-suite helper.
 
 Home Assistant 2026.11.0b0 is still an upstream beta. These checks do not claim validation against the final November release or every hardware/provider combination.
 

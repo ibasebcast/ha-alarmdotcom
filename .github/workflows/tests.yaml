@@ -21,6 +21,9 @@ jobs:
       run: pytest tests/ -v
 
   november-compatibility:
+    strategy:
+      matrix:
+        core: ["2026.11.0b0", "2026.11.0b1"]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -29,8 +32,8 @@ jobs:
         python-version: "3.14"
     - name: Install November beta and compatibility-test dependencies
       run: >-
-        pip install "homeassistant==2026.11.0b0" "pytest==9.0.3"
-        "PyTurboJPEG==1.8.2" beautifulsoup4 mashumaro phonenumbers pyhumps typer click rich
+        pip install "homeassistant==${{ matrix.core }}" "pytest==9.0.3"
+        "PyTurboJPEG==2.6.1" beautifulsoup4 mashumaro phonenumbers pyhumps typer click rich
     - name: Test actual November core APIs without the October-only test helper
       env:
         PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"

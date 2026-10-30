@@ -68,3 +68,42 @@ cancel_auto_off:
     entity:
       domain: light
       integration: alarmdotcom
+set_temporary_access:
+  name: Set temporary user access
+  description: >-
+    Set UTC or offset-aware start and end dates for an existing user's access.
+    Preserves the existing PIN. Weekly schedules and access plans are unsupported.
+    Saving does not confirm that all panels and locks have synchronized.
+  fields:
+    config_entry_id:
+      name: Alarm.com account
+      required: true
+      selector:
+        config_entry:
+          integration: alarmdotcom
+    system_id:
+      name: System ID
+      description: Alarm.com system ID belonging to the selected account.
+      required: true
+      selector:
+        text:
+    user_id:
+      name: User ID
+      description: Existing Alarm.com user ID from the portal user page URL.
+      required: true
+      selector:
+        text:
+    begin:
+      name: Access start
+      description: ISO 8601 date and time including Z or an explicit UTC offset.
+      required: true
+      example: "2027-01-05T12:00:00-05:00"
+      selector:
+        text:
+    end:
+      name: Access end
+      description: ISO 8601 date and time including Z or an explicit UTC offset, after the start.
+      required: true
+      example: "2027-01-10T12:00:00-05:00"
+      selector:
+        text:
