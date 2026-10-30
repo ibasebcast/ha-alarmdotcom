@@ -72,6 +72,7 @@ from _pyalarmdotcomajax.exceptions import (
     UnknownDevice,
     UnsupportedOperation,
 )
+from _pyalarmdotcomajax.light_discovery import summarize_light_discovery
 from _pyalarmdotcomajax.models import (
     AdcManagedDeviceT,
     AdcMiniSuccessResponse,
@@ -540,8 +541,13 @@ class AlarmBridge:
                     log.debug(
                         "Light discovery: requesting active system detail for light IDs."
                     )
+                    log.debug(
+                        "Light discovery probe: requested system is present in loaded systems: %s.",
+                        any(system.id == system_id for system in self._systems.items),
+                    )
                     system_detail = await self.get(
                         "systems/systems", system_id,
+                        light_discovery_system_id=system_id,
                     )
                     system_resources = (
                         system_detail.data
@@ -1084,6 +1090,7 @@ class AlarmBridge:
         success_response_class: type[T] | type[SuccessDocument] = SuccessDocument,
         *,
         allow_login_repair: bool = True,
+        light_discovery_system_id: str | None = None,
         **kwargs: Any,
     ) -> T | SuccessDocument:
         """Make request to the api and return response data."""
@@ -1120,7 +1127,8 @@ class AlarmBridge:
                 )
 
                 try:
-                    response = success_response_class.from_json(await raw_resp.text())
+                    response_text = await raw_resp.text()
+                    response = success_response_class.from_json(response_text)
                 except json.JSONDecodeError:
                     # Triggered when the response is not valid JSON.
                     raise UnexpectedResponse("Response was not valid JSON.") from None
@@ -1129,6 +1137,15 @@ class AlarmBridge:
                     pass
 
                 if isinstance(response, success_response_class):
+                    if light_discovery_system_id is not None and log.isEnabledFor(logging.DEBUG):
+                        try:
+                            summary = summarize_light_discovery(
+                                json.loads(response_text), response.data, light_discovery_system_id,
+                            )
+                            log.debug("Light discovery probe: %s", summary)
+                        except Exception as probe_error:
+                            # A diagnostic must never break discovery or log a payload-bearing exception.
+                            log.debug("Light discovery probe unavailable (%s).", type(probe_error).__name__)
                     return response
 
                 # JsonAPI and AdcMini failure responses evaluate to the standard JSON:API FailureDocument.
@@ -1213,6 +1230,7 @@ class AlarmBridge:
             accept_types,
             success_response_class=success_response_class,
             allow_login_repair=False,
+            light_discovery_system_id=light_discovery_system_id,
             **kwargs,
         )
 
