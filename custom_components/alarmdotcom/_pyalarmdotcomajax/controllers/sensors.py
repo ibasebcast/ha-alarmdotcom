@@ -155,6 +155,9 @@ class SensorController(BaseController[Sensor]):
                         else SensorState.CLOSED,
                         adc_resource.api_resource,
                     )
+                    # The settle assumes the sensor ended closed. Ask Alarm.com once the pulse has played out,
+                    # so a sensor that was reopened (or never closed) does not sit on an assumed state.
+                    self._request_reconcile("opened/closed event")
 
             #
             # BYPASS UPDATES

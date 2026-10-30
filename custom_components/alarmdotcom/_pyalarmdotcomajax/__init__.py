@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import json
 import logging
+import time
 from collections.abc import AsyncIterator, Callable
 from datetime import datetime
 from types import TracebackType
@@ -159,11 +161,28 @@ __all__: tuple[str, ...] = (  # noqa: RUF022
     "water_valve",
     # controllers
     "AdcControllerT",
-    "ResourceEventMessage",
 )
 T = TypeVar("T", bound=JsonApiBaseElement)
 
 log = logging.getLogger(__name__)
+
+# Set while a login is running. Requests made by the login itself must not try to repair the session: the repair
+# would log in again from inside the login, and under _login_lock it waits on the lock it already holds.
+_LOGIN_IN_PROGRESS: contextvars.ContextVar[bool] = contextvars.ContextVar("adc_login_in_progress", default=False)
+
+# A login that has not finished in this long is abandoned, so a stalled Alarm.com cannot hold _login_lock forever.
+LOGIN_REPAIR_TIMEOUT_S = 60
+
+# After a failed session repair, no further login is attempted until this backoff passes; it doubles on each failure.
+# A wrong password, a changed password or a locked account would otherwise be retried by every waiting request and
+# every poll (several times a minute), which keeps the account locked.
+LOGIN_BACKOFF_INITIAL_S = 60
+LOGIN_BACKOFF_MAX_S = 30 * 60
+
+# How long a reconcile waits before fetching. Coalesces bursts (several zones changing at once, a reconnect that
+# lands with events) into one request, and lets an OpenedClosed pulse play out first.
+RECONCILE_DELAY_S = 3.0
+
 
 FORK_NAME = "ibasebcast"
 FORK_REPO = "https://github.com/ibasebcast/pyalarmdotcomajax"
@@ -190,6 +209,10 @@ class AlarmBridge:
         # Event Broker
         self.events = EventBroker()
 
+        # Debounced device re-fetch; see request_reconcile().
+        self._reconcile_task: asyncio.Task | None = None
+        self._reconcile_requested = False
+
         # Session
         self._websession: aiohttp.ClientSession | None = None
         self.ajax_key: str | None = None
@@ -202,6 +225,10 @@ class AlarmBridge:
         # someone else while it waited, and skip its own login.
         self._login_lock = asyncio.Lock()
         self._login_generation = 0
+        # Outcome of the latest session repair, and when the next one may be attempted.
+        self._last_login_error: BaseException | None = None
+        self._login_retry_at = 0.0
+        self._login_backoff_s: float = LOGIN_BACKOFF_INITIAL_S
 
         # Session Controllers
         self._auth_controller = AuthenticationController(
@@ -295,7 +322,81 @@ class AlarmBridge:
     async def login(self) -> None:
         """Login to alarm.com."""
 
-        return await self._auth_controller.login()
+        token = _LOGIN_IN_PROGRESS.set(True)
+        try:
+            return await self._auth_controller.login()
+        finally:
+            _LOGIN_IN_PROGRESS.reset(token)
+
+    async def _repair_session(self, login_generation: int) -> None:
+        """
+        Log in again after the session expired, once for all concurrent callers.
+
+        login_generation is the generation the caller saw before its request went out. If any login attempt has
+        happened since, its outcome stands for this caller too: a success means retry the request, a failure means
+        fail without another attempt. A failed attempt also starts a backoff that later callers respect.
+
+        Raises:
+            OtpRequired / MustConfigureMfa: Alarm.com wants a one-time code; only reauthentication can fix it.
+            AuthenticationFailed: The credentials were rejected (or were, within the backoff).
+            ServiceUnavailable: Alarm.com could not be reached or answered unexpectedly.
+
+        """
+
+        async with self._login_lock:
+            if login_generation != self._login_generation:
+                if self._last_login_error is None:
+                    log.debug("Session already repaired by another task; retrying.")
+                    return
+                raise self._repeat_login_failure()
+
+            if time.monotonic() < self._login_retry_at:
+                raise self._repeat_login_failure()
+
+            log.info("Attempting to repair session.")
+            token = _LOGIN_IN_PROGRESS.set(True)
+            try:
+                async with asyncio.timeout(LOGIN_REPAIR_TIMEOUT_S):
+                    await self._auth_controller.login()
+            except (OtpRequired, MustConfigureMfa) as err:
+                self._record_login_failure(err)
+                raise
+            except AuthenticationException as err:
+                self._record_login_failure(err)
+                raise AuthenticationFailed("Session repair failed: the login was rejected.") from err
+            except (TimeoutError, aiohttp.ClientError, AlarmdotcomException) as err:
+                self._record_login_failure(err)
+                raise ServiceUnavailable("Session repair failed: Alarm.com could not complete the login.") from err
+            finally:
+                _LOGIN_IN_PROGRESS.reset(token)
+                self._login_generation += 1
+
+            self._last_login_error = None
+            self._login_retry_at = 0.0
+            self._login_backoff_s = LOGIN_BACKOFF_INITIAL_S
+
+    def _record_login_failure(self, err: BaseException) -> None:
+        """Remember a failed repair and start (or lengthen) the backoff before the next one."""
+
+        self._last_login_error = err
+        self._login_retry_at = time.monotonic() + self._login_backoff_s
+        log.warning(
+            "Alarm.com session repair failed (%s). Not logging in again for %s seconds.",
+            type(err).__name__,
+            round(self._login_backoff_s),
+        )
+        self._login_backoff_s = min(self._login_backoff_s * 2, LOGIN_BACKOFF_MAX_S)
+
+    def _repeat_login_failure(self) -> AlarmdotcomException:
+        """Build the error for a caller that arrives while the latest repair's failure still stands."""
+
+        err = self._last_login_error
+
+        if isinstance(err, (OtpRequired, MustConfigureMfa)):
+            return err
+        if isinstance(err, AuthenticationException):
+            return AuthenticationFailed("A recent session repair was rejected; waiting before trying again.")
+        return ServiceUnavailable("A recent session repair failed; waiting before trying again.")
 
     async def get_activity_history(
         self,
@@ -525,13 +626,66 @@ class AlarmBridge:
             if controller.initialized
         ]
 
-        if refresh_tasks:
-            await asyncio.gather(*refresh_tasks, return_exceptions=True)
+        if not refresh_tasks:
+            return
 
+        results = await asyncio.gather(*refresh_tasks, return_exceptions=True)
+
+        # One controller failing must not stop the others, but an authentication failure has to reach the
+        # caller: it is how the hub learns that the session cannot be repaired and reauthentication is needed.
+        # NotAuthorized is not one. It is Alarm.com's 406/423 for an endpoint this account cannot use (a feature
+        # missing from the plan, a device type disabled), and the session is fine. Passing it up made the hub log in
+        # again every few minutes for as long as that endpoint kept refusing.
+        for result in results:
+            if isinstance(result, AuthenticationException) and not isinstance(result, NotAuthorized):
+                raise result
+            if isinstance(result, NotAuthorized):
+                log.debug("A controller refresh was refused by Alarm.com (not a login problem): %s", result)
+            elif isinstance(result, Exception):
+                log.debug("A controller refresh failed: %r", result)
+
+
+    def request_reconcile(self, reason: str, delay_s: float = RECONCILE_DELAY_S) -> None:
+        """
+        Re-fetch device state shortly, coalescing a burst of requests into one fetch.
+
+        WebSocket events are deltas with no replay, so any event that arrives while the socket is between
+        connections is lost, and an OpenedClosed event only implies that the sensor ended closed. Each of those
+        moments asks for a reconcile: one device-catalog request that carries every sensor, partition, lock,
+        etc., applied under BaseController's guard so it cannot undo an event that arrived after it was sent.
+        """
+
+        self._reconcile_requested = True
+
+        if self._reconcile_task is not None and not self._reconcile_task.done():
+            # The running task re-checks the flag after its fetch, so a request made while that fetch is in
+            # flight still gets a fetch that starts after it.
+            return
+
+        self._reconcile_task = asyncio.create_task(self._reconcile(reason, delay_s), name="Alarm.com reconcile")
+
+    async def _reconcile(self, reason: str, delay_s: float) -> None:
+        """Run requested reconciles until no new request arrived during the last fetch."""
+
+        while self._reconcile_requested:
+            await asyncio.sleep(delay_s)
+            self._reconcile_requested = False
+
+            if not self._initialized or not self._device_catalogs.initialized:
+                return
+
+            log.debug("Reconciling device state (%s).", reason)
+
+            try:
+                await self._device_catalogs._refresh()  # noqa: SLF001
+            except Exception:
+                # The periodic full refresh is the backstop; a failed reconcile must not take anything down.
+                log.debug("Reconcile failed (%s).", reason, exc_info=True)
+                return
 
     async def start_event_monitoring(
         self, ws_status_callback: EventBrokerCallbackT | None = None
-    ) -> None | Callable:
+    ) -> Callable | None:
         """Start real-time event monitoring."""
 
         await self._ws_controller.initialize()
@@ -749,6 +903,10 @@ class AlarmBridge:
 
         self._ws_controller.stop()
 
+        if self._reconcile_task is not None and not self._reconcile_task.done():
+            self._reconcile_task.cancel()
+        self._reconcile_task = None
+
         if self._websession:
             await self._websession.close()
         self._websession = None
@@ -950,6 +1108,11 @@ class AlarmBridge:
             async with self.create_request(
                 method, url, accept_types, use_ajax_key=True, **kwargs
             ) as raw_resp:
+                # Color PUTs can confirm with 204 and no document. Errors still
+                # follow the normal status/schema checks and session-repair path.
+                if method.lower() == "put" and raw_resp.status == 204:
+                    return success_response_class.from_dict({"data": None})
+
                 # Load the response as JSON:API object.
 
                 response: FailureDocument | JsonApiBaseElement | MetaDocument | None = (
@@ -1037,30 +1200,21 @@ class AlarmBridge:
                 raise UnexpectedResponse
 
         except AuthenticationFailed as err:
-            if err.can_autocorrect and allow_login_repair:
-                try:
-                    async with self._login_lock:
-                        # Another task may have already repaired the session while we waited
-                        # on the lock. Only log in if nobody else has done so since we started.
-                        if login_generation == self._login_generation:
-                            log.info("Attempting to repair session.")
-                            await self._auth_controller.login()
-                            self._login_generation += 1
-                        else:
-                            log.debug(
-                                "Session already repaired by another task; retrying."
-                            )
-                    return await self.request(
-                        method,
-                        url,
-                        success_response_class=success_response_class,
-                        allow_login_repair=False,
-                        **kwargs,
-                    )
-                except Exception as err:
-                    raise AuthenticationFailed from err
+            if not (err.can_autocorrect and allow_login_repair) or _LOGIN_IN_PROGRESS.get():
+                raise
 
-            raise
+            await self._repair_session(login_generation)
+
+        # Outside the except block, so an error on the retry keeps its own type instead of being reported as an
+        # authentication failure, and the retry asks for the same response type as the original request.
+        return await self.request(
+            method,
+            url,
+            accept_types,
+            success_response_class=success_response_class,
+            allow_login_repair=False,
+            **kwargs,
+        )
 
     def _generate_request_url(
         self, path: ResourceType | str, id: str | set[str] | None
@@ -1174,7 +1328,7 @@ class AlarmBridge:
                     **kwargs,
                 )
 
-            except (TimeoutError, aiohttp.ClientResponseError) as e:
+            except (TimeoutError, aiohttp.ClientResponseError, aiohttp.ClientConnectionError) as e:
                 if retries == REQUEST_RETRY_LIMIT:
                     raise ServiceUnavailable from e
                 retries += 1

@@ -102,6 +102,7 @@ PLATFORMS = [
     Platform.CLIMATE,
     Platform.VALVE,
     Platform.CAMERA,
+    Platform.EVENT,
 ]
 
 # #
@@ -110,3 +111,8 @@ PLATFORMS = [
 
 CONF_CAMERA_MFA_CODE = "mfa_code"
 CONF_CAMERA_MFA_COOKIE = "mfa_cookie"
+
+# Central Scene key attributes follow Z-Wave JS naming. Scene 1 is the up/on
+# paddle and scene 2 the down/off paddle on supported switches.
+EVENT_SCENE = "alarmdotcom_scene"
+SCENE_ACTIONS = ("KeyPressed", "KeyReleased", "KeyHeldDown", "KeyPressed2x", "KeyPressed3x", "KeyPressed4x", "KeyPressed5x")

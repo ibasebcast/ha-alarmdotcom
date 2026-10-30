@@ -22,6 +22,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
 from .binary_sensor_words import LANG_DOOR, LANG_WINDOW
+from .camera_detection import CameraDetectionSensor
 from .const import DOMAIN
 from .entity import (
     AdcControllerT,
@@ -82,6 +83,18 @@ async def async_setup_entry(
             for device in hub.api.managed_devices.values()
         )
 
+    camera_ids = {camera.id for camera in hub.api.cameras}
+    if (session := config_entry.runtime_data.camera_session) is not None:
+        try:
+            camera_ids.update(str(camera["id"]) for camera in await session.get_camera_list())
+        except Exception:
+            # Video account permissions must never prevent security sensors loading.
+            log.debug("Camera analytics discovery unavailable; security sensors continue.")
+    entities.extend(
+        CameraDetectionSensor(hub, resource_id, classification)
+        for resource_id in sorted(camera_ids)
+        for classification in ("person", "vehicle", "animal", "package")
+    )
     async_add_entities(entities)
 
     current_entity_ids = {entity.entity_id for entity in entities}

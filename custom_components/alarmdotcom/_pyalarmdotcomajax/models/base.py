@@ -179,9 +179,12 @@ class AdcSubtypedResource(
 
         super().__post_init__()
 
-        self.subtype = (
-            self.resource_subtypes(getattr(self.attributes, "device_type", None)) if self.resource_subtypes else None
-        )
+        # Subclasses declare `resource_subtypes = SensorSubtype` as a plain class attribute, but the dataclass
+        # __init__ still assigns this field's default (None) on the instance, which hides it. Fall back to the
+        # class attribute, or every subtype comes out None and checks such as "is this a motion sensor" never match.
+        subtypes = self.resource_subtypes or type(self).resource_subtypes
+
+        self.subtype = subtypes(getattr(self.attributes, "device_type", None)) if subtypes else None
 
 
 DeviceState = TypeVar("DeviceState", bound=Enum)

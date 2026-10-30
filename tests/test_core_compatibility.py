@@ -13,6 +13,7 @@ from custom_components.alarmdotcom import _pyalarmdotcomajax as pyadc
 from custom_components.alarmdotcom.camera import AlarmDotComCamera
 from custom_components.alarmdotcom.climate import AdcClimateEntity
 from custom_components.alarmdotcom.config_flow import ADCFlowHandler
+from custom_components.alarmdotcom.device_trigger import TRIGGER_SCHEMA
 from custom_components.alarmdotcom.entity import device_info_fn
 from custom_components.alarmdotcom.hub import AlarmHub
 from custom_components.alarmdotcom.schema import vol
@@ -111,3 +112,13 @@ def test_hub_unloads_platforms_once():
     assert asyncio.run(hub.close()) is True
     hub.api.close.assert_awaited_once()
     hub.hass.config_entries.async_unload_platforms.assert_awaited_once()
+
+
+def test_scene_device_trigger_schema_uses_core_schema_library():
+    """The new device-trigger schema must compose with the running core APIs."""
+
+    config = TRIGGER_SCHEMA({
+        "platform": "device", "domain": "alarmdotcom", "device_id": "device-1",
+        "type": "scene_action", "subtype": "scene_001", "value": "KeyPressed2x",
+    })
+    assert config["value"] == "KeyPressed2x"

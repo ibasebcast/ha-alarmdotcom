@@ -280,20 +280,29 @@ class AuthenticationController:
                         raise AuthenticationFailed("Account is locked.")
                     return
 
-            except TimeoutError as err:
+            except AuthenticationFailed:
+                # Alarm.com said no: wrong credentials or a locked account.
+                raise
+
+            # Only Alarm.com's own verdict above means the credentials are bad. A server error or a dropped
+            # connection says nothing about them, and reporting it as an authentication failure sends Home
+            # Assistant to "reauthentication required", which it never retries on its own.
+            except (TimeoutError, aiohttp.ClientConnectionError) as err:
                 if retries == const.REQUEST_RETRY_LIMIT:
                     raise ServiceUnavailable from err
                 retries += 1
                 continue
 
-            except (
-                aiohttp.ClientResponseError,
-                AttributeError,
-                IndexError,
-                Exception,
-                KeyError,
-            ) as err:
+            except aiohttp.ClientResponseError as err:
+                if err.status >= 500 or err.status == 429:
+                    if retries == const.REQUEST_RETRY_LIMIT:
+                        raise ServiceUnavailable from err
+                    retries += 1
+                    continue
                 raise AuthenticationFailed from err
+
+            except Exception as err:
+                raise UnexpectedResponse from err
 
     async def _login_otp_discovery(self) -> None:
         """Step 3 of login process. Determine whether OTP is required."""

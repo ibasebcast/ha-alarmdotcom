@@ -21,7 +21,9 @@
             },
             "otp_select_method": {
                 "title": "Select Two Factor Authentication Method",
-                "data": { "otp_method": "Method" }
+                "data": {
+                    "otp_method": "Method"
+                }
             }
         },
         "error": {
@@ -127,6 +129,18 @@
                 "sms": "Text Message",
                 "email": "Email"
             }
+        }
+    },
+    "device_automation": {
+        "trigger_type": {
+            "scene_action": "Scene action on {subtype}"
+        },
+        "trigger_subtype": {
+            "scene_001": "Scene 001 (on button)",
+            "scene_002": "Scene 002 (off button)"
+        },
+        "extra_fields": {
+            "value": "Value"
         }
     }
 }
