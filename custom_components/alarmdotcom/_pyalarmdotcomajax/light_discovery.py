@@ -26,6 +26,15 @@ def _shape(value: object, *, present: bool = True) -> str:
     return "unexpected"
 
 
+def _resource_id(value: object) -> str | None:
+    """Normalize numeric JSON IDs in memory, without ever returning them in logs."""
+    if type(value) is int:
+        return str(value)
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
 def summarize_light_discovery(
     payload: object, parsed: Resource | list[Resource], requested_system_id: str,
 ) -> dict[str, Any]:
@@ -42,7 +51,7 @@ def summarize_light_discovery(
     for system in systems:
         if not isinstance(system, dict):
             continue
-        response_matches_request |= system.get("id") == requested_system_id
+        response_matches_request |= _resource_id(system.get("id")) == requested_system_id
         relationships = system.get("relationships")
         light = relationships.get("lights") if isinstance(relationships, dict) else None
         if not isinstance(light, dict):
@@ -52,14 +61,17 @@ def summarize_light_discovery(
         shapes.add(_shape(light_data, present="data" in light))
         entries = light_data if isinstance(light_data, list) else [light_data] if isinstance(light_data, dict) else []
         raw_entries += len(entries)
-        raw_ids.update(item["id"] for item in entries if isinstance(item, dict)
-                       and isinstance(item.get("id"), str) and item["id"].strip())
+        for item in entries:
+            if isinstance(item, dict) and (identifier := _resource_id(item.get("id"))) is not None:
+                raw_ids.add(identifier)
         links = light.get("links")
         related_link_present |= isinstance(links, dict) and "related" in links
         meta = light.get("meta")
         count = meta.get("count") if isinstance(meta, dict) else None
         # Metadata count is useful for detecting a link-only relationship. Never
         # echo arbitrary metadata values, strings, names, or unusually large numbers.
+        if isinstance(count, str) and len(count) <= 4 and count.isascii() and count.isdecimal():
+            count = int(count)
         if type(count) is int and 0 <= count <= 1000:
             declared_count_present = True
             declared_count += count

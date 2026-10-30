@@ -114,3 +114,29 @@ async def test_probe_failure_does_not_prevent_successful_discovery(caplog):
     assert result.data.id == SYSTEM_ID
     assert "probe unavailable (ValueError)" in caplog.text
     assert "private-exception-marker" not in caplog.text
+
+
+@pytest.mark.parametrize("count", [1, "1"])
+def test_browser_numeric_ids_and_string_counts_are_normalized(count):
+    """Match the real browser response's types using neutral synthetic IDs."""
+    payload = document({"data": [{"id": "30001-1204", "type": "devices/light"}], "meta": {"count": count}})
+    payload["data"]["id"] = 20001
+    parsed = AdcSuccessDocumentSingle.from_dict(payload)
+    summary = summarize_light_discovery(payload, parsed.data, "20001")
+    assert parsed.data.id == "20001"
+    assert summary["response_matches_requested_system"]
+    assert summary["declared_count_present"]
+    assert summary["declared_count"] == 1
+    assert summary["raw_entries"] == summary["parsed_entries"] == 1
+    assert summary["raw_and_parsed_ids_match"]
+
+
+@pytest.mark.parametrize("count", ["private-metadata-marker", "100000000000000", True, -1, 1001])
+def test_invalid_count_values_are_never_echoed(count):
+    """Arbitrary metadata and booleans must not become logged numeric counts."""
+    payload = document({"data": [], "meta": {"count": count}})
+    parsed = AdcSuccessDocumentSingle.from_dict(payload)
+    summary = summarize_light_discovery(payload, parsed.data, SYSTEM_ID)
+    assert not summary["declared_count_present"]
+    assert summary["declared_count"] == 0
+    assert "private-metadata-marker" not in repr(summary)

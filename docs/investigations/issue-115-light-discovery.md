@@ -28,3 +28,11 @@ Possible outcomes on the affected account, once this investigation is ready for 
 - Both counts match and contain IDs: continue through the scoped lights request and model registration.
 
 Do not request another reporter installation or publish a speculative fix on the basis of these local tests. Actual affected-account behavior remains unverified. No additional issue attachment was inspected during this investigation.
+
+## Maintainer browser captures and Homebridge comparison
+
+The maintainer supplied browser responses directly. The system-detail example contains one light in `relationships.lights.data`, with `meta.count` represented as a numeric string. The root system ID is a JSON number, while its relationship references are strings. A neutral reproduction of this structure parses successfully and retains the light entry. The supplied identity response's selected system matches the pasted system-detail ID. These observations describe the working maintainer account and do not establish the behavior of the affected reporter account.
+
+Corrected the unreleased probe to normalize numeric system IDs for equality checks and accept bounded decimal-string metadata counts. Without this, the probe could falsely report a system mismatch or miss the declared count even though the main parser handles the response correctly. All public fixtures use synthetic IDs and names; the user's account data and attachments are not added to this repository.
+
+The Homebridge plugin delegates API access to `node-alarm-dot-com/node-alarm-dot-com` (reviewed at `403afb60560dac357d2a6b695664cd2181fee619`). That library obtains system IDs from `identities.data[].relationships.selectedSystem.data.id`, loads `systems/systems/{id}`, then reads `relationships.lights.data` and issues ID-scoped light requests. This differs from our available-system selection source and remains a comparison to investigate on the affected account, rather than a reason to change systems automatically. It batches queries into at most 50 device IDs. Its camera snapshot helper uses `video/snapshots/{cameraId}` to obtain a signed image URL, a separate avenue for future camera investigation. No panic activation or temporary user-access management implementation was found in the reviewed source.
