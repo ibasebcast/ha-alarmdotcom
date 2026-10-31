@@ -521,6 +521,11 @@ class AlarmBridge:
         # The Alarm.com web portal instead requests lights with explicit ids[].
         # Only use IDs actually advertised by the system/catalog; never guess IDs.
         if not self._lights.items:
+            # Keep fallback discovery bound to the selected system. Some accounts
+            # may depend on explicit request context as well as the URL ID.
+            # This candidate fix still needs account testing. Do not change session defaults
+            # or send this context on unrelated requests.
+            light_headers = {"context-id": self._available_device_catalogs.active_system_id}
             light_ids = set(device_ids_by_type.get(type(self._lights), []))
             light_ids.update(self._lights._target_device_ids)  # noqa: SLF001
             # Some accounts advertise light IDs in catalog relationships.
@@ -550,6 +555,7 @@ class AlarmBridge:
                     system_detail = await self.get(
                         "systems/systems", system_id,
                         light_discovery_system_id=system_id,
+                        headers=light_headers.copy(),
                     )
                     system_resources = (
                         system_detail.data
@@ -590,7 +596,7 @@ class AlarmBridge:
                 try:
                     # Use ids[] even for one light (not /lights/{id}).
                     scoped_path = self._build_light_discovery_path(light_ids)
-                    light_response = await self.get(scoped_path, None)
+                    light_response = await self.get(scoped_path, None, headers=light_headers.copy())
                     light_resources = (
                         light_response.data
                         if isinstance(light_response.data, list)
@@ -604,7 +610,7 @@ class AlarmBridge:
                 # Preserve unscoped discovery for accounts where it works.
                 # Some providers return HTTP 423, which is nonfatal.
                 try:
-                    response = await self.get(ResourceType.LIGHT, None)
+                    response = await self.get(ResourceType.LIGHT, None, headers=light_headers.copy())
                     resources = response.data if isinstance(response.data, list) else [response.data]
                     await self._lights._refresh(pre_fetched=resources)  # noqa: SLF001
                     log.info("Unscoped light discovery registered %d lights.", len(self._lights.items))

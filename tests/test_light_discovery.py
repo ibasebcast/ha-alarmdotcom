@@ -6,6 +6,7 @@ import pytest
 
 from custom_components.alarmdotcom._pyalarmdotcomajax import AlarmBridge
 from custom_components.alarmdotcom._pyalarmdotcomajax.controllers import AdcSuccessDocumentSingle
+from custom_components.alarmdotcom._pyalarmdotcomajax.models.base import ResourceType
 
 
 def test_single_light_uses_scoped_query():
@@ -26,16 +27,17 @@ def test_empty_light_ids_are_rejected():
         AlarmBridge._build_light_discovery_path(set())
 
 
+@pytest.mark.parametrize("light_count", [0, 4])
 @pytest.mark.parametrize("light_type", ["devices/light", "devices/switch", "provider/light"])
-async def test_system_lights_relationship_drives_scoped_discovery(light_type):
+async def test_system_lights_relationship_drives_scoped_discovery(light_type, light_count):
     """Exercise parsed system detail through the actual scoped discovery path."""
     bridge = AlarmBridge()
-    ids = [f"light-{number}" for number in range(4)]
+    ids = [f"light-{number}" for number in range(light_count)]
     response = AdcSuccessDocumentSingle.from_dict({
         "data": {
             "id": "system-1", "type": "systems/system", "attributes": {},
             "relationships": {
-                "lights": {"data": [{"id": item, "type": light_type} for item in ids], "meta": {"count": 4}},
+                "lights": {"data": [{"id": item, "type": light_type} for item in ids], "meta": {"count": light_count}},
                 "locks": {"data": [{"id": "lock-1", "type": "devices/lock"}]},
             },
         },
@@ -51,5 +53,19 @@ async def test_system_lights_relationship_drives_scoped_discovery(light_type):
     with patch.object(AlarmBridge, "resource_controllers", new_callable=PropertyMock, return_value=[]):
         await bridge.fetch_full_state()
     assert bridge.get.await_args_list[0].args == ("systems/systems", "system-1")
-    assert bridge.get.await_args_list[1].args == (AlarmBridge._build_light_discovery_path(set(ids)), None)
+    for call in bridge.get.await_args_list:
+        assert call.kwargs["headers"] == {"context-id": "system-1"}
+    if ids:
+        assert bridge.get.await_args_list[1].args == (AlarmBridge._build_light_discovery_path(set(ids)), None)
+    else:
+        assert bridge.get.await_args_list[1].args == (ResourceType.LIGHT, None)
     bridge._lights._refresh.assert_awaited_once_with(pre_fetched=[])
+
+
+def test_light_context_survives_common_header_builder():
+    """Caller context must reach the transport alongside normal auth headers."""
+    bridge = AlarmBridge()
+    bridge.ajax_key = "synthetic-ajax-key"
+    request = bridge.build_request_headers(headers={"context-id": "system-1"})
+    assert request["headers"]["context-id"] == "system-1"
+    assert request["headers"]["Ajaxrequestuniquekey"] == "synthetic-ajax-key"
