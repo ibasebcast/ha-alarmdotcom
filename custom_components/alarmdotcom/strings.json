@@ -147,6 +147,24 @@
                     "description": "ISO 8601 date and time including Z or an explicit UTC offset, after the start."
                 }
             }
+        },
+        "get_temporary_user_schedule": {
+            "name": "Get temporary user schedule",
+            "description": "Read the saved schedule and Alarm.com's numeric credential status without returning a PIN. This does not confirm synchronization on every device.",
+            "fields": {
+                "config_entry_id": {
+                    "name": "Alarm.com account",
+                    "description": "Select the loaded Alarm.com configuration entry."
+                },
+                "system_id": {
+                    "name": "System ID",
+                    "description": "System ID belonging to the selected account."
+                },
+                "user_id": {
+                    "name": "User ID",
+                    "description": "Existing user ID from the portal user page URL."
+                }
+            }
         }
     },
     "selector": {

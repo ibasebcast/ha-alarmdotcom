@@ -1,3 +1,7 @@
+## 2026.11.01b0 (unreleased test build)
+
+Camera reconnect recovery and signed snapshots; SMS/email code resend; temporary-access confirmation correction and read-only schedule action; README install buttons and login-permissions guidance. See [test notes](release-notes/2026.11.01b0.md). Pending live validation; not published.
+
 ## 2026.10.30b1 (beta)
 
 - Add count-only raw-versus-parsed light-discovery diagnostics for #115, including numeric system-ID and metadata-count normalization. Discovery behavior is unchanged; this is not a confirmed fix.

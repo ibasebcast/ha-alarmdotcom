@@ -55,9 +55,9 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Beta prepared for release:** `2026.10.30b1`, developed on `release/2026.10.30b1`.
+**Unreleased test build:** `2026.11.01b0`, developed on `release/2026.11.01b0`.
 
-This beta adds targeted light-discovery diagnostics for #115, temporary user-access scheduling, and thermostat temperature fixes on top of b0. The stable release remains `2026.10.28`. See [beta notes](release-notes/2026.10.30b1.md) for changes, limitations, and testing steps.
+This unreleased build combines camera reconnect recovery, signed snapshots, verification-code resend, and temporary-access confirmation and read-back. See [test-build notes](release-notes/2026.11.01b0.md). It has not been promoted to stable; the stable release remains `2026.10.28`.
 
 ### What's changed since 2026.10.26
 
@@ -87,6 +87,10 @@ Camera playback requires an installed, online camera. A listed camera that is no
 
 ### Install Using HACS (Recommended)
 
+[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ibasebcast&repository=ha-alarmdotcom&category=integration)
+
+The button above opens this repository in HACS on your Home Assistant instance (it uses [My Home Assistant](https://my.home-assistant.io/)). If you have not linked an instance, use the manual steps below.
+
 1. Open **HACS**
 2. Navigate to **Integrations**
 3. Click the **three-dot menu**
@@ -106,12 +110,22 @@ After restarting:
 
 **Settings → Devices & Services → Add Integration → Alarm.com**
 
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=alarmdotcom)
+
 ## Prerequisites
 Before setting up this integration you need the following
 
 1. An active alarm.com account
 2. Know the login for the alarm.com and be able to fill the One-Time Password
 3. Have a device connected to alarm.com
+
+### Permissions for a dedicated Alarm.com login
+
+Sign into the Alarm.com website using the **exact credentials configured in Home Assistant**. Confirm that this login can see and control the devices you want to use. Your main login's permissions do not automatically apply to a separate HA login.
+
+In Alarm.com's login management, grant access to the required device categories. In particular, enable **Lights/Thermostats** if you expect those devices in HA. Enable the **Activity** read permission for activity-history features. Reload the integration after changing permissions.
+
+Missing permissions can produce empty device lists or HTTP 423 responses while other device categories continue working. In #115, enabling Lights/Thermostats for the dedicated HA login immediately restored all four lights. Check permissions before reinstalling, capturing network traffic, or trying another build.
 
 ## Setup
 
@@ -495,3 +509,20 @@ See **LICENSE** (Apache-2.0) and **LICENSE-upstream** (MIT) for details.
 
  ## Also check the quality_scale.yaml for other notes
 -->
+
+### Read a temporary user's saved schedule
+
+The response-only `alarmdotcom.get_temporary_user_schedule` action accepts the same account, system ID, and user ID as the write action. In a script:
+
+```yaml
+- action: alarmdotcom.get_temporary_user_schedule
+  data:
+    config_entry_id: YOUR_CONFIG_ENTRY_ID
+    system_id: "YOUR_SYSTEM_ID"
+    user_id: "YOUR_USER_ID"
+  response_variable: saved_access
+```
+
+Response fields are `temporary_schedule` (an object with UTC `begin`/`end`, or null) and `credential_status` (Alarm.com's numeric status, or null). No PIN, raw access document, or arbitrary server description is returned. Status values are not translated into undocumented synchronization guarantees. A null temporary schedule does not mean access is unrestricted; another access type may apply.
+
+This is a standard HA action with response data. An existing MCP connection that supports those actions can call it without integration-specific MCP code. Reading confirms what Alarm.com reports, not enforcement or completed synchronization on every lock/panel. User/system name pickers and unrestricted/weekly access management remain outside this build.

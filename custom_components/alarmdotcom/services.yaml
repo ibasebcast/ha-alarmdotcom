@@ -107,3 +107,30 @@ set_temporary_access:
       example: "2027-01-10T12:00:00-05:00"
       selector:
         text:
+
+get_temporary_user_schedule:
+  name: Get temporary user schedule
+  description: >-
+    Read the saved temporary schedule and Alarm.com's numeric credential status.
+    Returns response data without a PIN. A null schedule means no temporary
+    schedule is saved, not that access is unrestricted. Reading does not confirm
+    that every panel or lock has synchronized.
+  fields:
+    config_entry_id:
+      name: Alarm.com account
+      required: true
+      selector:
+        config_entry:
+          integration: alarmdotcom
+    system_id:
+      name: System ID
+      description: Alarm.com system ID belonging to the selected account.
+      required: true
+      selector:
+        text:
+    user_id:
+      name: User ID
+      description: Existing Alarm.com user ID from the portal user page URL.
+      required: true
+      selector:
+        text:

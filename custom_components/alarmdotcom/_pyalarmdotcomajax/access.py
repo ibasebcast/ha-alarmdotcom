@@ -87,6 +87,57 @@ def build_access_payload(resource: dict[str, Any], user_id: str, begin: str, end
     return payload
 
 
+def access_dates_match(resource: dict[str, Any], user_id: str, begin: str, end: str) -> bool:
+    """Compare timezone-aware instants, accepting equivalent server formatting."""
+    if str(resource.get("id")) != user_id or resource.get("type") != "users/access/device-access":
+        return False
+    attributes = resource.get("attributes")
+    schedule = attributes.get("temporarySchedule") if isinstance(attributes, dict) else None
+    if not isinstance(schedule, dict):
+        return False
+    for key, expected in (("beginDateTime", begin), ("endDateTime", end)):
+        actual = schedule.get(key)
+        if not isinstance(actual, str):
+            return False
+        try:
+            parsed = datetime.fromisoformat(actual)
+            requested = datetime.fromisoformat(expected)
+        except ValueError:
+            return False
+        # Never assign a machine-local zone to an ambiguous server timestamp.
+        if parsed.utcoffset() is None or parsed.astimezone(UTC) != requested.astimezone(UTC):
+            return False
+    return True
+
+
+def public_access_schedule(resource: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Project an access document onto a strict credential-free response."""
+    if str(resource.get("id")) != user_id or resource.get("type") != "users/access/device-access":
+        raise AccessValidationError("Access response does not match the requested user.")
+    attributes = resource.get("attributes")
+    if not isinstance(attributes, dict) or "temporarySchedule" not in attributes:
+        raise AccessValidationError("Access response is missing schedule information.")
+    schedule = attributes["temporarySchedule"]
+    public_schedule = None
+    if schedule is not None:
+        if not isinstance(schedule, dict):
+            raise AccessValidationError("Access response contains an invalid temporary schedule.")
+        try:
+            begin = datetime.fromisoformat(schedule["beginDateTime"])
+            end = datetime.fromisoformat(schedule["endDateTime"])
+            start, finish = validate_period(begin, end)
+        except (KeyError, TypeError, ValueError):
+            raise AccessValidationError("Access response contains an invalid temporary schedule.") from None
+        public_schedule = {"begin": start, "end": finish}
+    # Preserve the server's numeric status without guessing at undocumented enum
+    # meanings. Never return arbitrary attributes, descriptions, or PIN values.
+    status = attributes.get("credentialStatus")
+    return {
+        "temporary_schedule": public_schedule,
+        "credential_status": status if type(status) is int else None,
+    }
+
+
 class DeviceAccessManager:
     """Perform serialized read-modify-write operations without retaining access data."""
 
@@ -94,6 +145,17 @@ class DeviceAccessManager:
         """Keep only the bridge and lock, never a cached PIN or access document."""
         self._bridge = bridge
         self._lock = asyncio.Lock()
+
+    async def get_temporary_user_schedule(self, user_id: str, system_id: str) -> dict[str, Any]:
+        """Read the current schedule without writing or retaining credential data."""
+        if not all(value and value.isascii() and value.isdecimal() for value in (user_id, system_id)):
+            raise AccessValidationError("User and system IDs must contain decimal digits only.")
+        async with self._lock:
+            current = await self._bridge.request(
+                "get", f"{API_URL_BASE}users/access/deviceAccesses/{user_id}",
+                success_response_class=AccessDocument, headers={"context-id": system_id},
+            )
+            return public_access_schedule(current.data, user_id)
 
     async def set_temporary_access(self, user_id: str, system_id: str, begin: datetime, end: datetime) -> None:
         """Update dates for one existing user and require a matching response."""
@@ -117,8 +179,13 @@ class DeviceAccessManager:
             )
             # A 200 response confirms the server saved dates, not that every
             # panel/lock has finished synchronizing the credential.
-            result = updated.data
-            if (str(result.get("id")) != user_id
-                    or result.get("type") != "users/access/device-access"
-                    or result.get("attributes", {}).get("temporarySchedule") != payload["temporarySchedule"]):
+            if access_dates_match(updated.data, user_id, start, finish):
+                return
+            # Some writes return a stale representation. Read the requested user
+            # once to verify persisted dates, without replaying the credential PUT.
+            confirmed = await self._bridge.request(
+                "get", url, success_response_class=AccessDocument,
+                headers={"context-id": system_id},
+            )
+            if not access_dates_match(confirmed.data, user_id, start, finish):
                 raise AccessValidationError("Alarm.com did not confirm the requested access dates. Check the portal before retrying.")
