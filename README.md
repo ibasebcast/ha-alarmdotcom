@@ -87,6 +87,10 @@ Camera playback requires an installed, online camera. A listed camera that is no
 
 ### Install Using HACS (Recommended)
 
+[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ibasebcast&repository=ha-alarmdotcom&category=integration)
+
+The button above opens this repository in HACS on your Home Assistant instance (it uses [My Home Assistant](https://my.home-assistant.io/)). If you have not linked an instance, use the manual steps below.
+
 1. Open **HACS**
 2. Navigate to **Integrations**
 3. Click the **three-dot menu**
@@ -105,6 +109,8 @@ https://github.com/ibasebcast/ha-alarmdotcom
 After restarting:
 
 **Settings → Devices & Services → Add Integration → Alarm.com**
+
+[![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=alarmdotcom)
 
 ## Prerequisites
 Before setting up this integration you need the following
