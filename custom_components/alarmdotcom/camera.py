@@ -163,9 +163,12 @@ class AlarmDotComCamera(Camera):
         """Fetch stream info from Alarm.com with one auth retry."""
         if self._fetch_lock.locked():
             _LOGGER.debug(
-                "Token fetch already in progress for camera %s, skipping.",
+                "Waiting for token fetch already in progress for camera %s.",
                 self._id,
             )
+            # Share the in-flight result rather than returning stale credentials.
+            async with self._fetch_lock:
+                pass
             return
 
         async with self._fetch_lock:
@@ -230,19 +233,19 @@ class AlarmDotComCamera(Camera):
                 self.async_write_ha_state()
                 return
 
-        if not config:
-            now = monotonic()
-            if (self._last_empty_stream_warning is None
-                    or now - self._last_empty_stream_warning >= 1800):
-                _LOGGER.warning("Empty stream info returned for camera %s", self._id)
-                self._last_empty_stream_warning = now
-            self._webrtc_config = None
-        else:
-            self._webrtc_config = config
-            self._last_empty_stream_warning = None
-            _LOGGER.debug("WebRTC tokens refreshed for camera %s", self._id)
+            if not config:
+                now = monotonic()
+                if (self._last_empty_stream_warning is None
+                        or now - self._last_empty_stream_warning >= 1800):
+                    _LOGGER.warning("Empty stream info returned for camera %s", self._id)
+                    self._last_empty_stream_warning = now
+                self._webrtc_config = None
+            else:
+                self._webrtc_config = config
+                self._last_empty_stream_warning = None
+                _LOGGER.debug("WebRTC tokens refreshed for camera %s", self._id)
 
-        self.async_write_ha_state()
+            self.async_write_ha_state()
 
     @property
     def is_on(self) -> bool:
@@ -255,9 +258,14 @@ class AlarmDotComCamera(Camera):
         return {}
 
     async def async_get_webrtc_config(self) -> dict | None:
-        """Return stream configuration on demand to an authorized websocket caller."""
-        if self._webrtc_config is None:
-            await self._fetch_stream_info()
+        """
+        Fetch current credentials for a new authorized browser session.
+
+        Cached credentials may have expired or been consumed by a previous
+        stream. Dashboard reconnects must not depend on the periodic refresh.
+        Concurrent callers share a fetch already in progress for this camera.
+        """
+        await self._fetch_stream_info()
         return self._webrtc_config
 
     async def stream_source(self) -> str | None:

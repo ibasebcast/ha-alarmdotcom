@@ -17,7 +17,9 @@ function loadCard() {
     customElements: { get: () => undefined, define: (_name, cls) => { Card = cls; } },
   };
   vm.runInNewContext(fs.readFileSync("custom_components/alarmdotcom/www/alarm-webrtc-card.js", "utf8"), context);
-  return { card: new Card(), timers, document, context };
+  const card = new Card();
+  card.isConnected = true;
+  return { card, timers, document, context };
 }
 
 test("rotation preserves the current stream and resumes the same video", () => {
@@ -39,6 +41,7 @@ test("actual card removal closes transports and invalidates outstanding credenti
   card.pc = { close: () => { closed++; } };
   card.ws = { close: () => { closed++; } };
   card._secureConfig = { private: "token" };
+  card.isConnected = false;
   card.disconnectedCallback();
   [...timers.values()][0]();
   assert.equal(closed, 2);
@@ -85,4 +88,108 @@ test("late Janus connection cannot replace the current stream", async () => {
   await opening;
   assert.equal(closed, true);
   assert.equal(card.ws, null);
+});
+
+
+test("legacy token rejection closes transports and retries with newly requested credentials", async () => {
+  const { card, context, timers } = loadCard();
+  let closed = 0;
+  context.RTCPeerConnection = class { close() { closed++; } };
+  let socket;
+  context.WebSocket = class { constructor() { socket = this; } close() { closed++; } };
+  card.querySelector = () => ({});
+  card.renderPlaceholder = () => {};
+  card.config = { entity: "camera.test" };
+  const oldConfig = { signallingServerUrl: "wss://example.test", signallingServerToken: "old", cameraAuthToken: "old" };
+  card._secureConfig = oldConfig;
+  card._currentConfig = oldConfig;
+  card._connecting = true;
+  await card._startLegacy(oldConfig);
+  const lateMessage = socket.onmessage;
+  await socket.onmessage({ data: JSON.stringify({ error: "Invalid token!" }) });
+  assert.equal(closed, 2);
+  assert.equal(card._secureConfig, null);
+  assert.equal(card._currentConfig, null);
+  assert.equal(card._connecting, false);
+  assert.equal(timers.size, 1);
+  // A queued close/error from the old stream must not consume another retry.
+  await lateMessage({ data: JSON.stringify({ error: "Invalid token!" }) });
+  assert.equal(card._retryCount, 1);
+  let requested = 0;
+  card._requestTokens = () => { requested++; };
+  [...timers.values()][0]();
+  assert.equal(requested, 1);
+});
+
+test("identical refreshed configuration can restart a closed stream", () => {
+  const { card } = loadCard();
+  const config = { signallingServerUrl: "wss://example.test", signallingServerToken: "same", cameraAuthToken: "same" };
+  card.config = { entity: "camera.test" };
+  card._secureConfig = config;
+  card._currentConfig = config;
+  card.renderVideo = () => {};
+  let started = 0;
+  card.startStream = () => { started++; };
+  card.hass = { states: { "camera.test": {} } };
+  assert.equal(started, 1);
+});
+
+test("dashboard return requests credentials and ignores the removed card's pending response", async () => {
+  const { card, timers } = loadCard();
+  card.config = { entity: "camera.test" };
+  card.renderPlaceholder = () => {};
+  card.querySelector = () => null;
+  let resolveOld;
+  let calls = 0;
+  const hass = { states: { "camera.test": {} }, connection: { sendMessagePromise: () => {
+    calls++;
+    return new Promise((resolve) => { resolveOld = resolve; });
+  } } };
+  card.hass = hass;
+  const staleResolve = resolveOld;
+  card.isConnected = false;
+  card.disconnectedCallback();
+  timers.get(card._disconnectGrace)();
+  // HA state updates while absent must not start new sessions.
+  card.hass = hass;
+  assert.equal(calls, 1);
+  card.isConnected = true;
+  card.connectedCallback();
+  assert.equal(calls, 2);
+  staleResolve({ signallingServerUrl: "wss://example.test", signallingServerToken: "stale", cameraAuthToken: "stale" });
+  await Promise.resolve();
+  assert.equal(card._secureConfig, null);
+  assert.equal(card._requesting, true);
+});
+
+test("retry budget survives state updates and stops repeated token failures", () => {
+  const { card, timers } = loadCard();
+  card.config = { entity: "camera.test" };
+  card.renderPlaceholder = () => {};
+  let exhausted = 0;
+  card._showReconnectButton = () => { exhausted++; };
+  card._retryCount = card._maxRetries;
+  card._scheduleRetry("Signaling rejected session");
+  card._hass = { states: { "camera.test": {} }, connection: { sendMessagePromise: () => assert.fail("retry budget exhausted") } };
+  card.hass = card._hass;
+  assert.equal(exhausted, 1);
+  assert.equal(timers.size, 0);
+});
+
+
+test("Janus rejection also discards credentials before retrying", async () => {
+  const { card, context, timers } = loadCard();
+  context.RTCPeerConnection = class { close() {} };
+  context.WebSocket = { OPEN: 1 };
+  const socket = { readyState: 1, send() {}, close() {} };
+  card._openJanusWebSocket = async () => socket;
+  card.querySelector = () => ({});
+  card.renderPlaceholder = () => {};
+  card._secureConfig = { janusToken: "synthetic-old" };
+  await card._startJanus(card._secureConfig);
+  await socket.onmessage({ data: JSON.stringify({ janus: "error", error: { code: 403, reason: "synthetic" } }) });
+  assert.equal(card._secureConfig, null);
+  assert.equal(card.ws, null);
+  assert.equal(card.pc, null);
+  assert.equal(timers.size, 1);
 });

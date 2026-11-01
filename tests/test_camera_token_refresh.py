@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
@@ -44,3 +45,56 @@ async def test_setup_falls_back_to_thirty_minutes_when_unset(hass: HomeAssistant
     """An entry configured before this option existed keeps the old hardcoded cadence."""
     (camera,) = await _setup(hass, {})
     assert camera._token_refresh_interval == timedelta(minutes=30)
+
+
+async def test_browser_reconnect_fetches_new_credentials(hass: HomeAssistant) -> None:
+    """A cached stream token must not satisfy a new browser session."""
+    (camera,) = await _setup(hass, {})
+    camera.async_write_ha_state = MagicMock()
+    camera._webrtc_config = {"cameraAuthToken": "synthetic-expired"}
+    camera._session.get_stream_info = AsyncMock(side_effect=[
+        {"cameraAuthToken": "synthetic-first"},
+        {"cameraAuthToken": "synthetic-second"},
+    ])
+    assert await camera.async_get_webrtc_config() == {"cameraAuthToken": "synthetic-first"}
+    assert await camera.async_get_webrtc_config() == {"cameraAuthToken": "synthetic-second"}
+    assert camera._session.get_stream_info.await_count == 2
+    assert camera.extra_state_attributes == {}
+
+
+async def test_concurrent_browser_requests_wait_for_current_fetch(hass: HomeAssistant) -> None:
+    """Neither caller receives the previous token while a refresh is pending."""
+    (camera,) = await _setup(hass, {})
+    camera.async_write_ha_state = MagicMock()
+    camera._webrtc_config = {"cameraAuthToken": "synthetic-expired"}
+    started = asyncio.Event()
+    release = asyncio.Event()
+    fresh = {"cameraAuthToken": "synthetic-fresh"}
+
+    async def fetch(_camera_id: str) -> dict:
+        started.set()
+        await release.wait()
+        return fresh
+
+    camera._session.get_stream_info = AsyncMock(side_effect=fetch)
+    first = asyncio.create_task(camera.async_get_webrtc_config())
+    await started.wait()
+    second = asyncio.create_task(camera.async_get_webrtc_config())
+    await asyncio.sleep(0)
+    assert not second.done()
+    release.set()
+    assert await asyncio.gather(first, second) == [fresh, fresh]
+    camera._session.get_stream_info.assert_awaited_once_with("cam-1")
+
+
+@pytest.mark.parametrize("result", [None, RuntimeError("synthetic-failure")])
+async def test_failed_reconnect_does_not_return_old_credentials(hass: HomeAssistant, result: object) -> None:
+    """A failed refresh reports unavailable instead of replaying cached tokens."""
+    (camera,) = await _setup(hass, {})
+    camera.async_write_ha_state = MagicMock()
+    camera._webrtc_config = {"cameraAuthToken": "synthetic-expired"}
+    if isinstance(result, Exception):
+        camera._session.get_stream_info = AsyncMock(side_effect=result)
+    else:
+        camera._session.get_stream_info = AsyncMock(return_value=result)
+    assert await camera.async_get_webrtc_config() is None
