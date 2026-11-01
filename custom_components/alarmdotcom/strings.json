@@ -14,9 +14,10 @@
             },
             "otp_submit": {
                 "title": "Enter One-Time Password",
-                "description": "If you used the SMS or email authentication methods, an OTP has already been sent to your inbox.",
+                "description": "Enter your verification code. For SMS or email, select Send another code and submit if your code has not arrived.\n\n{resend_status}",
                 "data": {
-                    "otp": "One-Time Password"
+                    "otp": "One-Time Password",
+                    "resend_code": "Send another code (SMS/email)"
                 }
             },
             "otp_select_method": {

@@ -296,3 +296,45 @@ async def test_options_flow_polling_step_persists_camera_token_refresh(hass: Hom
 def test_camera_token_refresh_default_is_the_previously_hardcoded_thirty_minutes() -> None:
     """Existing installs must keep the 30-minute cadence they had before this was an option."""
     assert CONF_OPTIONS_DEFAULT[CONF_CAMERA_TOKEN_REFRESH_INTERVAL] == 30
+
+
+@pytest.mark.parametrize("method", [pyadc.OtpType.sms, pyadc.OtpType.email])
+async def test_resend_code_does_not_submit_otp(
+    hass, mock_bridge_class, mock_bridge, mock_setup_entry, method,
+):
+    """Request another delivery without a code, then finish using the new code."""
+    mock_bridge.login = AsyncMock(side_effect=pyadc.OtpRequired(enabled_2fa_methods=[method]))
+    result = await _start_user_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], VALID_CREDS)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_OTP_METHOD: method.name})
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"resend_code": True})
+    assert result["step_id"] == "otp_submit"
+    assert result["errors"] == {}
+    assert "new code" in result["description_placeholders"]["resend_status"]
+    assert mock_bridge.auth_controller.request_otp.await_count == 2
+    mock_bridge.auth_controller.submit_otp.assert_not_awaited()
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_OTP: "123456"})
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+
+
+async def test_resend_failure_remains_on_code_form(hass, mock_bridge_class, mock_bridge):
+    """An unsuccessful resend must not claim success or discard the login flow."""
+    mock_bridge.login = AsyncMock(side_effect=pyadc.OtpRequired(enabled_2fa_methods=[pyadc.OtpType.sms]))
+    result = await _start_user_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], VALID_CREDS)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_OTP_METHOD: "sms"})
+    mock_bridge.auth_controller.request_otp.side_effect = TimeoutError()
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {"resend_code": True})
+    assert result["step_id"] == "otp_submit"
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert result["description_placeholders"]["resend_status"] == ""
+    mock_bridge.auth_controller.submit_otp.assert_not_awaited()
+
+
+async def test_app_otp_has_no_resend_control(hass, mock_bridge_class, mock_bridge):
+    """App codes are generated locally and must not offer an SMS/email request."""
+    mock_bridge.login = AsyncMock(side_effect=pyadc.OtpRequired(enabled_2fa_methods=[pyadc.OtpType.app]))
+    result = await _start_user_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], VALID_CREDS)
+    assert "resend_code" not in result["data_schema"].schema
+    mock_bridge.auth_controller.request_otp.assert_not_awaited()

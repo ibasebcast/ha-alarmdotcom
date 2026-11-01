@@ -14,6 +14,7 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
+from yarl import URL
 
 from .const import (
     CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
@@ -293,20 +294,37 @@ class AlarmDotComCamera(Camera):
     ) -> bytes | None:
         """Return a still snapshot image from the camera."""
         try:
-            resp = await self._session.get(
-                f"https://www.alarm.com/web/api/video/devices/cameras/{self._id}/snapshot"
-            )
-            return await resp.read()
+            signed_url = await self._session.get_snapshot_url(self._id)
+            if not signed_url:
+                return None
+            url = URL(signed_url)
+            if url.scheme != "https" or not url.host or url.user is not None:
+                return None
+
+            # The signed URL belongs to a video host, not the authenticated API.
+            # A separate cookie-free client prevents session cookies, MFA tokens,
+            # and AJAX headers from being forwarded with the image request.
+            async with aiohttp.ClientSession(
+                cookie_jar=aiohttp.DummyCookieJar(),
+                timeout=aiohttp.ClientTimeout(total=15),
+            ) as image_session, image_session.get(url, allow_redirects=False) as response:
+                response.raise_for_status()
+                if response.status != 200 or not response.content_type.startswith("image/"):
+                    return None
+                # Bound the download and do not return HTML/JSON error pages
+                # as a successful camera snapshot.
+                chunks: list[bytes] = []
+                size = 0
+                async for chunk in response.content.iter_chunked(64 * 1024):
+                    size += len(chunk)
+                    if size > 10 * 1024 * 1024:
+                        return None
+                    chunks.append(chunk)
+                return b"".join(chunks) or None
         except aiohttp.ClientResponseError as err:
-            if err.status == 404:
-                _LOGGER.debug("Camera %s does not support snapshots (404).", self._id)
-            else:
-                _LOGGER.debug(
-                    "Snapshot fetch failed for camera %s: HTTP %s",
-                    self._id,
-                    err.status,
-                )
+            _LOGGER.debug("Snapshot request failed with HTTP %s", err.status)
         except Exception as err:
-            _LOGGER.debug("Snapshot fetch error for camera %s: %s", self._id, err)
+            # Exceptions can contain signed URLs. Log only the exception type.
+            _LOGGER.debug("Snapshot request failed (%s)", type(err).__name__)
 
         return None

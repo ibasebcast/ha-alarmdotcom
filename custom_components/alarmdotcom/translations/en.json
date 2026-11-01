@@ -30,9 +30,10 @@
             },
             "otp_submit": {
                 "title": "Verify Your Identity",
-                "description": "Please enter the one-time code sent to your chosen device.",
+                "description": "Enter your verification code. For SMS or email, select Send another code and submit if your code has not arrived.\n\n{resend_status}",
                 "data": {
-                    "otp": "Security Code"
+                    "otp": "Security Code",
+                    "resend_code": "Send another code (SMS/email)"
                 }
             },
             "reauth_confirm": {
