@@ -63,7 +63,7 @@ not credential synchronization at every panel and lock.
 
 ## Remaining live verification
 
-1. Install beta 2026.10.30b1 when ready to test.
+1. Install the unreleased combined 2026.11.01b0 test build when ready to test.
 2. Use a disposable existing test user with no weekly schedule or access plan.
 3. Invoke the action once and confirm the saved interval in the portal.
 4. Verify eventual provisioning and enforcement on the intended panel/lock.
@@ -71,3 +71,22 @@ not credential synchronization at every panel and lock.
 
 All-times/restricted transitions, read-only status entities, schedule clearing,
 and user creation remain outside this implementation.
+
+## Follow-up: confirming equivalent timestamps
+
+A b1 hardware test returned the confirmation error after the PUT. The original
+comparison required identical timestamp strings, so equivalent instants formatted
+with different fractional seconds or UTC offsets could be rejected. This is a
+confirmed validation weakness, not yet the confirmed cause of that live result.
+
+The follow-up compares timezone-aware instants without rounding away differences.
+A mismatched PUT representation triggers one GET of the requested user to verify
+persisted dates. It never resends the credential PUT. A missing schedule, naive
+server timestamp, wrong identity, or different instant remains unconfirmed.
+
+
+## Read-only response action
+
+`alarmdotcom.get_temporary_user_schedule` is a standard HA response-only action, usable by scripts and an existing MCP connection that supports actions with response data. It resolves the selected loaded account and verifies system membership before reading. The API manager performs one GET under its access lock and validates the returned user identity. It never performs a credential write.
+
+The returned allowlist is `temporary_schedule` (UTC `begin`/`end`, or null) and `credential_status` (the server's integer value, or null). No arbitrary server descriptions, PINs, raw documents, or unknown attributes are returned. Unknown status values are not interpreted. A null schedule does not assert unrestricted access. Validation/errors remain credential-free. Last-entry unload removes the read service alongside the write service.

@@ -85,7 +85,7 @@ class AlarmWebRTCCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     const entityId = this.config?.entity;
-    if (!entityId) return;
+    if (!entityId || !this.isConnected) return;
 
     this._entityId = entityId;
 
@@ -118,15 +118,12 @@ class AlarmWebRTCCard extends HTMLElement {
     );
 
     if (!isValid) {
-      if (!this._requesting && !this._connecting) {
+      if (!this._requesting && !this._connecting && !this._retryTimer && this._retryCount < this._maxRetries) {
         this._requestTokens("No valid config");
       }
       return;
     }
 
-    const hasNoCurrentConfig = !this._currentConfig;
-    const isNewConfig =
-      JSON.stringify(config) !== JSON.stringify(this._currentConfig);
     const streamTypeChanged =
       config?.streamType !== this._currentConfig?.streamType;
 
@@ -138,8 +135,7 @@ class AlarmWebRTCCard extends HTMLElement {
 
     const shouldStartFresh =
       !this._connected &&
-      !this._connecting &&
-      (hasNoCurrentConfig || isNewConfig || streamTypeChanged);
+      !this._connecting;
 
     const shouldRestart =
       isStructuralChange &&
@@ -234,7 +230,15 @@ class AlarmWebRTCCard extends HTMLElement {
   }
 
   _scheduleRetry(reason) {
-    if (this._retryTimer) return;
+    if (this._retryTimer || !this.isConnected) return;
+
+    // A retry starts a new session, never a replay of rejected credentials.
+    // Invalidate pending callbacks before closing either transport.
+    clearTimeout(this._requestTimeout);
+    this._requestSerial += 1;
+    this._requesting = false;
+    this._secureConfig = null;
+    this._teardownStream();
 
     if (this._retryCount >= this._maxRetries) {
       this._log("Max retries reached", reason);
@@ -257,7 +261,7 @@ class AlarmWebRTCCard extends HTMLElement {
   }
 
   _requestTokens(reason) {
-    if (this._requesting) return;
+    if (this._requesting || !this.isConnected) return;
 
     this._log("Requesting tokens", reason);
     this._requesting = true;
@@ -445,6 +449,12 @@ class AlarmWebRTCCard extends HTMLElement {
       try {
         data = JSON.parse(msg.data);
       } catch {
+        return;
+      }
+
+      if (data.error) {
+        // Use a fixed reason: server errors may include sensitive session data.
+        this._scheduleRetry("Signaling rejected session");
         return;
       }
 
@@ -887,6 +897,9 @@ class AlarmWebRTCCard extends HTMLElement {
     this._disconnectGrace = null;
     const video = this.querySelector("video");
     if (video?.srcObject && video.paused) video.play().catch(() => {});
+    // A genuine dashboard return gets a fresh retry budget. Reparenting an
+    // active stream during rotation must keep its existing session intact.
+    if (!this._connected && !this._connecting && !this._requesting) this._retryCount = 0;
     if (this._hass) this.hass = this._hass;
   }
 

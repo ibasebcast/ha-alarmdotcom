@@ -224,24 +224,31 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         # self.bridge is always set by this point - see async_step_otp_select_method.
         assert self.bridge is not None
         errors: dict[str, str] = {}
+        resend_status = ""
+        can_resend = self.otp_method in (pyadc.OtpType.sms, pyadc.OtpType.email)
 
         if user_input is not None:
             if not self.otp_method:
                 return self.async_abort(reason="otp_method_lost")
 
             try:
-                mfa_cookie = await self.bridge.auth_controller.submit_otp(
-                    method=self.otp_method,
-                    code=user_input[CONF_OTP],
-                    device_name=f"Home Assistant {self.hass.config.location_name}",
-                )
-
-                if mfa_cookie:
-                    self.config[CONF_MFA_TOKEN] = mfa_cookie
-                    return await self.async_step_final()
-
-                errors["base"] = "invalid_otp"
-
+                # Resending is explicit and never submits a blank or old code.
+                # Authenticator apps generate their codes locally.
+                if can_resend and user_input.get("resend_code", False):
+                    await self.bridge.auth_controller.request_otp(self.otp_method)
+                    resend_status = "A new code was requested. Enter the code when it arrives."
+                elif code := user_input.get(CONF_OTP):
+                    mfa_cookie = await self.bridge.auth_controller.submit_otp(
+                        method=self.otp_method,
+                        code=code,
+                        device_name=f"Home Assistant {self.hass.config.location_name}",
+                    )
+                    if mfa_cookie:
+                        self.config[CONF_MFA_TOKEN] = mfa_cookie
+                        return await self.async_step_final()
+                    errors["base"] = "invalid_otp"
+                else:
+                    errors["base"] = "invalid_otp"
             except pyadc.AuthenticationFailed:
                 errors["base"] = "invalid_otp"
             except (
@@ -250,25 +257,26 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 pyadc.UnexpectedResponse,
                 pyadc.NotAuthorized,
             ):
-                LOGGER.exception("OTP submission failed.")
+                LOGGER.debug("OTP request or submission failed.")
                 errors["base"] = "cannot_connect"
             except Exception:
-                LOGGER.exception("Unexpected error during OTP submission.")
+                LOGGER.debug("Unexpected OTP request or submission failure.")
                 errors["base"] = "unknown"
 
-        creds_schema = vol.Schema(
-            {
-                vol.Required(CONF_OTP): TextSelector(
-                    TextSelectorConfig(
-                        type=TextSelectorType.TEXT,
-                        autocomplete="one-time-code",
-                    )
-                ),
-            }
-        )
+        # SMS/email users can submit the resend control without entering a code.
+        code_key = vol.Optional(CONF_OTP) if can_resend else vol.Required(CONF_OTP)
+        fields: dict[Any, TextSelector | selector.BooleanSelector] = {
+            code_key: TextSelector(
+                TextSelectorConfig(type=TextSelectorType.TEXT, autocomplete="one-time-code")
+            ),
+        }
+        if can_resend:
+            fields[vol.Optional("resend_code", default=False)] = selector.BooleanSelector()
+        creds_schema = vol.Schema(fields)
 
         return self.async_show_form(
             step_id="otp_submit",
+            description_placeholders={"resend_status": resend_status},
             data_schema=creds_schema,
             errors=errors,
             last_step=True,

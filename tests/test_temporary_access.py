@@ -8,7 +8,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from _pyalarmdotcomajax import AlarmBridge
-from _pyalarmdotcomajax.access import AccessDocument, AccessValidationError, build_access_payload, validate_period
+from _pyalarmdotcomajax.access import (
+    AccessDocument,
+    AccessValidationError,
+    access_dates_match,
+    build_access_payload,
+    validate_period,
+)
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -120,7 +126,9 @@ async def test_unconfirmed_save_is_reported():
     bridge.request = AsyncMock(return_value=AccessDocument.from_dict({"data": resource()}))
     with pytest.raises(ValueError, match="did not confirm"):
         await bridge.device_access.set_temporary_access(USER, SYSTEM, datetime.fromisoformat(START), datetime.fromisoformat(END))
-    assert bridge.request.call_args.kwargs["allow_login_repair"] is False
+    writes = [call for call in bridge.request.call_args_list if call.args[0] == "put"]
+    assert len(writes) == 1
+    assert writes[0].kwargs["allow_login_repair"] is False
 
 
 def account(hass, title):
@@ -158,4 +166,108 @@ async def test_action_blocks_wrong_system_and_hides_private_errors(hass):
     data["system_id"] = SYSTEM
     with pytest.raises(HomeAssistantError) as error:
         await hass.services.async_call(DOMAIN, "set_temporary_access", data, blocking=True)
+    assert "private-pin-sentinel" not in str(error.value)
+
+
+@pytest.mark.parametrize(("begin", "end", "matches"), [
+    ("2027-01-05T17:00:00Z", "2027-01-10T17:00:00+00:00", True),
+    ("2027-01-05T12:00:00-05:00", "2027-01-10T12:00:00-05:00", True),
+    ("2027-01-05T17:00:00.001Z", END, False),
+    ("2027-01-05T17:00:00", END, False),
+    ("invalid", END, False),
+    (START, "2027-01-10T18:00:00Z", False),
+])
+def test_confirmation_compares_instants_not_strings(begin, end, matches):
+    """Formatting differences are allowed; changed instants are never accepted."""
+    body = resource()
+    body["attributes"]["temporarySchedule"] = {"beginDateTime": begin, "endDateTime": end}
+    assert access_dates_match(body, USER, START, END) is matches
+    assert not access_dates_match(body, "900099", START, END)
+
+
+async def test_stale_put_response_is_confirmed_with_one_read_only_request():
+    """Check persisted state without issuing a second credential write."""
+    bridge = AlarmBridge()
+    before = resource()
+    after = resource()
+    after["attributes"]["temporarySchedule"] = {
+        "beginDateTime": "2027-01-05T17:00:00Z", "endDateTime": "2027-01-10T17:00:00Z",
+    }
+    bridge.request = AsyncMock(side_effect=[AccessDocument(data=body) for body in (before, before, after)])
+    await bridge.device_access.set_temporary_access(USER, SYSTEM, datetime.fromisoformat(START), datetime.fromisoformat(END))
+    assert [call.args[0] for call in bridge.request.call_args_list] == ["get", "put", "get"]
+
+
+@pytest.mark.parametrize("scheduled", [False, True])
+async def test_read_action_manager_only_gets_and_filters_credentials(scheduled):
+    """Read-back exposes a small allowlist and never writes or returns a PIN."""
+    bridge = AlarmBridge()
+    body = resource()
+    body["attributes"]["credentialStatus"] = 1
+    body["attributes"]["credentialStatusDesc"] = "private-pin-sentinel"
+    if scheduled:
+        body["attributes"]["temporarySchedule"] = {
+            "beginDateTime": START, "endDateTime": END,
+            "unexpectedSecret": "private-pin-sentinel",
+        }
+    bridge.request = AsyncMock(return_value=AccessDocument(data=body))
+    result = await bridge.device_access.get_temporary_user_schedule(USER, SYSTEM)
+    assert result == {
+        "temporary_schedule": {"begin": START, "end": END} if scheduled else None,
+        "credential_status": 1,
+    }
+    assert "private-pin-sentinel" not in json.dumps(result)
+    bridge.request.assert_awaited_once()
+    assert bridge.request.call_args.args[0] == "get"
+    assert bridge.request.call_args.kwargs["headers"] == {"context-id": SYSTEM}
+
+
+@pytest.mark.parametrize("change", ["wrong_user", "missing_schedule", "naive_date", "invalid_date"])
+async def test_read_rejects_mismatched_or_ambiguous_schedule(change):
+    """A read must not silently confirm a different user or invent time zones."""
+    body = resource()
+    if change == "wrong_user":
+        body["id"] = "900099"
+    elif change == "missing_schedule":
+        del body["attributes"]["temporarySchedule"]
+    else:
+        body["attributes"]["temporarySchedule"] = {
+            "beginDateTime": "invalid" if change == "invalid_date" else "2027-01-05T17:00:00",
+            "endDateTime": END,
+        }
+    bridge = AlarmBridge()
+    bridge.request = AsyncMock(return_value=AccessDocument(data=body))
+    with pytest.raises(AccessValidationError):
+        await bridge.device_access.get_temporary_user_schedule(USER, SYSTEM)
+
+
+async def test_read_service_returns_response_from_selected_account(hass):
+    """Standard HA response data is available to scripts and existing MCP bridges."""
+    first, second = account(hass, "First"), account(hass, "Second")
+    expected = {"temporary_schedule": {"begin": START, "end": END}, "credential_status": 3}
+    for entry in (first, second):
+        entry.runtime_data.hub.api.device_access.get_temporary_user_schedule = AsyncMock(return_value=expected)
+    async_register_access_service(hass)
+    result = await hass.services.async_call(DOMAIN, "get_temporary_user_schedule", {
+        "config_entry_id": second.entry_id, "system_id": SYSTEM, "user_id": USER,
+    }, blocking=True, return_response=True)
+    assert result == expected
+    first.runtime_data.hub.api.device_access.get_temporary_user_schedule.assert_not_awaited()
+    second.runtime_data.hub.api.device_access.get_temporary_user_schedule.assert_awaited_once_with(USER, SYSTEM)
+    second.runtime_data.hub.api.device_access.set_temporary_access.assert_not_awaited()
+
+
+async def test_read_service_blocks_wrong_account_and_redacts_failures(hass):
+    """Account routing and error privacy apply equally to read-only actions."""
+    entry = account(hass, "Account")
+    reader = AsyncMock(side_effect=RuntimeError("private-pin-sentinel"))
+    entry.runtime_data.hub.api.device_access.get_temporary_user_schedule = reader
+    async_register_access_service(hass)
+    data = {"config_entry_id": entry.entry_id, "system_id": "900099", "user_id": USER}
+    with pytest.raises(ServiceValidationError, match="does not belong"):
+        await hass.services.async_call(DOMAIN, "get_temporary_user_schedule", data, blocking=True, return_response=True)
+    reader.assert_not_awaited()
+    data["system_id"] = SYSTEM
+    with pytest.raises(HomeAssistantError) as error:
+        await hass.services.async_call(DOMAIN, "get_temporary_user_schedule", data, blocking=True, return_response=True)
     assert "private-pin-sentinel" not in str(error.value)

@@ -517,6 +517,21 @@ class AlarmCameraSession:
 
         return cameras
 
+    async def get_snapshot_url(self, camera_id: str) -> str | None:
+        """Request an ephemeral image URL, keeping it out of logs and HA state."""
+        resp = await self.get(f"{API_URL_BASE}video/snapshots/{camera_id}")
+        try:
+            body = await resp.json()
+        finally:
+            resp.release()
+        if not isinstance(body, dict) or not isinstance(body.get("data"), dict):
+            return None
+        attributes = body["data"].get("attributes")
+        if not isinstance(attributes, dict) or attributes.get("error"):
+            return None
+        url = attributes.get("url")
+        return url if isinstance(url, str) and url else None
+
     async def get_stream_info(self, camera_id: str) -> dict | None:
         """
         Fetch WebRTC config for a camera.
