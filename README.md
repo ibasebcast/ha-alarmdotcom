@@ -55,9 +55,9 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Unreleased test build:** `2026.11.01b0`, developed on `release/2026.11.01b0`.
+**Beta:** `2026.11.01b0`, developed on `release/2026.11.01b0`.
 
-This unreleased build combines camera reconnect recovery, signed snapshots, verification-code resend, and temporary-access confirmation and read-back. See [test-build notes](release-notes/2026.11.01b0.md). It has not been promoted to stable; the stable release remains `2026.10.28`.
+This beta combines camera reconnect recovery, signed snapshots, verification-code resend, and temporary-access confirmation and read-back. See [release notes](release-notes/2026.11.01b0.md). The stable release remains `2026.10.28`.
 
 ### What's changed since 2026.10.26
 
