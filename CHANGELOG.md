@@ -1,6 +1,6 @@
-## 2026.11.01b0 (beta)
+## 2026.11.01
 
-Camera reconnect recovery and signed snapshots; SMS/email code resend; temporary-access confirmation correction and read-only schedule action; README install buttons and login-permissions guidance. See [test notes](release-notes/2026.11.01b0.md). Live validation across camera models and credential provisioning remains in progress.
+Camera reconnect recovery and signed snapshots; SMS/email code resend; temporary-access confirmation correction and read-only schedule action; README install buttons and login-permissions guidance. See [test notes](release-notes/2026.11.01.md). Live validation across camera models and credential provisioning remains in progress.
 
 ## 2026.10.30b1 (beta)
 

@@ -55,9 +55,9 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Beta:** `2026.11.01b0`, developed on `release/2026.11.01b0`.
+**Stable release:** `2026.11.01`.
 
-This beta combines camera reconnect recovery, signed snapshots, verification-code resend, and temporary-access confirmation and read-back. See [release notes](release-notes/2026.11.01b0.md). The stable release remains `2026.10.28`.
+This release combines camera reconnect recovery, signed snapshots, verification-code resend, and temporary-access confirmation and read-back. See [release notes](release-notes/2026.11.01.md). Previously published beta releases remain unchanged.
 
 ### What's changed since 2026.10.26
 
@@ -79,7 +79,7 @@ Home Assistant 2026.11.0b0 is still an upstream beta. These checks do not claim 
 
 Back up your Home Assistant configuration, install the stable version through HACS when it is published, and restart Home Assistant. Verify login/MFA, integration reloads, live sensor events, and controls for the devices installed on your account.
 
-[Light discovery #115](https://github.com/ibasebcast/ha-alarmdotcom/issues/115) remains under investigation. The relationship-ID change is a candidate fix, not a confirmed resolution; reporter confirmation is still needed. If installed lights remain missing, temporarily enable `_pyalarmdotcomajax: debug` and share only redacted `Light discovery:` lines, including the parsed relationship-entry count. Disable debug logging afterward.
+[Light discovery #115](https://github.com/ibasebcast/ha-alarmdotcom/issues/115) was resolved by enabling Lights/Thermostats access for the dedicated HA login. If devices are missing, first sign into Alarm.com with the exact same login used in HA and check its category permissions. See the dedicated-login checklist below. The speculative request-context change was not included.
 
 Camera playback requires an installed, online camera. A listed camera that is not installed or online can return empty stream information without indicating an integration startup failure. Snapshot availability depends on the camera and account.
 
