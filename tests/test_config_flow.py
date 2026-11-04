@@ -107,6 +107,22 @@ async def test_login_failure_modes(
     assert result["errors"] == {"base": expected_error}
 
 
+async def test_sign_in_timeout_reports_login_step_at_warning_level(
+    hass: HomeAssistant, mock_bridge_class, mock_bridge, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The default log identifies the last login step without exception contents."""
+    mock_bridge.auth_controller.login_step = "looking up dealer information"
+    mock_bridge.login.side_effect = TimeoutError("private-response-sentinel")
+    form = await _start_user_flow(hass)
+
+    result = await hass.config_entries.flow.async_configure(form["flow_id"], VALID_CREDS)
+
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert "sign-in failed during looking up dealer information" in caplog.text
+    assert "(TimeoutError)" in caplog.text
+    assert "private-response-sentinel" not in caplog.text
+
+
 async def test_system_lookup_failure_logs_safe_stage_and_returns_form(
     hass: HomeAssistant, mock_bridge_class, mock_bridge, caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -68,6 +68,7 @@ class AuthenticationController:
     ) -> None:
         """Initialize authentication controller."""
         self._bridge = bridge
+        self.login_step = "checking credentials"
 
         # Credentials
         # We allow these to be set after initialization so that we can use an instantiated (but not initialized)
@@ -181,6 +182,7 @@ class AuthenticationController:
         """
         log.debug("Logging in to Alarm.com")
 
+        self.login_step = "checking credentials"
         if "" in [self._username, self._password]:
             raise AuthenticationFailed("Username and password are required.")
 
@@ -190,12 +192,14 @@ class AuthenticationController:
         # Step 1: Get login page and cookies
         #
 
+        self.login_step = "loading login page"
         login_info = await self._login_preload()
 
         #
         # Step 2: Log in and save first anti-forgery key
         #
 
+        self.login_step = "submitting credentials"
         await self._login_submit_credentials(login_info)
 
         log.debug("Logged in to Alarm.com.")
@@ -311,6 +315,7 @@ class AuthenticationController:
         """Step 3 of login process. Determine whether OTP is required."""
 
         # User ID required to check OTP status
+        self.login_step = "looking up account identity"
         await asyncio.gather(
             self._identities.initialize(),
             self._profiles.initialize(),
@@ -320,11 +325,13 @@ class AuthenticationController:
         if not self._identities.items:
             raise UnexpectedResponse("No identities found.")
 
+        self.login_step = "looking up dealer information"
         if dealer_id := self._identities.items[0].dealer_id:
             log.debug(await self._dealers.add_target(dealer_id))
         else:
             log.error("No dealer ID found.")
 
+        self.login_step = "checking two-factor requirements"
         response = await self._bridge.get(path=TWO_FACTOR_PATH, id=self._identities.items[0].id)
 
         if not isinstance(response.data, Resource):

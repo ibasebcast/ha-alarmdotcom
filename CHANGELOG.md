@@ -1,3 +1,7 @@
+## 2026.11.04.1 (stable)
+
+Show the failing sign-in step in the default Home Assistant setup warning (#157). See [release notes](release-notes/2026.11.04.1.md).
+
 ## 2026.11.04 (stable)
 
 - Handle missing session preferences and defer full device discovery until config entry startup. Record safe timing and failure details during setup (#157).
