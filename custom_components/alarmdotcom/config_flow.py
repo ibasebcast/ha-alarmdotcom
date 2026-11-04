@@ -87,30 +87,30 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 mfa_token=self.config[CONF_MFA_TOKEN],
             )
 
-            async with asyncio.timeout(60):
-                try:
+            try:
+                async with asyncio.timeout(60):
                     await self.bridge.login()
-                except pyadc.OtpRequired as exc:
-                    LOGGER.debug("OTP code required. Moving to selection step.")
-                    self._otp_options = exc
-                    return await self.async_step_otp_select_method()
-                except pyadc.MustConfigureMfa:
-                    return self.async_abort(reason="must_enable_2fa")
-                except (
-                    TimeoutError,
-                    aiohttp.ClientError,
-                    pyadc.UnexpectedResponse,
-                    pyadc.NotAuthorized,
-                ):
-                    LOGGER.exception("User login failed to contact Alarm.com.")
-                    errors["base"] = "cannot_connect"
-                except pyadc.AuthenticationFailed:
-                    errors["base"] = "invalid_auth"
-                except Exception:
-                    LOGGER.exception("Got error while initializing Alarm.com.")
-                    errors["base"] = "unknown"
-                else:
-                    return await self.async_step_final()
+            except pyadc.OtpRequired as exc:
+                LOGGER.debug("OTP code required. Moving to selection step.")
+                self._otp_options = exc
+                return await self.async_step_otp_select_method()
+            except pyadc.MustConfigureMfa:
+                return self.async_abort(reason="must_enable_2fa")
+            except (
+                TimeoutError,
+                aiohttp.ClientError,
+                pyadc.UnexpectedResponse,
+                pyadc.NotAuthorized,
+            ):
+                LOGGER.exception("User login failed to contact Alarm.com.")
+                errors["base"] = "cannot_connect"
+            except pyadc.AuthenticationFailed:
+                errors["base"] = "invalid_auth"
+            except Exception:
+                LOGGER.exception("Got error while initializing Alarm.com.")
+                errors["base"] = "unknown"
+            else:
+                return await self.async_step_final()
 
         creds_schema = vol.Schema(
             {

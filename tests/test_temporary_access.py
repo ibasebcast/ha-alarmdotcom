@@ -15,8 +15,10 @@ from _pyalarmdotcomajax.access import (
     build_access_payload,
     validate_period,
 )
+from homeassistant.auth.const import GROUP_ID_ADMIN, GROUP_ID_USER
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.core import Context
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError, Unauthorized
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.alarmdotcom.access_service import async_register_access_service
@@ -151,6 +153,27 @@ async def test_action_routes_to_selected_live_account(hass):
     }, blocking=True)
     first.runtime_data.hub.api.device_access.set_temporary_access.assert_not_awaited()
     second.runtime_data.hub.api.device_access.set_temporary_access.assert_awaited_once()
+
+
+async def test_schedule_write_requires_an_admin_user(hass):
+    """Reject non-admin calls before reaching the Alarm.com API."""
+    entry = account(hass, "Account")
+    admin = await hass.auth.async_create_user("Admin", group_ids=[GROUP_ID_ADMIN])
+    user = await hass.auth.async_create_user("User", group_ids=[GROUP_ID_USER])
+    async_register_access_service(hass)
+    data = {"config_entry_id": entry.entry_id, "system_id": SYSTEM, "user_id": USER, "begin": START, "end": END}
+    update = entry.runtime_data.hub.api.device_access.set_temporary_access
+
+    with pytest.raises(Unauthorized):
+        await hass.services.async_call(
+            DOMAIN, "set_temporary_access", data, blocking=True, context=Context(user_id=user.id),
+        )
+    update.assert_not_awaited()
+
+    await hass.services.async_call(
+        DOMAIN, "set_temporary_access", data, blocking=True, context=Context(user_id=admin.id),
+    )
+    update.assert_awaited_once()
 
 
 async def test_action_blocks_wrong_system_and_hides_private_errors(hass):

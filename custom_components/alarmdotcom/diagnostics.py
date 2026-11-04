@@ -16,7 +16,7 @@ diagnostics downloads are meant to be safe to attach to a GitHub issue.
 
 from __future__ import annotations
 
-import contextlib
+import json
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -62,6 +62,12 @@ TO_REDACT = {
     "username",
     "email",
     "ajax_key",
+    "publicIp",
+    "privateIp",
+    "macAddress",
+    "networkedDevicePrivateIp",
+    "cameraBehindNetworkedDevicePrivateIp",
+    "urlForRecordingStream",
 }
 
 
@@ -147,15 +153,23 @@ def _connection_health(hub: AlarmHub) -> dict[str, Any]:
         if hub.api.active_system
         else None,
     }
-    # The WebSocket client already keeps the last 25 raw frames
-    # (websocket/client.py, `last_events`), but nothing surfaced them. Every
-    # "my sensor stopped updating" report needs exactly this to tell a
-    # transport-level miss from something dropping the message after receipt,
-    # and asking each reporter to reproduce with debug logging is a slow way to
-    # get it. Flows through the same async_redact_data(..., TO_REDACT) call as
-    # every other section.
-    with contextlib.suppress(AttributeError):
-        health["last_events"] = hub.api.ws_controller.last_events
+    # Raw frames can contain access details and camera storage paths in a
+    # query string. Keep only the fields needed to trace event delivery.
+    controller = getattr(hub.api, "ws_controller", None)
+    if controller is not None:
+        events = []
+        for frame in controller.last_events:
+            try:
+                event = json.loads(frame) if isinstance(frame, str) else frame
+            except ValueError:
+                continue
+            if isinstance(event, dict):
+                events.append({
+                    key: event[key]
+                    for key in ("EventDateUtc", "EventType", "DeviceType", "DeviceId")
+                    if key in event and isinstance(event[key], (str, int))
+                })
+        health["last_events"] = events
     return health
 
 

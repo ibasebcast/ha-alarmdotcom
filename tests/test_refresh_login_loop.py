@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from _pyalarmdotcomajax import AlarmBridge
+from _pyalarmdotcomajax import AlarmBridge, ConnectionEvent, EventBrokerTopic, WebSocketState
 from _pyalarmdotcomajax.exceptions import AuthenticationFailed, NotAuthorized
 
 from custom_components.alarmdotcom import hub as hub_module
@@ -100,3 +100,19 @@ async def test_a_device_type_the_system_does_not_have_is_not_requested() -> None
 
     assert controller.initialized
     bridge.get.assert_not_awaited()
+
+
+async def test_websocket_connection_does_not_hide_failed_http_refresh() -> None:
+    """Entities recover only when Alarm.com accepts a subsequent full refresh."""
+    hub = _hub(AuthenticationFailed("403"))
+    availability = []
+    hub.api.events.subscribe(EventBrokerTopic.CONNECTION_EVENT, lambda _: availability.append(hub.available))
+
+    await hub._async_refresh_state()
+    await hub._ws_state_handler(ConnectionEvent(current_state=WebSocketState.CONNECTED, next_attempt_s=None))
+    assert availability == [False]
+    assert not hub.available
+
+    hub.api.refresh_all_resources.side_effect = None
+    await hub._async_refresh_state()
+    assert availability == [False, True]

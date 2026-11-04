@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.alarmdotcom import AlarmEntryData
 from custom_components.alarmdotcom.const import DOMAIN
 from custom_components.alarmdotcom.diagnostics import (
+    _connection_health,
     async_get_config_entry_diagnostics,
     async_get_device_diagnostics,
 )
@@ -59,6 +60,17 @@ def mock_hub_with_camera_resource():
     )
     hub.api.resource_controllers = [_make_controller("CameraController", [camera_resource])]
     return hub
+
+
+def test_recent_events_exclude_raw_camera_metadata(mock_hub_with_camera_resource) -> None:
+    """Raw websocket JSON must not bypass the normal redaction pass."""
+    hub = mock_hub_with_camera_resource
+    hub.api.ws_controller.last_events = [
+        '{"EventType":210,"DeviceId":20,"QstringForExtraData":"path=private-storage-sentinel"}',
+        "not a JSON event",
+    ]
+
+    assert _connection_health(hub)["last_events"] == [{"EventType": 210, "DeviceId": 20}]
 
 
 async def test_config_entry_diagnostics_redacts_credentials(hass, mock_hub_with_camera_resource) -> None:

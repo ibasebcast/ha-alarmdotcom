@@ -72,6 +72,7 @@ set_temporary_access:
   name: Set temporary user access
   description: >-
     Set UTC or offset-aware start and end dates for an existing user's access.
+    Requires a Home Assistant administrator when called by a user.
     Preserves the existing PIN. Weekly schedules and access plans are unsupported.
     Saving does not confirm that all panels and locks have synchronized.
   fields:
