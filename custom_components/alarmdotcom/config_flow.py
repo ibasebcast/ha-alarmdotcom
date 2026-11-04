@@ -2,9 +2,6 @@
 
 import asyncio
 import logging
-import time
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import Any, Literal
 
 import _pyalarmdotcomajax as pyadc
@@ -43,7 +40,6 @@ from .const import (
 from .schema import vol
 
 LOGGER = logging.getLogger(__name__)
-SETUP_STAGE_TIMEOUT_S = 60
 LegacyArmingOptions = Literal["home", "away", "true", "false"]
 
 
@@ -70,40 +66,11 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         """Tell Home Assistant that this integration supports configuration options."""
         return ADCOptionsFlowHandler(config_entry)
 
-    @asynccontextmanager
-    async def _setup_stage(self, stage: str) -> AsyncIterator[None]:
-        """Log bounded setup steps using safe fields."""
-        started = time.monotonic()
-        LOGGER.info("Alarm.com setup [%s]: %s started.", self.flow_id, stage)
-        try:
-            async with asyncio.timeout(SETUP_STAGE_TIMEOUT_S):
-                yield
-        except (pyadc.OtpRequired, pyadc.MustConfigureMfa) as err:
-            LOGGER.info(
-                "Alarm.com setup [%s]: %s needs two-factor authentication after %.1fs (%s).",
-                self.flow_id, stage, time.monotonic() - started, type(err).__name__,
-            )
-            raise
-        except Exception as err:
-            detail = ""
-            if stage == "sign-in" and self.bridge is not None:
-                detail = f" during {self.bridge.auth_controller.login_step}"
-            LOGGER.warning(
-                "Alarm.com setup [%s]: %s failed%s after %.1fs (%s).",
-                self.flow_id, stage, detail, time.monotonic() - started, type(err).__name__,
-            )
-            raise
-        else:
-            LOGGER.info(
-                "Alarm.com setup [%s]: %s completed in %.1fs.",
-                self.flow_id, stage, time.monotonic() - started,
-            )
-
     async def async_step_user(
-        self, user_input: dict[str, Any] | None = None, *, setup_error: str | None = None
+        self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Gather configuration data when flow is initiated via the user interface."""
-        errors = {"base": setup_error} if setup_error else {}
+        errors: dict[str, str] = {}
 
         if user_input is not None:
             self.config = {
@@ -112,6 +79,8 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 CONF_MFA_TOKEN: user_input.get(CONF_MFA_TOKEN),
             }
 
+            LOGGER.debug("Logging in to Alarm.com...")
+
             self.bridge = pyadc.AlarmBridge(
                 username=self.config[CONF_USERNAME],
                 password=self.config[CONF_PASSWORD],
@@ -119,7 +88,7 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             )
 
             try:
-                async with self._setup_stage("sign-in"):
+                async with asyncio.timeout(60):
                     await self.bridge.login()
             except pyadc.OtpRequired as exc:
                 LOGGER.debug("OTP code required. Moving to selection step.")
@@ -131,13 +100,14 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 TimeoutError,
                 aiohttp.ClientError,
                 pyadc.UnexpectedResponse,
-                pyadc.ServiceUnavailable,
                 pyadc.NotAuthorized,
             ):
+                LOGGER.exception("User login failed to contact Alarm.com.")
                 errors["base"] = "cannot_connect"
             except pyadc.AuthenticationFailed:
                 errors["base"] = "invalid_auth"
             except Exception:
+                LOGGER.exception("Got error while initializing Alarm.com.")
                 errors["base"] = "unknown"
             else:
                 return await self.async_step_final()
@@ -206,8 +176,10 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 try:
                     if self.otp_method in (pyadc.OtpType.email, pyadc.OtpType.sms):
-                        async with self._setup_stage("verification code request"):
-                            await self.bridge.auth_controller.request_otp(self.otp_method)
+                        LOGGER.debug(
+                            "Requesting OTP via %s...", self.otp_method.name
+                        )
+                        await self.bridge.auth_controller.request_otp(self.otp_method)
 
                     return await self.async_step_otp_submit()
 
@@ -217,8 +189,10 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                     pyadc.UnexpectedResponse,
                     pyadc.NotAuthorized,
                 ):
+                    LOGGER.exception("Failed to request OTP.")
                     errors["base"] = "cannot_connect"
                 except Exception:
+                    LOGGER.exception("Unexpected error while requesting OTP.")
                     errors["base"] = "unknown"
 
         otp_method_schema = vol.Schema(
@@ -261,16 +235,14 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 # Resending is explicit and never submits a blank or old code.
                 # Authenticator apps generate their codes locally.
                 if can_resend and user_input.get("resend_code", False):
-                    async with self._setup_stage("verification code resend"):
-                        await self.bridge.auth_controller.request_otp(self.otp_method)
+                    await self.bridge.auth_controller.request_otp(self.otp_method)
                     resend_status = "A new code was requested. Enter the code when it arrives."
                 elif code := user_input.get(CONF_OTP):
-                    async with self._setup_stage("verification code validation"):
-                        mfa_cookie = await self.bridge.auth_controller.submit_otp(
-                            method=self.otp_method,
-                            code=code,
-                            device_name=f"Home Assistant {self.hass.config.location_name}",
-                        )
+                    mfa_cookie = await self.bridge.auth_controller.submit_otp(
+                        method=self.otp_method,
+                        code=code,
+                        device_name=f"Home Assistant {self.hass.config.location_name}",
+                    )
                     if mfa_cookie:
                         self.config[CONF_MFA_TOKEN] = mfa_cookie
                         return await self.async_step_final()
@@ -316,25 +288,13 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         """Create configuration entry using entered data."""
         # self.bridge is always set by this point - see async_step_otp_select_method.
         assert self.bridge is not None
-        try:
-            async with self._setup_stage("active system lookup"):
-                system = await self.bridge.fetch_active_system()
-                system_id = str(system.id)
-        except (
-            TimeoutError,
-            aiohttp.ClientError,
-            pyadc.UnexpectedResponse,
-            pyadc.ServiceUnavailable,
-            pyadc.AuthenticationException,
-        ):
-            return await self.async_step_user(setup_error="cannot_connect")
-        except Exception:
-            return await self.async_step_user(setup_error="unknown")
+        await self.bridge.fetch_full_state()
 
+        system_id = str(self.bridge.active_system.id)
         await self.async_set_unique_id(system_id)
 
         self._config_title = (
-            f"{system.name} "
+            f"{self.bridge.active_system.name} "
             f"({self.bridge.auth_controller.user_email})"
         )
 
@@ -362,7 +322,6 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         # block a legitimate reauth.
         self._abort_if_unique_id_configured()
 
-        LOGGER.info("Alarm.com setup [%s]: active system found, creating configuration entry.", self.flow_id)
         return self.async_create_entry(
             title=self._config_title,
             data=self.config,
