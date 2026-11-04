@@ -44,7 +44,7 @@ from .const import (
 from .schema import vol
 
 LOGGER = logging.getLogger(__name__)
-SETUP_STAGE_TIMEOUT_S = 60
+SETUP_STAGE_TIMEOUT_S = 150
 LegacyArmingOptions = Literal["home", "away", "true", "false"]
 
 
@@ -88,7 +88,10 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         except Exception as err:
             detail = ""
             if stage == "sign-in" and self.bridge is not None:
-                detail = f" during {self.bridge.auth_controller.login_step}"
+                auth = self.bridge.auth_controller
+                detail = f" during {auth.login_step}"
+                if timings := auth.login_step_timings():
+                    detail += f" [{timings}]"
             error_type = type(err).__name__
             if isinstance(err, (pyadc.ServiceUnavailable, pyadc.UnexpectedResponse)) and err.__cause__:
                 cause = err.__cause__

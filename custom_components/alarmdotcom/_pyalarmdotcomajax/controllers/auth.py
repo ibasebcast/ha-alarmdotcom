@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import re
+import time
 from typing import TYPE_CHECKING
 
 import aiohttp
@@ -165,6 +166,32 @@ class AuthenticationController:
             else True
         )
 
+    @property
+    def login_step(self) -> str:
+        """The sign-in step currently running."""
+
+        return self._login_step
+
+    @login_step.setter
+    def login_step(self, step: str) -> None:
+        now = time.monotonic()
+        if step == "checking credentials":
+            self._step_log = []
+        self._step_log.append((step, now))
+        self._login_step = step
+
+    def login_step_timings(self) -> str:
+        """Elapsed seconds per sign-in step, safe to log (no account data)."""
+
+        log_ = getattr(self, "_step_log", [])
+        now = time.monotonic()
+        parts = []
+        for i, (step, started) in enumerate(log_):
+            ended = log_[i + 1][1] if i + 1 < len(log_) else now
+            if step != "checking credentials":
+                parts.append(f"{step} {ended - started:.1f}s")
+        return ", ".join(parts)
+
     def set_credentials(self, username: str, password: str, mfa_cookie: str | None = None) -> None:
         """Set the user's credentials."""
 
@@ -321,14 +348,15 @@ class AuthenticationController:
 
         # User ID required to check OTP status
         self.login_step = "looking up account identity"
-        await asyncio.gather(
-            self._identities.initialize(),
-            self._profiles.initialize(),
-            self._dealers.initialize(),
-        )
-
+        # Sequential, like the upstream library's single identity read: a parallel profile read opens a second
+        # connection during sign-in, and on slow provider paths each new connection costs seconds (issue #157).
+        await self._identities.initialize()
         if not self._identities.items:
             raise UnexpectedResponse("No identities found.")
+
+        self.login_step = "looking up user profile"
+        await self._profiles.initialize()
+        await self._dealers.initialize()
 
         self.login_step = "looking up dealer information"
         if dealer_id := self._identities.items[0].dealer_id:

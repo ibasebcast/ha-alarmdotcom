@@ -6,7 +6,8 @@ from enum import Enum
 
 # CONFIG: BEGIN
 REQUEST_RETRY_LIMIT = 3
-LOGIN_READ_TIMEOUT_S = 8
+# Some provider/region paths answer sign-in reads slowly (issue #157); bound hangs, not slow links.
+LOGIN_READ_TIMEOUT_S = 30
 SUBMIT_RETRY_LIMIT = 2
 DEBUG_REQUEST_DUMP_MAX_LEN = 1000
 # CONFIG: END
