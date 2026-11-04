@@ -137,6 +137,23 @@ When adding the integration you will be prompted for:
 | Password          | Yes      | Alarm.com account password                              |
 | One-Time Password | Maybe    | Required if your account uses two-factor authentication |
 
+### Capture first-time setup logs
+
+Before adding Alarm.com, use **Developer Tools → Actions** in YAML mode to enable
+the setup logger:
+
+```yaml
+action: logger.set_level
+data:
+  custom_components.alarmdotcom.config_flow: info
+```
+
+Add the integration or retry setup once. In **Settings → System → Logs**, find
+the lines beginning with `Alarm.com setup` and copy the lines with the same
+attempt ID. They show the stage, elapsed time, and exception type if a stage
+failed. Failures are logged at warning level even without enabling info logs.
+The setup messages omit credentials, verification codes, and response bodies.
+
 ---
 
 # Integration Options

@@ -106,6 +106,26 @@ async def test_login_failure_modes(
     assert result["errors"] == {"base": expected_error}
 
 
+async def test_discovery_failure_logs_safe_stage_and_returns_form(
+    hass: HomeAssistant, mock_bridge_class, mock_bridge, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A post-login failure stays in setup and its message is omitted from logs."""
+    mock_bridge.fetch_full_state.side_effect = TimeoutError("private-response-sentinel")
+    caplog.set_level("INFO", logger="custom_components.alarmdotcom.config_flow")
+    form = await _start_user_flow(hass)
+
+    result = await hass.config_entries.flow.async_configure(form["flow_id"], VALID_CREDS)
+
+    assert result["type"] == data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "user"
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert "sign-in completed" in caplog.text
+    assert "initial system and device discovery failed" in caplog.text
+    assert "(TimeoutError)" in caplog.text
+    assert form["flow_id"] in caplog.text
+    assert "private-response-sentinel" not in caplog.text
+
+
 async def test_must_configure_mfa_aborts(hass: HomeAssistant, mock_bridge_class, mock_bridge) -> None:
     """If Alarm.com requires 2FA to be enabled account-wide, abort with a clear reason."""
     mock_bridge.login = AsyncMock(side_effect=pyadc.MustConfigureMfa())
