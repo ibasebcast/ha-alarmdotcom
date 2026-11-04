@@ -55,9 +55,9 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Stable release:** `2026.11.04`.
+**Stable release:** `2026.11.04.1`.
 
-This release improves first-time setup and session recovery, restricts temporary-access writes to administrators, and reduces sensitive metadata in diagnostics. See [release notes](release-notes/2026.11.04.md).
+This release improves first-time setup and session recovery, restricts temporary-access writes to administrators, and reduces sensitive metadata in diagnostics. See [release notes](release-notes/2026.11.04.1.md).
 
 ### What's changed since 2026.10.26
 

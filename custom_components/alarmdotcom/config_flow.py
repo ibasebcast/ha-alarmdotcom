@@ -85,9 +85,12 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             )
             raise
         except Exception as err:
+            detail = ""
+            if stage == "sign-in" and self.bridge is not None:
+                detail = f" during {self.bridge.auth_controller.login_step}"
             LOGGER.warning(
-                "Alarm.com setup [%s]: %s failed after %.1fs (%s).",
-                self.flow_id, stage, time.monotonic() - started, type(err).__name__,
+                "Alarm.com setup [%s]: %s failed%s after %.1fs (%s).",
+                self.flow_id, stage, detail, time.monotonic() - started, type(err).__name__,
             )
             raise
         else:
