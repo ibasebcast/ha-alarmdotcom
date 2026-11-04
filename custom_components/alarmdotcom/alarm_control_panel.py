@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from collections.abc import Callable, Coroutine, Mapping
@@ -174,39 +175,44 @@ async def control_fn(
             raise ServiceValidationError("Invalid code entered for arm/disarm command.")
 
     try:
-        if command == DISARM:
-            await controller.disarm(partition_id)
+        async with asyncio.timeout(30):
+            if command == DISARM:
+                await controller.disarm(partition_id)
 
-        elif command == ARM_AWAY:
-            cmd_options = config_options.get(CONF_ARM_AWAY, {})
-            await controller.arm_away(
-                partition_id,
-                force_bypass=CONF_FORCE_BYPASS in cmd_options,
-                no_entry_delay=CONF_NO_ENTRY_DELAY in cmd_options,
-                silent_arming=CONF_SILENT_ARM in cmd_options,
-            )
+            elif command == ARM_AWAY:
+                cmd_options = config_options.get(CONF_ARM_AWAY, {})
+                await controller.arm_away(
+                    partition_id,
+                    force_bypass=CONF_FORCE_BYPASS in cmd_options,
+                    no_entry_delay=CONF_NO_ENTRY_DELAY in cmd_options,
+                    silent_arming=CONF_SILENT_ARM in cmd_options,
+                )
 
-        elif command == ARM_STAY:
-            cmd_options = config_options.get(CONF_ARM_HOME, {})
-            await controller.arm_stay(
-                partition_id,
-                force_bypass=CONF_FORCE_BYPASS in cmd_options,
-                no_entry_delay=CONF_NO_ENTRY_DELAY in cmd_options,
-                silent_arming=CONF_SILENT_ARM in cmd_options,
-            )
+            elif command == ARM_STAY:
+                cmd_options = config_options.get(CONF_ARM_HOME, {})
+                await controller.arm_stay(
+                    partition_id,
+                    force_bypass=CONF_FORCE_BYPASS in cmd_options,
+                    no_entry_delay=CONF_NO_ENTRY_DELAY in cmd_options,
+                    silent_arming=CONF_SILENT_ARM in cmd_options,
+                )
 
-        elif command == ARM_NIGHT:
-            cmd_options = config_options.get(CONF_ARM_NIGHT, {})
-            await controller.arm_night(
-                partition_id,
-                force_bypass=CONF_FORCE_BYPASS in cmd_options,
-                no_entry_delay=CONF_NO_ENTRY_DELAY in cmd_options,
-                silent_arming=CONF_SILENT_ARM in cmd_options,
-            )
+            elif command == ARM_NIGHT:
+                cmd_options = config_options.get(CONF_ARM_NIGHT, {})
+                await controller.arm_night(
+                    partition_id,
+                    force_bypass=CONF_FORCE_BYPASS in cmd_options,
+                    no_entry_delay=CONF_NO_ENTRY_DELAY in cmd_options,
+                    silent_arming=CONF_SILENT_ARM in cmd_options,
+                )
 
-        else:
-            raise ServiceValidationError("Unsupported command.")
+            else:
+                raise ServiceValidationError("Unsupported command.")
 
+    except TimeoutError:
+        raise InvalidStateError(
+            "Alarm.com did not confirm the panel command in time. Check the panel before retrying."
+        ) from None
     except (pyadc.ServiceUnavailable, pyadc.UnexpectedResponse, pyadc.UnsupportedOperation) as err:
         raise InvalidStateError(f"Failed to execute partition command '{command}'.") from err
 

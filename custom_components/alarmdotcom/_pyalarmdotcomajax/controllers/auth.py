@@ -130,7 +130,10 @@ class AuthenticationController:
     def keep_alive_url(self) -> str | None:
         """URL for keep-alive requests, if keep alive is enabled."""
 
-        return self._identities.items[0].attributes.application_session_properties.keep_alive_url
+        return (
+            self._identities.items[0].attributes.application_session_properties.keep_alive_url
+            or "/web/KeepAlive.aspx"
+        )
 
     @property
     def use_celsius(self) -> bool:

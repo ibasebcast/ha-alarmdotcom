@@ -9,6 +9,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.service import async_register_admin_service
 
 from .const import DOMAIN
 from .schema import vol
@@ -48,14 +49,19 @@ def async_register_access_service(hass: HomeAssistant) -> None:
                 "Could not confirm the access update. Check the Alarm.com portal before retrying."
             ) from None
 
-    hass.services.async_register(DOMAIN, SERVICE_SET_TEMPORARY_ACCESS, handle, schema=vol.Schema({
-        vol.Required("config_entry_id"): cv.string,
-        vol.Required("system_id"): cv.string,
-        vol.Required("user_id"): cv.string,
-        vol.Required("begin"): cv.datetime,
-        vol.Required("end"): cv.datetime,
-    }))
-
+    async_register_admin_service(
+        hass,
+        DOMAIN,
+        SERVICE_SET_TEMPORARY_ACCESS,
+        handle,
+        schema=vol.Schema({
+            vol.Required("config_entry_id"): cv.string,
+            vol.Required("system_id"): cv.string,
+            vol.Required("user_id"): cv.string,
+            vol.Required("begin"): cv.datetime,
+            vol.Required("end"): cv.datetime,
+        }),
+    )
 
     async def read_schedule(call: ServiceCall) -> ServiceResponse:
         """Read from the selected live account and return only public fields."""

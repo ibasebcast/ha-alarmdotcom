@@ -42,6 +42,7 @@ async def test_system_lights_relationship_drives_scoped_discovery(light_type):
     })
     bridge._available_device_catalogs = MagicMock(active_system_id="system-1", initialize=AsyncMock())
     bridge._systems = MagicMock(initialize=AsyncMock())
+    bridge._systems.__getitem__.return_value.id = "system-1"
     bridge._device_catalogs = MagicMock(initialize=AsyncMock(), items=[], _included_resources=[])
     bridge._partitions = MagicMock(initialize=AsyncMock())
     bridge._auth_controller = MagicMock(has_trouble_conditions_service=False)
@@ -50,6 +51,7 @@ async def test_system_lights_relationship_drives_scoped_discovery(light_type):
     bridge.get = AsyncMock(side_effect=[response, lights_response])
     with patch.object(AlarmBridge, "resource_controllers", new_callable=PropertyMock, return_value=[]):
         await bridge.fetch_full_state()
+    bridge._device_catalogs.initialize.assert_awaited_once_with(["system-1"])
     assert bridge.get.await_args_list[0].args == ("systems/systems", "system-1")
     assert bridge.get.await_args_list[1].args == (AlarmBridge._build_light_discovery_path(set(ids)), None)
     bridge._lights._refresh.assert_awaited_once_with(pre_fetched=[])

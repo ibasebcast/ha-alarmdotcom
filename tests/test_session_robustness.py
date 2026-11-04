@@ -35,6 +35,7 @@ from _pyalarmdotcomajax.exceptions import (
     ServiceUnavailable,
 )
 from _pyalarmdotcomajax.models.auth import OtpType
+from _pyalarmdotcomajax.models.user import IdentityAttributes
 from _pyalarmdotcomajax.websocket import client as ws_client
 from _pyalarmdotcomajax.websocket.client import WebSocketClient, WebSocketState
 from homeassistant.config_entries import ConfigEntryState
@@ -321,3 +322,12 @@ async def test_a_network_error_during_setup_is_retried(hass: HomeAssistant) -> N
 
         await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
+
+
+@pytest.mark.parametrize("payload", [{}, {"application_session_properties": {}}])
+def test_identity_accepts_missing_session_preferences(payload: dict) -> None:
+    """Accounts without optional session fields can still finish login."""
+    identity = IdentityAttributes.from_dict(payload)
+
+    assert identity.application_session_properties.enable_keep_alive is True
+    assert identity.application_session_properties.inactivity_warning_timeout_ms is None

@@ -81,10 +81,13 @@ class AlarmHub:
 
         self.close_jobs: list[CALLBACK_TYPE] = []
         self.available: bool = True
+        self._refresh_auth_failed = False
+        self._ws_dead = False
         self._reconnect_attempts: int = 0
         self._reconnect_task: asyncio.Task | None = None
         self._refresh_lock = asyncio.Lock()
         self._last_refresh_auth_reconnect: float | None = None
+
     async def login(self) -> bool:
         """Log in to alarm.com."""
         try:
@@ -182,6 +185,16 @@ class AlarmHub:
         log.info("Alarm.com no longer lists %s; removing device %s.", message.id, device.name_by_user or device.name)
         device_registry.async_remove_device(device.id)
 
+    @callback
+    def _update_availability(self) -> None:
+        """Publish changes from HTTP health as well as the event connection."""
+        available = not (self._refresh_auth_failed or self._ws_dead)
+        if available != self.available:
+            self.available = available
+            self.api.events.publish(
+                pyadc.EventBrokerMessage(topic=pyadc.EventBrokerTopic.CONNECTION_EVENT)
+            )
+
     async def _async_refresh_state(self, _now: datetime | None = None) -> None:
         """Periodically poll full state as a safety net against missed websocket events."""
         try:
@@ -194,10 +207,14 @@ class AlarmHub:
             # this runs instead of being a silent no-op.
             async with self._refresh_lock:
                 await self.api.refresh_all_resources()
+                self._refresh_auth_failed = False
+                self._update_availability()
         except pyadc.NotAuthorized as err:
             # 406/423: an endpoint this account may not use. The session is fine, so logging in again cannot help.
             log.debug("Alarm.com: periodic refresh refused by Alarm.com: %s", err)
         except pyadc.AuthenticationException:
+            self._refresh_auth_failed = True
+            self._update_availability()
             now = time.monotonic()
             if (
                 self._last_refresh_auth_reconnect is not None
@@ -226,16 +243,18 @@ class AlarmHub:
                 self._reconnect_attempts + 1,
                 WS_MAX_RECONNECT_ATTEMPTS,
             )
-            self.available = False
+            self._ws_dead = True
+            self._update_availability()
             await self._async_handle_ws_death()
 
-        elif message.current_state == pyadc.WebSocketState.CONNECTED:
-            was_unavailable = not self.available
-            if was_unavailable:
+        elif message.current_state in (pyadc.WebSocketState.CONNECTED, pyadc.WebSocketState.RECONNECTED):
+            was_dead = self._ws_dead
+            if was_dead:
                 log.info("Alarm.com websocket reconnected. Reconciling device state.")
-            self.available = True
+            self._ws_dead = False
+            self._update_availability()
             self._reconnect_attempts = 0
-            if was_unavailable:
+            if was_dead:
                 self.hass.async_create_task(self._async_refresh_state())
 
         elif message.current_state not in (
@@ -286,7 +305,8 @@ class AlarmHub:
                     err,
                 )
             else:
-                self.available = True
+                self._ws_dead = False
+                self._update_availability()
                 self._reconnect_attempts = 0
                 log.info("Alarm.com: reconnect successful.")
                 # initialize() skips controllers that are already set up, so nothing above re-fetched state.
