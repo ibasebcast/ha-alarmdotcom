@@ -15,6 +15,7 @@ from _pyalarmdotcomajax.controllers.users import (
 from _pyalarmdotcomajax.exceptions import (
     AuthenticationFailed,
     MustConfigureMfa,
+    NotAuthorized,
     OtpRequired,
     ServiceUnavailable,
     UnexpectedResponse,
@@ -110,7 +111,9 @@ class AuthenticationController:
     def dealer(self) -> str | None:
         """The name of the Alarm.com provider."""
 
-        return self._dealers.items[0].attributes.name or "Alarm.com"
+        if self._dealers.items:
+            return self._dealers.items[0].attributes.name or "Alarm.com"
+        return "Alarm.com"
 
     @property
     def user_email(self) -> str | None:
@@ -228,6 +231,7 @@ class AuthenticationController:
                     accept_types=const.ResponseTypes.HTML,
                     use_ajax_key=False,
                     url=f"{const.URL_BASE}login",
+                    timeout=aiohttp.ClientTimeout(total=const.LOGIN_READ_TIMEOUT_S),
                 ) as resp:
                     resp.raise_for_status()
 
@@ -245,14 +249,16 @@ class AuthenticationController:
 
             # Only retry for connection/server errors. No expectation of being logged in here, so we don't need to
             # single out authentication errors.
-            except (TimeoutError, aiohttp.ClientResponseError) as err:
-                if retries == const.REQUEST_RETRY_LIMIT:
+            except (TimeoutError, aiohttp.ClientConnectionError, aiohttp.ClientResponseError) as err:
+                if isinstance(err, aiohttp.ClientResponseError) and err.status < 500 and err.status != 408:
+                    raise UnexpectedResponse from err
+                if retries == 1:
                     raise ServiceUnavailable from err
 
                 retries += 1
                 continue
 
-            except (AttributeError, IndexError, Exception) as err:
+            except Exception as err:
                 raise UnexpectedResponse from err
 
     async def _login_submit_credentials(self, login_info: dict[str, str]) -> None:
@@ -327,7 +333,12 @@ class AuthenticationController:
 
         self.login_step = "looking up dealer information"
         if dealer_id := self._identities.items[0].dealer_id:
-            log.debug(await self._dealers.add_target(dealer_id))
+            try:
+                # Dealer metadata is optional. Keep enough time for the required MFA check.
+                async with asyncio.timeout(5):
+                    await self._dealers.add_target(dealer_id)
+            except (TimeoutError, aiohttp.ClientError, ServiceUnavailable, UnexpectedResponse, NotAuthorized) as err:
+                log.debug("Alarm.com dealer lookup unavailable (%s).", type(err).__name__)
         else:
             log.error("No dealer ID found.")
 

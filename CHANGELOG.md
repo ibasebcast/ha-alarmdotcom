@@ -1,3 +1,7 @@
+## 2026.11.04.2 (stable)
+
+Bound sign-in reads, fall back between identity lookup URLs, and let setup proceed to MFA when optional dealer metadata is unavailable (#157). See [release notes](release-notes/2026.11.04.2.md).
+
 ## 2026.11.04.1 (stable)
 
 Show the failing sign-in step in the default Home Assistant setup warning (#157). See [release notes](release-notes/2026.11.04.1.md).
