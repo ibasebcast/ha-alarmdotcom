@@ -16,6 +16,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
@@ -77,6 +78,7 @@ class AlarmHub:
             username=config_entry.data[CONF_USERNAME],
             password=config_entry.data[CONF_PASSWORD],
             mfa_token=config_entry.data.get(CONF_MFA_TOKEN),
+            session_factory=lambda: async_create_clientsession(hass, connector_owner=False),
         )
 
         self.close_jobs: list[CALLBACK_TYPE] = []

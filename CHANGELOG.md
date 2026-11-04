@@ -1,3 +1,7 @@
+## 2026.11.04b0 (beta)
+
+Test Home Assistant HTTP transport, login preload retries, and safe setup diagnostics for #157. See [test instructions](release-notes/2026.11.04b0.md).
+
 ## 2026.11.04.3 (stable)
 
 Roll back the experimental sign-in and setup changes for #157, retain the other stability and access-control fixes, and reorganize the README. See [release notes](release-notes/2026.11.04.3.md).
