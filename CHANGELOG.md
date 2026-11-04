@@ -1,3 +1,7 @@
+## 2026.11.04.3 (stable)
+
+Roll back the experimental sign-in and setup changes for #157, retain the other stability and access-control fixes, and reorganize the README. See [release notes](release-notes/2026.11.04.3.md).
+
 ## 2026.11.04.2 (stable)
 
 Bound sign-in reads, fall back between identity lookup URLs, and let setup proceed to MFA when optional dealer metadata is unavailable (#157). See [release notes](release-notes/2026.11.04.2.md).

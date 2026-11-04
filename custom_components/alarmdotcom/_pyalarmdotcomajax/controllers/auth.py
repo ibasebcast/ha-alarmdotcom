@@ -15,7 +15,6 @@ from _pyalarmdotcomajax.controllers.users import (
 from _pyalarmdotcomajax.exceptions import (
     AuthenticationFailed,
     MustConfigureMfa,
-    NotAuthorized,
     OtpRequired,
     ServiceUnavailable,
     UnexpectedResponse,
@@ -69,7 +68,6 @@ class AuthenticationController:
     ) -> None:
         """Initialize authentication controller."""
         self._bridge = bridge
-        self.login_step = "checking credentials"
 
         # Credentials
         # We allow these to be set after initialization so that we can use an instantiated (but not initialized)
@@ -111,9 +109,7 @@ class AuthenticationController:
     def dealer(self) -> str | None:
         """The name of the Alarm.com provider."""
 
-        if self._dealers.items:
-            return self._dealers.items[0].attributes.name or "Alarm.com"
-        return "Alarm.com"
+        return self._dealers.items[0].attributes.name or "Alarm.com"
 
     @property
     def user_email(self) -> str | None:
@@ -134,10 +130,7 @@ class AuthenticationController:
     def keep_alive_url(self) -> str | None:
         """URL for keep-alive requests, if keep alive is enabled."""
 
-        return (
-            self._identities.items[0].attributes.application_session_properties.keep_alive_url
-            or "/web/KeepAlive.aspx"
-        )
+        return self._identities.items[0].attributes.application_session_properties.keep_alive_url
 
     @property
     def use_celsius(self) -> bool:
@@ -185,7 +178,6 @@ class AuthenticationController:
         """
         log.debug("Logging in to Alarm.com")
 
-        self.login_step = "checking credentials"
         if "" in [self._username, self._password]:
             raise AuthenticationFailed("Username and password are required.")
 
@@ -195,14 +187,12 @@ class AuthenticationController:
         # Step 1: Get login page and cookies
         #
 
-        self.login_step = "loading login page"
         login_info = await self._login_preload()
 
         #
         # Step 2: Log in and save first anti-forgery key
         #
 
-        self.login_step = "submitting credentials"
         await self._login_submit_credentials(login_info)
 
         log.debug("Logged in to Alarm.com.")
@@ -231,7 +221,6 @@ class AuthenticationController:
                     accept_types=const.ResponseTypes.HTML,
                     use_ajax_key=False,
                     url=f"{const.URL_BASE}login",
-                    timeout=aiohttp.ClientTimeout(total=const.LOGIN_READ_TIMEOUT_S),
                 ) as resp:
                     resp.raise_for_status()
 
@@ -249,16 +238,14 @@ class AuthenticationController:
 
             # Only retry for connection/server errors. No expectation of being logged in here, so we don't need to
             # single out authentication errors.
-            except (TimeoutError, aiohttp.ClientConnectionError, aiohttp.ClientResponseError) as err:
-                if isinstance(err, aiohttp.ClientResponseError) and err.status < 500 and err.status != 408:
-                    raise UnexpectedResponse from err
-                if retries == 1:
+            except (TimeoutError, aiohttp.ClientResponseError) as err:
+                if retries == const.REQUEST_RETRY_LIMIT:
                     raise ServiceUnavailable from err
 
                 retries += 1
                 continue
 
-            except Exception as err:
+            except (AttributeError, IndexError, Exception) as err:
                 raise UnexpectedResponse from err
 
     async def _login_submit_credentials(self, login_info: dict[str, str]) -> None:
@@ -321,7 +308,6 @@ class AuthenticationController:
         """Step 3 of login process. Determine whether OTP is required."""
 
         # User ID required to check OTP status
-        self.login_step = "looking up account identity"
         await asyncio.gather(
             self._identities.initialize(),
             self._profiles.initialize(),
@@ -331,18 +317,11 @@ class AuthenticationController:
         if not self._identities.items:
             raise UnexpectedResponse("No identities found.")
 
-        self.login_step = "looking up dealer information"
         if dealer_id := self._identities.items[0].dealer_id:
-            try:
-                # Dealer metadata is optional. Keep enough time for the required MFA check.
-                async with asyncio.timeout(5):
-                    await self._dealers.add_target(dealer_id)
-            except (TimeoutError, aiohttp.ClientError, ServiceUnavailable, UnexpectedResponse, NotAuthorized) as err:
-                log.debug("Alarm.com dealer lookup unavailable (%s).", type(err).__name__)
+            log.debug(await self._dealers.add_target(dealer_id))
         else:
             log.error("No dealer ID found.")
 
-        self.login_step = "checking two-factor requirements"
         response = await self._bridge.get(path=TWO_FACTOR_PATH, id=self._identities.items[0].id)
 
         if not isinstance(response.data, Resource):

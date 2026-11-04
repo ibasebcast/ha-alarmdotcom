@@ -25,7 +25,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
-from _pyalarmdotcomajax import AlarmBridge, _LOGIN_IN_PROGRESS
+from _pyalarmdotcomajax import AlarmBridge
 from _pyalarmdotcomajax.const import ResponseTypes
 from _pyalarmdotcomajax.controllers import auth as auth_mod
 from _pyalarmdotcomajax.exceptions import (
@@ -35,7 +35,6 @@ from _pyalarmdotcomajax.exceptions import (
     ServiceUnavailable,
 )
 from _pyalarmdotcomajax.models.auth import OtpType
-from _pyalarmdotcomajax.models.user import IdentityAttributes
 from _pyalarmdotcomajax.websocket import client as ws_client
 from _pyalarmdotcomajax.websocket.client import WebSocketClient, WebSocketState
 from homeassistant.config_entries import ConfigEntryState
@@ -322,44 +321,3 @@ async def test_a_network_error_during_setup_is_retried(hass: HomeAssistant) -> N
 
         await hass.config_entries.async_unload(entry.entry_id)
         await hass.async_block_till_done()
-
-
-@pytest.mark.parametrize("payload", [{}, {"application_session_properties": {}}])
-def test_identity_accepts_missing_session_preferences(payload: dict) -> None:
-    """Accounts without optional session fields can still finish login."""
-    identity = IdentityAttributes.from_dict(payload)
-
-    assert identity.application_session_properties.enable_keep_alive is True
-    assert identity.application_session_properties.inactivity_warning_timeout_ms is None
-
-
-async def test_identity_timeout_tries_slash_then_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A stalled identity request must leave time to try the alternate URL."""
-    bridge = AlarmBridge()
-    request = AsyncMock(side_effect=[TimeoutError(), MagicMock()])
-    monkeypatch.setattr(bridge, "request", request)
-    token = _LOGIN_IN_PROGRESS.set(True)
-    try:
-        await bridge.get(bridge.auth_controller._identities._resource_url_override or "identities", None)
-    finally:
-        _LOGIN_IN_PROGRESS.reset(token)
-
-    assert [call.kwargs["url"] for call in request.await_args_list] == [
-        "https://www.alarm.com/web/api/identities/",
-        "https://www.alarm.com/web/api/identities",
-    ]
-
-
-async def test_sign_in_read_does_not_retry_auth_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
-    """An authentication rejection should surface immediately."""
-    bridge = AlarmBridge()
-    request = AsyncMock(side_effect=AuthenticationFailed("rejected"))
-    monkeypatch.setattr(bridge, "request", request)
-    token = _LOGIN_IN_PROGRESS.set(True)
-    try:
-        with pytest.raises(AuthenticationFailed):
-            await bridge.get("identities/", None)
-    finally:
-        _LOGIN_IN_PROGRESS.reset(token)
-
-    request.assert_awaited_once()

@@ -18,7 +18,7 @@ class IdentitiesController(BaseController[Identity]):
 
     resource_type = ResourceType.IDENTITY
     _resource_class = Identity
-    _resource_url_override = "identities/"
+    _resource_url_override = "identities"
 
 
 class ProfilesController(BaseController[Profile]):

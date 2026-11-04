@@ -33,7 +33,7 @@ def mock_bridge(mock_system):
     """
     Build a mock AlarmBridge representing a successful, no-OTP login.
 
-    login() and fetch_active_system() succeed, and
+    login() succeeds without raising, fetch_full_state() succeeds, and
     active_system / auth_controller.user_email are populated so
     async_step_final can build a title and unique_id without touching the
     real Alarm.com API.
@@ -41,7 +41,6 @@ def mock_bridge(mock_system):
     bridge = MagicMock()
     bridge.login = AsyncMock(return_value=None)
     bridge.fetch_full_state = AsyncMock(return_value=None)
-    bridge.fetch_active_system = AsyncMock(return_value=mock_system)
     bridge.active_system = mock_system
     bridge.auth_controller = MagicMock()
     bridge.auth_controller.user_email = "test@example.com"

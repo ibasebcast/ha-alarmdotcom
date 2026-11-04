@@ -51,39 +51,15 @@ Because this integration communicates with Alarm.com cloud services, functionali
 > Some alarm.com devices use Z-Wave, so if you have a Z-Wave dongle then you can move the devices from alarm.com to Home Assistant's [native Z-Wave integration](https://www.home-assistant.io/integrations/zwave_js/)
 ---
 
-# How to install and setup the integration
+# Installation and Setup
 
 ## Installation
 
-**Stable release:** `2026.11.04.2`.
+**Stable release:** [2026.11.04.3](release-notes/2026.11.04.3.md). See the [changelog](CHANGELOG.md) for earlier releases.
 
-This patch adds bounded retries for sign-in reads and an alternate identity lookup URL. See [release notes](release-notes/2026.11.04.2.md).
+Back up Home Assistant before updating through HACS, then restart Home Assistant.
 
-### What's changed since 2026.10.26
-
-- **Sensor events:** quick combined open/close events produce a cancellable two-second contact/motion pulse for history and automations. Newer sensor events and API refreshes take precedence; glass-break restoral handling is retained.
-- **WebSocket reliability:** sessions rotate before token expiry, connection handshakes are bounded, and recent diagnostic event history grows from 25 to 500 frames.
-- **Home Assistant compatibility:** fix climate imports, support November's DeviceInfo dataclass and Probatio schemas, and migrate thermostat temperatures to the native API while preserving earlier releases' behavior.
-- **Camera behavior:** throttle missing-stream warnings, improve credential-free failure diagnostics, and clarify device-dependent snapshots and bundled-card setup.
-- **Credential protection:** remove stream-response dumps, request URLs in custom API errors/logs, and payload-bearing parser tracebacks. Camera tokens remain outside entity state and recorder history, delivered only through permission-checked WebSocket requests.
-- **Light discovery:** use IDs advertised by the named system lights relationship even when resource type labels vary, retain ID-scoped requests, and add privacy-safe entry counts. Normal no-light accounts no longer generate discovery warnings.
-- **Validation:** add HTTP credential, camera permission, sensor pulse, light discovery, core compatibility, and release-version regressions. Keep the manifest and bundled library version aligned.
-
-### Home Assistant compatibility
-
-The automated full suite targets Home Assistant 2026.10.4. Independent compatibility checks pass against 2026.11.0b0 and 2026.11.0b1 using their actual core APIs, covering device metadata and parent links, configuration and WebSocket schemas, thermostat temperatures and units, camera state secrecy, and platform unloading. November's published custom-component test-helper package is not yet available, so these checks run independently of the October full-suite helper.
-
-Home Assistant 2026.11.0b0 is still an upstream beta. These checks do not claim validation against the final November release or every hardware/provider combination.
-
-### Updating and known limitations
-
-Back up your Home Assistant configuration, install the stable version through HACS when it is published, and restart Home Assistant. Verify login/MFA, integration reloads, live sensor events, and controls for the devices installed on your account.
-
-[Light discovery #115](https://github.com/ibasebcast/ha-alarmdotcom/issues/115) was resolved by enabling Lights/Thermostats access for the dedicated HA login. If devices are missing, first sign into Alarm.com with the exact same login used in HA and check its category permissions. See the dedicated-login checklist below. The speculative request-context change was not included.
-
-Camera playback requires an installed, online camera. A listed camera that is not installed or online can return empty stream information without indicating an integration startup failure. Snapshot availability depends on the camera and account.
-
-**HACS status:** [The default-catalog submission](https://github.com/hacs/default/pull/12316) is under maintainer review. Use the custom-repository installation steps below until inclusion is approved.
+**HACS status:** [The default-catalog submission](https://github.com/hacs/default/pull/12316) is under maintainer review. Use the custom-repository steps below.
 
 ### Install Using HACS (Recommended)
 
@@ -137,23 +113,6 @@ When adding the integration you will be prompted for:
 | Password          | Yes      | Alarm.com account password                              |
 | One-Time Password | Maybe    | Required if your account uses two-factor authentication |
 
-### Capture first-time setup logs
-
-Before adding Alarm.com, use **Developer Tools → Actions** in YAML mode to enable
-the setup logger:
-
-```yaml
-action: logger.set_level
-data:
-  custom_components.alarmdotcom.config_flow: info
-```
-
-Add the integration or retry setup once. In **Settings → System → Logs**, find
-the lines beginning with `Alarm.com setup` and copy the lines with the same
-attempt ID. They show the stage, elapsed time, and exception type if a stage
-failed. Failures are logged at warning level even without enabling info logs.
-The setup messages omit credentials, verification codes, and response bodies.
-
 ---
 
 # Integration Options
@@ -183,6 +142,30 @@ This integration exposes the following services, callable from **Developer Tools
 | `alarmdotcom.cancel_auto_off`  | Cancel a pending auto-off timer                                  | Same as above                 |
 
 `bypass_sensor`/`unbypass_sensor` take a `resource_id`, not an `entity_id` - find this in the sensor entity's own `resource_id` attribute (Settings → Devices & Services → Alarm.com → the sensor entity → Attributes). `set_auto_off`/`cancel_auto_off` use Home Assistant's standard entity target selector instead, since they operate on lights specifically and Home Assistant already has a rich picker for that.
+
+### Set a temporary access schedule
+
+The admin-only `alarmdotcom.set_temporary_access` action updates the temporary
+schedule for an existing Alarm.com user. Select the integration account and
+enter the system ID, the user ID from the portal's user page, and the start
+and end times in ISO 8601 with `Z` or an explicit UTC offset.
+
+### Read a temporary user's saved schedule
+
+The response-only `alarmdotcom.get_temporary_user_schedule` action accepts the same account, system ID, and user ID as the write action. In a script:
+
+```yaml
+- action: alarmdotcom.get_temporary_user_schedule
+  data:
+    config_entry_id: YOUR_CONFIG_ENTRY_ID
+    system_id: "YOUR_SYSTEM_ID"
+    user_id: "YOUR_USER_ID"
+  response_variable: saved_access
+```
+
+Response fields are `temporary_schedule` (an object with UTC `begin`/`end`, or null) and `credential_status` (Alarm.com's numeric status, or null). No PIN, raw access document, or arbitrary server description is returned. Status values are not translated into undocumented synchronization guarantees. A null temporary schedule does not mean access is unrestricted; another access type may apply.
+
+This is a standard HA action with response data. An existing MCP connection that supports those actions can call it without integration-specific MCP code. Reading confirms what Alarm.com reports, not enforcement or completed synchronization on every lock/panel. User/system name pickers and unrestricted/weekly access management remain outside this build.
 
 ---
 
@@ -399,15 +382,7 @@ Removing this integration is the same as most HACS integrations:
 
 This integration is under active maintenance.
 
-Recent improvements include:
-
-* Prepared stable 2026.10.28 with the b0–b3 device metadata, schema, thermostat, sensor-event, and WebSocket updates.
-* Added separate October full-suite and November compatibility CI checks.
-* Hardened credential logging and kept camera stream tokens out of entity state and recorder history.
-* Bundled the WebRTC camera card with authenticated, permission-checked credential delivery.
-* Improved device registry handling and websocket reliability.
-
-Missing light discovery (#115) remains an open investigation. Home Assistant 2026.11 compatibility testing currently targets 2026.11.0b0.
+See the [changelog](CHANGELOG.md) for compatibility checks and recent changes.
 
 ---
 
@@ -526,20 +501,3 @@ See **LICENSE** (Apache-2.0) and **LICENSE-upstream** (MIT) for details.
 
  ## Also check the quality_scale.yaml for other notes
 -->
-
-### Read a temporary user's saved schedule
-
-The response-only `alarmdotcom.get_temporary_user_schedule` action accepts the same account, system ID, and user ID as the write action. In a script:
-
-```yaml
-- action: alarmdotcom.get_temporary_user_schedule
-  data:
-    config_entry_id: YOUR_CONFIG_ENTRY_ID
-    system_id: "YOUR_SYSTEM_ID"
-    user_id: "YOUR_USER_ID"
-  response_variable: saved_access
-```
-
-Response fields are `temporary_schedule` (an object with UTC `begin`/`end`, or null) and `credential_status` (Alarm.com's numeric status, or null). No PIN, raw access document, or arbitrary server description is returned. Status values are not translated into undocumented synchronization guarantees. A null temporary schedule does not mean access is unrestricted; another access type may apply.
-
-This is a standard HA action with response data. An existing MCP connection that supports those actions can call it without integration-specific MCP code. Reading confirms what Alarm.com reports, not enforcement or completed synchronization on every lock/panel. User/system name pickers and unrestricted/weekly access management remain outside this build.
