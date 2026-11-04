@@ -231,7 +231,6 @@ class AuthenticationController:
                     accept_types=const.ResponseTypes.HTML,
                     use_ajax_key=False,
                     url=f"{const.URL_BASE}login",
-                    timeout=aiohttp.ClientTimeout(total=const.LOGIN_READ_TIMEOUT_S),
                 ) as resp:
                     resp.raise_for_status()
 
@@ -252,7 +251,7 @@ class AuthenticationController:
             except (TimeoutError, aiohttp.ClientConnectionError, aiohttp.ClientResponseError) as err:
                 if isinstance(err, aiohttp.ClientResponseError) and err.status < 500 and err.status != 408:
                     raise UnexpectedResponse from err
-                if retries == 1:
+                if retries == const.REQUEST_RETRY_LIMIT:
                     raise ServiceUnavailable from err
 
                 retries += 1

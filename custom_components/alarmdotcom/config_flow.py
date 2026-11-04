@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.selector import (
     SelectSelector,
     SelectSelectorConfig,
@@ -88,9 +89,15 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             detail = ""
             if stage == "sign-in" and self.bridge is not None:
                 detail = f" during {self.bridge.auth_controller.login_step}"
+            error_type = type(err).__name__
+            if isinstance(err, (pyadc.ServiceUnavailable, pyadc.UnexpectedResponse)) and err.__cause__:
+                cause = err.__cause__
+                error_type += f"; cause={type(cause).__name__}"
+                if isinstance(cause, aiohttp.ClientResponseError):
+                    error_type += f"; HTTP {cause.status}"
             LOGGER.warning(
                 "Alarm.com setup [%s]: %s failed%s after %.1fs (%s).",
-                self.flow_id, stage, detail, time.monotonic() - started, type(err).__name__,
+                self.flow_id, stage, detail, time.monotonic() - started, error_type,
             )
             raise
         else:
@@ -116,6 +123,7 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
                 username=self.config[CONF_USERNAME],
                 password=self.config[CONF_PASSWORD],
                 mfa_token=self.config[CONF_MFA_TOKEN],
+                session_factory=lambda: async_create_clientsession(self.hass, connector_owner=False),
             )
 
             try:

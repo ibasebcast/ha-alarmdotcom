@@ -201,6 +201,8 @@ class AlarmBridge:
         username: str | None = None,
         password: str | None = None,
         mfa_token: str | None = None,
+        *,
+        session_factory: Callable[[], aiohttp.ClientSession] | None = None,
     ) -> None:
         """Initialize alarm bridge."""
 
@@ -218,6 +220,7 @@ class AlarmBridge:
         self._reconcile_requested = False
 
         # Session
+        self._session_factory = session_factory
         self._websession: aiohttp.ClientSession | None = None
         self.ajax_key: str | None = None
 
@@ -922,7 +925,11 @@ class AlarmBridge:
         self._reconcile_task = None
 
         if self._websession:
-            await self._websession.close()
+            if self._session_factory is None:
+                await self._websession.close()
+            else:
+                # Factory sessions borrow the host connector.
+                self._websession.detach()
         self._websession = None
         self._initialized = False
         log.info("Connection to alarm.com closed.")
@@ -945,10 +952,7 @@ class AlarmBridge:
 
         kwargs["headers"].update(
             {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-                ),
+                "User-Agent": f"ha-alarmdotcom/{__version__}",
                 "Referrer": "https://www.alarm.com/web/system/home",
                 "Connection": "keep-alive",
             }
@@ -980,7 +984,7 @@ class AlarmBridge:
 
         if self._websession is None:
             log.debug("Creating new websession.")
-            self._websession = aiohttp.ClientSession()
+            self._websession = (self._session_factory or aiohttp.ClientSession)()
 
         if self._auth_controller.mfa_cookie:
             kwargs.setdefault("cookies", {}).update(
