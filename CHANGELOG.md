@@ -1,3 +1,11 @@
+## 2026.11.04 (stable)
+
+- Handle missing session preferences and defer full device discovery until config entry startup. Record safe timing and failure details during setup (#157).
+- Show unavailable states during failed authentication refreshes and bound panel commands (#162).
+- Require administrator access for temporary schedule writes and redact camera network details and raw events from diagnostics.
+
+See [release notes](release-notes/2026.11.04.md).
+
 ## 2026.11.01
 
 Camera reconnect recovery and signed snapshots; SMS/email code resend; temporary-access confirmation correction and read-only schedule action; README install buttons and login-permissions guidance. See [test notes](release-notes/2026.11.01.md). Live validation across camera models and credential provisioning remains in progress.

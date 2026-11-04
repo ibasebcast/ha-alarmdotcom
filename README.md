@@ -55,9 +55,9 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Stable release:** `2026.11.01`.
+**Stable release:** `2026.11.04`.
 
-This release combines camera reconnect recovery, signed snapshots, verification-code resend, and temporary-access confirmation and read-back. See [release notes](release-notes/2026.11.01.md). Previously published beta releases remain unchanged.
+This release improves first-time setup and session recovery, restricts temporary-access writes to administrators, and reduces sensitive metadata in diagnostics. See [release notes](release-notes/2026.11.04.md).
 
 ### What's changed since 2026.10.26
 
