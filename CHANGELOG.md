@@ -1,3 +1,7 @@
+## 2026.11.04b2 (beta)
+
+Allow time for slow connections when the entry loads and reconnects, and log where it stalls, for #157. See [test instructions](release-notes/2026.11.04b2.md).
+
 ## 2026.11.04b1 (beta)
 
 Give slow sign-in paths more time, read identity and profile one at a time, and log per-step sign-in durations for #157. See [test instructions](release-notes/2026.11.04b1.md).

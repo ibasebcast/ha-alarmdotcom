@@ -188,7 +188,7 @@ class AuthenticationController:
         parts = []
         for i, (step, started) in enumerate(log_):
             ended = log_[i + 1][1] if i + 1 < len(log_) else now
-            if step != "checking credentials":
+            if step not in ("checking credentials", "signed in"):
                 parts.append(f"{step} {ended - started:.1f}s")
         return ", ".join(parts)
 
@@ -241,6 +241,9 @@ class AuthenticationController:
         log.debug("Checking MFA requirements.")
 
         await self._login_otp_discovery()
+
+        # Close the last step's timer so time spent after sign-in is not reported as a sign-in step.
+        self.login_step = "signed in"
 
     ###################
     # LOGIN FUNCTIONS #
