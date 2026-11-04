@@ -22,9 +22,9 @@ class ApplicationSessionProperties(AdcResourceAttributes):
     """A class representing application session properties."""
 
     # fmt: off
-    should_timeout: bool = field(metadata={"description": "Specifies if the session should timeout"})
+    should_timeout: bool = field(default=True, metadata={"description": "Specifies if the session should timeout"})
     keep_alive_url: str | None= field(metadata={"description": "URL used for keep-alive requests"}, default=None)
-    enable_keep_alive: bool = field(metadata={"description": "Indicates whether keep-alive requests are enabled"})
+    enable_keep_alive: bool = field(default=True, metadata={"description": "Indicates whether keep-alive requests are enabled"})
     logout_timeout_ms: int = field(metadata={"description": "Timeout duration for logout in milliseconds"}, default=300000) # 5 minutes
     inactivity_warning_timeout_ms: int | None = field(
         metadata={
@@ -41,7 +41,7 @@ class IdentityAttributes(AdcResourceAttributes):
     # fmt: off
     timezone: str | None = field(default=None)
     preferred_timezone: str = field(default="UTC")
-    application_session_properties: ApplicationSessionProperties
+    application_session_properties: ApplicationSessionProperties = field(default_factory=ApplicationSessionProperties)
     localize_temp_units_to_celsius: bool = field(default=False)
     has_trouble_conditions_service: bool = field(default=True)
     # fmt: on

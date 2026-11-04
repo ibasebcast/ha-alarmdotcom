@@ -314,9 +314,9 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         # self.bridge is always set by this point - see async_step_otp_select_method.
         assert self.bridge is not None
         try:
-            async with self._setup_stage("initial system and device discovery"):
-                await self.bridge.fetch_full_state()
-                system_id = str(self.bridge.active_system.id)
+            async with self._setup_stage("active system lookup"):
+                system = await self.bridge.fetch_active_system()
+                system_id = str(system.id)
         except (
             TimeoutError,
             aiohttp.ClientError,
@@ -331,7 +331,7 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         await self.async_set_unique_id(system_id)
 
         self._config_title = (
-            f"{self.bridge.active_system.name} "
+            f"{system.name} "
             f"({self.bridge.auth_controller.user_email})"
         )
 
@@ -359,7 +359,7 @@ class ADCFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         # block a legitimate reauth.
         self._abort_if_unique_id_configured()
 
-        LOGGER.info("Alarm.com setup [%s]: discovery complete, creating configuration entry.", self.flow_id)
+        LOGGER.info("Alarm.com setup [%s]: active system found, creating configuration entry.", self.flow_id)
         return self.async_create_entry(
             title=self._config_title,
             data=self.config,

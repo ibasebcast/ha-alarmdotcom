@@ -470,16 +470,21 @@ class AlarmBridge:
             [("ids[]", device_id) for device_id in sorted(light_ids)]
         )
 
-    async def fetch_full_state(self) -> None:
-        """Fetch full state from alarm.com."""
-
-        # 1. Initialize system and device catalog controllers first
+    async def fetch_active_system(self) -> System:
+        """Identify the selected system without loading its devices."""
         await self._available_device_catalogs.initialize()
         if not self._available_device_catalogs.active_system_id:
             raise AuthenticationFailed("No active system found.")
         await self._systems.initialize()
+        return self.active_system
+
+    async def fetch_full_state(self) -> None:
+        """Fetch full state from alarm.com."""
+        active_system = await self.fetch_active_system()
+
+        # Initialize the device catalog and partition controllers.
         await self._device_catalogs.initialize(
-            [self._available_device_catalogs.active_system_id]
+            [active_system.id]
         )
         await self._partitions.initialize()
         if self._auth_controller.has_trouble_conditions_service:
