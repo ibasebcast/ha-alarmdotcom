@@ -1,3 +1,7 @@
+## 2026.11.04b3 (beta)
+
+Send only enabled arming options and explain 422 command rejections for #157. See [test instructions](release-notes/2026.11.04b3.md).
+
 ## 2026.11.04b2 (beta)
 
 Allow time for slow connections when the entry loads and reconnects, and log where it stalls, for #157. See [test instructions](release-notes/2026.11.04b2.md).
