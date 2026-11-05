@@ -20,6 +20,7 @@ from _pyalarmdotcomajax._version import __version__
 from _pyalarmdotcomajax.access import DeviceAccessManager
 from _pyalarmdotcomajax.const import (
     API_URL_BASE,
+    LOGIN_READ_TIMEOUT_S,
     REQUEST_RETRY_LIMIT,
     SUBMIT_RETRY_LIMIT,
     URL_BASE,
@@ -200,6 +201,8 @@ class AlarmBridge:
         username: str | None = None,
         password: str | None = None,
         mfa_token: str | None = None,
+        *,
+        session_factory: Callable[[], aiohttp.ClientSession] | None = None,
     ) -> None:
         """Initialize alarm bridge."""
 
@@ -217,6 +220,7 @@ class AlarmBridge:
         self._reconcile_requested = False
 
         # Session
+        self._session_factory = session_factory
         self._websession: aiohttp.ClientSession | None = None
         self.ajax_key: str | None = None
 
@@ -470,16 +474,21 @@ class AlarmBridge:
             [("ids[]", device_id) for device_id in sorted(light_ids)]
         )
 
-    async def fetch_full_state(self) -> None:
-        """Fetch full state from alarm.com."""
-
-        # 1. Initialize system and device catalog controllers first
+    async def fetch_active_system(self) -> System:
+        """Identify the selected system without loading its devices."""
         await self._available_device_catalogs.initialize()
         if not self._available_device_catalogs.active_system_id:
             raise AuthenticationFailed("No active system found.")
         await self._systems.initialize()
+        return self.active_system
+
+    async def fetch_full_state(self) -> None:
+        """Fetch full state from alarm.com."""
+        active_system = await self.fetch_active_system()
+
+        # Initialize the device catalog and partition controllers.
         await self._device_catalogs.initialize(
-            [self._available_device_catalogs.active_system_id]
+            [active_system.id]
         )
         await self._partitions.initialize()
         if self._auth_controller.has_trouble_conditions_service:
@@ -916,7 +925,11 @@ class AlarmBridge:
         self._reconcile_task = None
 
         if self._websession:
-            await self._websession.close()
+            if self._session_factory is None:
+                await self._websession.close()
+            else:
+                # Factory sessions borrow the host connector.
+                self._websession.detach()
         self._websession = None
         self._initialized = False
         log.info("Connection to alarm.com closed.")
@@ -939,10 +952,7 @@ class AlarmBridge:
 
         kwargs["headers"].update(
             {
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-                ),
+                "User-Agent": f"ha-alarmdotcom/{__version__}",
                 "Referrer": "https://www.alarm.com/web/system/home",
                 "Connection": "keep-alive",
             }
@@ -974,7 +984,7 @@ class AlarmBridge:
 
         if self._websession is None:
             log.debug("Creating new websession.")
-            self._websession = aiohttp.ClientSession()
+            self._websession = (self._session_factory or aiohttp.ClientSession)()
 
         if self._auth_controller.mfa_cookie:
             kwargs.setdefault("cookies", {}).update(
@@ -1117,6 +1127,15 @@ class AlarmBridge:
             async with self.create_request(
                 method, url, accept_types, use_ajax_key=True, **kwargs
             ) as raw_resp:
+                # Login reads can receive HTML errors instead of an API document.
+                # Surface temporary HTTP errors so the bounded GET can retry.
+                if _LOGIN_IN_PROGRESS.get() and method.lower() == "get" and (
+                    raw_resp.status >= 500
+                    or raw_resp.status == 408
+                    or (raw_resp.status == 404 and url == f"{API_URL_BASE}identities/")
+                ):
+                    raw_resp.raise_for_status()
+
                 # Color PUTs can confirm with 204 and no document. Errors still
                 # follow the normal status/schema checks and session-repair path.
                 if method.lower() == "put" and raw_resp.status == 204:
@@ -1249,8 +1268,7 @@ class AlarmBridge:
         # Format path for appropriate resource type & pluralize.
         if isinstance(path, ResourceType):
             path = humps.camelize(path.value) + "s"
-        else:
-            path.rstrip("/")
+        # String paths are passed verbatim, including the identity endpoint slash.
 
         if isinstance(id, set) and len(id) == 1:
             id = id.pop()
@@ -1327,32 +1345,45 @@ class AlarmBridge:
 
         """
 
-        path = self._generate_request_url(path, id)
+        url = self._generate_request_url(path, id)
+        login_read = _LOGIN_IN_PROGRESS.get()
+        identity_lookup = login_read and path == "identities/" and id is None
+        retry_limit = 1 if login_read else REQUEST_RETRY_LIMIT
 
         retries = 0
         while True:
             try:
-                return await self.request(
-                    method="get",
-                    url=path,
-                    accept_types=ResponseTypes.JSON
-                    if mini_response
-                    else ResponseTypes.JSONAPI,
-                    success_response_class=AdcMiniSuccessResponse
-                    if mini_response
-                    else (
-                        AdcSuccessDocumentSingle
-                        if isinstance(id, str)
-                        else AdcSuccessDocumentMulti
-                    ),
-                    **kwargs,
-                )
+                async with asyncio.timeout(LOGIN_READ_TIMEOUT_S if login_read else None):
+                    return await self.request(
+                        method="get",
+                        url=url,
+                        accept_types=ResponseTypes.JSON
+                        if mini_response
+                        else ResponseTypes.JSONAPI,
+                        success_response_class=AdcMiniSuccessResponse
+                        if mini_response
+                        else (
+                            AdcSuccessDocumentSingle
+                            if isinstance(id, str)
+                            else AdcSuccessDocumentMulti
+                        ),
+                        **kwargs,
+                    )
 
             except (TimeoutError, aiohttp.ClientResponseError, aiohttp.ClientConnectionError) as e:
-                if retries == REQUEST_RETRY_LIMIT:
+                if login_read and isinstance(e, aiohttp.ClientResponseError):
+                    can_retry = (
+                        e.status >= 500 or e.status == 408 or (e.status == 404 and identity_lookup)
+                    )
+                    if not can_retry:
+                        raise
+                if retries == retry_limit:
                     raise ServiceUnavailable from e
                 retries += 1
-                continue
+                if identity_lookup:
+                    url = self._generate_request_url("identities", None)
+                if login_read:
+                    log.debug("Retrying Alarm.com sign-in read (%s).", type(e).__name__)
 
     async def post(
         self,

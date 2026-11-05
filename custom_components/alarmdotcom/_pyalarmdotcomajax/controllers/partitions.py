@@ -225,7 +225,9 @@ class PartitionController(BaseController[Partition]):
     ) -> None:
         """Change partition state."""
 
-        msg_body: dict[str, Any] = ARMING_OPTIONS_BODY.copy()
+        # Send only the options being turned on, as the upstream library does. Some panels answer an arming
+        # request that names an option they do not offer, even set to false, with 422 (issue #157).
+        msg_body: dict[str, Any] = {}
 
         extended_arming_options = extended_arming_options or []
 

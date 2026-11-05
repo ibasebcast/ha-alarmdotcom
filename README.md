@@ -55,6 +55,8 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
+An opt-in [sign-in test build](release-notes/2026.11.04b3.md) is prepared for issue #157.
+
 **Stable release:** [2026.11.04.3](release-notes/2026.11.04.3.md). See the [changelog](CHANGELOG.md) for earlier releases.
 
 Back up Home Assistant before updating through HACS, then restart Home Assistant.
