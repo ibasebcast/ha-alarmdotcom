@@ -116,6 +116,8 @@ class BaseController(ABC, Generic[AdcResourceT]):
     _event_state_map: ClassVar[MappingProxyType[ResourceEventType, Enum] | None] = None
     # Indicates whether this controller is a device controller.
     _is_device_controller: ClassVar[bool] = False
+    # Persistent devices need deletion protection; temporary resources may override this.
+    _missing_refreshes_before_removal: ClassVar[int] = MISSING_REFRESHES_BEFORE_REMOVAL
 
     def __init__(
         self,
@@ -375,14 +377,14 @@ class BaseController(ABC, Generic[AdcResourceT]):
 
             count = self._missing_refreshes.get(missing_resource_id, 0) + 1
 
-            if count < MISSING_REFRESHES_BEFORE_REMOVAL:
+            if count < self._missing_refreshes_before_removal:
                 self._missing_refreshes[missing_resource_id] = count
                 log.warning(
                     "[%s] %s was missing from Alarm.com's response (%s of %s before it is removed).",
                     self.resource_type.name,
                     missing_resource_id,
                     count,
-                    MISSING_REFRESHES_BEFORE_REMOVAL,
+                    self._missing_refreshes_before_removal,
                 )
                 continue
 

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 import aiohttp
 from bs4 import BeautifulSoup
+from yarl import URL
 
 if TYPE_CHECKING:
     from _pyalarmdotcomajax import AlarmBridge
@@ -353,6 +354,14 @@ class AlarmCameraSession:
         """Inject MFA cookie explicitly when needed."""
         return {MFA_COOKIE_KEY: self.mfa_cookie} if self.mfa_cookie else {}
 
+    def _sync_ajax_key(self, url: str) -> None:
+        """Use the current anti-forgery cookie before sending an API request."""
+        # The main bridge can renew our shared session between camera requests.
+        # Its cookie jar changes, but the key copied at camera setup does not.
+        # Sending the old header can cause a 403 and an unnecessary camera login.
+        if (afg := self.session.cookie_jar.filter_cookies(URL(url)).get("afg")) and afg.value:
+            self.ajax_key = afg.value
+
     def _extract_cookies(self, resp: aiohttp.ClientResponse) -> None:
         afg = resp.cookies.get("afg")
         if afg:
@@ -376,6 +385,8 @@ class AlarmCameraSession:
         also needs this for fetching snapshot images - it was never actually
         private in practice, just named as if it were.
         """
+        if use_ajax:
+            self._sync_ajax_key(url)
         resp = await self.session.get(
             url,
             headers=_build_headers(accept or ACCEPT_JSONAPI, self.ajax_key if use_ajax else None),
@@ -395,6 +406,8 @@ class AlarmCameraSession:
         data: dict | None = None,
         json_body: dict | None = None,
     ) -> aiohttp.ClientResponse:
+        if use_ajax:
+            self._sync_ajax_key(url)
         kwargs: dict = {
             "headers": _build_headers(
                 accept or ACCEPT_JSONAPI,
@@ -567,17 +580,8 @@ class AlarmCameraSession:
 
         included = body.get("included", [])
 
-        for inc in included:
-            if inc.get("type") == "video/videoSources/endToEndWebrtcConnectionInfo":
-                config = dict(inc.get("attributes", {}))
-                config["iceServers"] = ice_servers
-                config["streamType"] = "endToEnd"
-                _LOGGER.debug(
-                    "Found end-to-end WebRTC config for camera %s",
-                    camera_id,
-                )
-                return config
-
+        # Some cameras advertise endToEnd but never send an SDP offer (#106, #172).
+        # Prefer the working proxy path when Alarm.com supplies both credentials.
         if top_attrs.get("janusGatewayUrl") and top_attrs.get("janusToken"):
             # Find the HD stream mountpoint ID from the quality message included items.
             # Alarm.com includes webrtcStreamQualityMessage entries with a streamID field;
@@ -630,6 +634,17 @@ class AlarmCameraSession:
                 janus_stream_id,
             )
             return config
+
+        for inc in included:
+            if inc.get("type") == "video/videoSources/endToEndWebrtcConnectionInfo":
+                config = dict(inc.get("attributes", {}))
+                config["iceServers"] = ice_servers
+                config["streamType"] = "endToEnd"
+                _LOGGER.debug(
+                    "Found end-to-end WebRTC config for camera %s",
+                    camera_id,
+                )
+                return config
 
         _LOGGER.debug(
             "No WebRTC config found for camera %s. "

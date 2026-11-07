@@ -1,3 +1,11 @@
+## 2026.11.06 (stable)
+
+- Prefer advertised Janus camera streams when both transports are available (#172, #106).
+- Synchronize camera anti-forgery headers with the shared session cookie before API requests, avoiding a stale-key source of unnecessary authentication failures (#156).
+- Remove expired trouble-condition records after a successful refresh, preventing repeated missing-resource warnings and retained condition counts (#173).
+
+See [release notes](release-notes/2026.11.06.md) for validation and remaining investigations.
+
 ## 2026.11.04.3 (stable)
 
 Roll back the experimental sign-in and setup changes for #157, retain the other stability and access-control fixes, and reorganize the README. See [release notes](release-notes/2026.11.04.3.md).

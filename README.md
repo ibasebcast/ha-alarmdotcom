@@ -55,7 +55,7 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Stable release:** [2026.11.04.3](release-notes/2026.11.04.3.md). See the [changelog](CHANGELOG.md) for earlier releases.
+**Stable release:** [2026.11.06](release-notes/2026.11.06.md). See the [changelog](CHANGELOG.md) for earlier releases.
 
 Back up Home Assistant before updating through HACS, then restart Home Assistant.
 
