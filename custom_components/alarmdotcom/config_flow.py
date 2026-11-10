@@ -27,6 +27,7 @@ from .const import (
     CONF_ARM_HOME,
     CONF_ARM_MODE_OPTIONS,
     CONF_ARM_NIGHT,
+    CONF_CAMERA_STREAM_TRANSPORT,
     CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
     CONF_FULL_STATE_POLL_INTERVAL,
     CONF_MFA_TOKEN,
@@ -459,6 +460,16 @@ class ADCOptionsFlowHandler(config_entries.OptionsFlow):
                 ): selector.selector(
                     {"number": {"min": 1, "max": 60, "step": 1, "unit_of_measurement": "minutes"}}
                 ),
+                vol.Optional(
+                    CONF_CAMERA_STREAM_TRANSPORT,
+                    default=self.options.get(
+                        CONF_CAMERA_STREAM_TRANSPORT,
+                        CONF_OPTIONS_DEFAULT[CONF_CAMERA_STREAM_TRANSPORT],
+                    ),
+                ): selector.selector({"select": {"options": [
+                    {"value": "endToEnd", "label": "End-to-end (default)"},
+                    {"value": "janus", "label": "Janus proxy"},
+                ]}}),
                 vol.Required(
                     CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
                     default=self.options.get(

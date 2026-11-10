@@ -68,6 +68,7 @@ CONF_FULL_STATE_POLL_INTERVAL = "full_state_poll_interval"  # minutes
 # not document the token lifetime; 30 minutes is the value that was hardcoded
 # before this became an option (#93).
 CONF_CAMERA_TOKEN_REFRESH_INTERVAL = "camera_token_refresh_interval"  # minutes  # noqa: S105
+CONF_CAMERA_STREAM_TRANSPORT = "camera_stream_transport"
 CONF_ARM_MODE_OPTIONS = {
     CONF_FORCE_BYPASS: "Force Bypass",
     CONF_SILENT_ARM: "Arm Silently",
@@ -82,6 +83,7 @@ CONF_OPTIONS_DEFAULT = {
     CONF_ACTIVITY_POLL_INTERVAL: 15,
     CONF_FULL_STATE_POLL_INTERVAL: 5,
     CONF_CAMERA_TOKEN_REFRESH_INTERVAL: 30,
+    CONF_CAMERA_STREAM_TRANSPORT: "endToEnd",
 }
 
 

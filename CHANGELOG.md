@@ -1,3 +1,12 @@
+## 2026.11.09 (stable)
+
+- Restore endToEnd camera preference by default and offer Janus through integration options (#177, #172).
+- Preserve retry counts through brief stream connections and card reparenting; add a rolling recovery cap for kiosk use (#177).
+- Fetch advertised water valves directly when catalog resources are absent; preserve unknown valve state (#178).
+- Audit stable OTP delivery requests and resend behavior with focused tests and add setup troubleshooting guidance.
+
+See [release notes](release-notes/2026.11.09.md). Experimental beta login and arming changes remain excluded.
+
 ## 2026.11.06 (stable)
 
 - Prefer advertised Janus camera streams when both transports are available (#172, #106).

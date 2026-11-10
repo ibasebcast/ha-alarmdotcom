@@ -71,7 +71,7 @@ async def test_concurrent_browser_requests_wait_for_current_fetch(hass: HomeAssi
     release = asyncio.Event()
     fresh = {"cameraAuthToken": "synthetic-fresh"}
 
-    async def fetch(_camera_id: str) -> dict:
+    async def fetch(_camera_id: str, *, preferred_transport: str = "endToEnd") -> dict:
         started.set()
         await release.wait()
         return fresh
@@ -84,7 +84,7 @@ async def test_concurrent_browser_requests_wait_for_current_fetch(hass: HomeAssi
     assert not second.done()
     release.set()
     assert await asyncio.gather(first, second) == [fresh, fresh]
-    camera._session.get_stream_info.assert_awaited_once_with("cam-1")
+    camera._session.get_stream_info.assert_awaited_once_with("cam-1", preferred_transport="endToEnd")
 
 
 @pytest.mark.parametrize("result", [None, RuntimeError("synthetic-failure")])
@@ -98,3 +98,12 @@ async def test_failed_reconnect_does_not_return_old_credentials(hass: HomeAssist
     else:
         camera._session.get_stream_info = AsyncMock(return_value=result)
     assert await camera.async_get_webrtc_config() is None
+
+
+async def test_setup_passes_explicit_janus_preference_to_camera(hass: HomeAssistant) -> None:
+    """Accounts affected by #172 can select the working path through options."""
+    (camera,) = await _setup(hass, {"camera_stream_transport": "janus"})
+    camera.async_write_ha_state = MagicMock()
+    camera._session.get_stream_info = AsyncMock(return_value={"streamType": "janus"})
+    await camera.async_get_webrtc_config()
+    camera._session.get_stream_info.assert_awaited_once_with("cam-1", preferred_transport="janus")

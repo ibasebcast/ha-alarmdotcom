@@ -545,7 +545,7 @@ class AlarmCameraSession:
         url = attributes.get("url")
         return url if isinstance(url, str) and url else None
 
-    async def get_stream_info(self, camera_id: str) -> dict | None:
+    async def get_stream_info(self, camera_id: str, *, preferred_transport: str = "endToEnd") -> dict | None:
         """
         Fetch WebRTC config for a camera.
 
@@ -580,8 +580,17 @@ class AlarmCameraSession:
 
         included = body.get("included", [])
 
-        # Some cameras advertise endToEnd but never send an SDP offer (#106, #172).
-        # Prefer the working proxy path when Alarm.com supplies both credentials.
+        # Preserve the pre-2026.11.06 transport by default (#177), while letting
+        # accounts affected by #172 prefer Janus without editing source files.
+        end_to_end = next((item for item in included
+                           if item.get("type") == "video/videoSources/endToEndWebrtcConnectionInfo"), None)
+        has_janus = bool(top_attrs.get("janusGatewayUrl") and top_attrs.get("janusToken"))
+        if end_to_end is not None and (preferred_transport != "janus" or not has_janus):
+            config = dict(end_to_end.get("attributes", {}))
+            config["iceServers"] = ice_servers
+            config["streamType"] = "endToEnd"
+            return config
+
         if top_attrs.get("janusGatewayUrl") and top_attrs.get("janusToken"):
             # Find the HD stream mountpoint ID from the quality message included items.
             # Alarm.com includes webrtcStreamQualityMessage entries with a streamID field;
@@ -634,17 +643,6 @@ class AlarmCameraSession:
                 janus_stream_id,
             )
             return config
-
-        for inc in included:
-            if inc.get("type") == "video/videoSources/endToEndWebrtcConnectionInfo":
-                config = dict(inc.get("attributes", {}))
-                config["iceServers"] = ice_servers
-                config["streamType"] = "endToEnd"
-                _LOGGER.debug(
-                    "Found end-to-end WebRTC config for camera %s",
-                    camera_id,
-                )
-                return config
 
         _LOGGER.debug(
             "No WebRTC config found for camera %s. "
