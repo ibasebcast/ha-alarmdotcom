@@ -14,6 +14,9 @@ class AlarmWebRTCCard extends HTMLElement {
     this._retryCount = 0;
     this._maxRetries = 5;
     this._retryDelayMs = 4000;
+    this._stableTimer = null;
+    this._retryWindow = [];
+    this._wasRemoved = false;
     this.pc = null;
     this.ws = null;
     this.remoteId = null;
@@ -215,6 +218,7 @@ class AlarmWebRTCCard extends HTMLElement {
     this.querySelector("#reconnect-btn").addEventListener("click", () => {
       this._log("Manual reconnect");
       this._retryCount = 0;
+      this._retryWindow = [];
       this._requesting = false;
       this._connecting = false;
       this._connected = false;
@@ -240,13 +244,19 @@ class AlarmWebRTCCard extends HTMLElement {
     this._secureConfig = null;
     this._teardownStream();
 
-    if (this._retryCount >= this._maxRetries) {
+    // Also limit repeated short-lived successes: they must not turn a kiosk
+    // into an endless reconnect loop by continually renewing its retry budget.
+    const now = Date.now();
+    this._retryWindow = this._retryWindow.filter((at) => now - at < 10 * 60 * 1000);
+    if (this._retryCount >= this._maxRetries || this._retryWindow.length >= 10) {
+      this._retryCount = this._maxRetries;
       this._log("Max retries reached", reason);
       this._showReconnectButton(`Stream unavailable (${reason})`);
       return;
     }
 
     this._retryCount += 1;
+    this._retryWindow.push(now);
     this._log(
       `Scheduling retry ${this._retryCount}/${this._maxRetries} in ${this._retryDelayMs}ms`,
       reason
@@ -304,6 +314,8 @@ class AlarmWebRTCCard extends HTMLElement {
   _teardownStream(resetConfig = true) {
     // Invalidate old callbacks before closing: a late close must not kill a replacement stream.
     this._streamGeneration += 1;
+    clearTimeout(this._stableTimer);
+    this._stableTimer = null;
     if (this._janusKeepalive) {
       clearInterval(this._janusKeepalive);
       this._janusKeepalive = null;
@@ -342,7 +354,20 @@ class AlarmWebRTCCard extends HTMLElement {
     this._connected = true;
     this._connecting = false;
     this._requesting = false;
-    this._retryCount = 0;
+    // Receiving a track is not proof of a stable stream. Brief connections
+    // used to reset the counter immediately, repeating "1/5" forever (#177).
+    if (!this._stableTimer) {
+      const generation = this._streamGeneration;
+      this._stableTimer = setTimeout(() => {
+        if (generation !== this._streamGeneration) return;
+        this._stableTimer = null;
+        if (generation === this._streamGeneration && this._connected && this.isConnected &&
+            (this.pc?.connectionState === "connected" ||
+             ["connected", "completed"].includes(this.pc?.iceConnectionState))) {
+          this._retryCount = 0;
+        }
+      }, 30000);
+    }
 
     clearTimeout(this._requestTimeout);
 
@@ -899,7 +924,11 @@ class AlarmWebRTCCard extends HTMLElement {
     if (video?.srcObject && video.paused) video.play().catch(() => {});
     // A genuine dashboard return gets a fresh retry budget. Reparenting an
     // active stream during rotation must keep its existing session intact.
-    if (!this._connected && !this._connecting && !this._requesting) this._retryCount = 0;
+    if (this._wasRemoved) {
+      this._retryCount = 0;
+      this._retryWindow = [];
+      this._wasRemoved = false;
+    }
     if (this._hass) this.hass = this._hass;
   }
 
@@ -908,6 +937,7 @@ class AlarmWebRTCCard extends HTMLElement {
     this._disconnectGrace = setTimeout(() => {
       this._disconnectGrace = null;
       if (this.isConnected) return;
+      this._wasRemoved = true;
       clearTimeout(this._requestTimeout);
       clearTimeout(this._retryTimer);
       this._retryTimer = null;

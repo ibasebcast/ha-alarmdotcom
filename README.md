@@ -55,7 +55,7 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Stable release:** [2026.11.06](release-notes/2026.11.06.md). See the [changelog](CHANGELOG.md) for earlier releases.
+**Stable release:** [2026.11.09](release-notes/2026.11.09.md). See the [changelog](CHANGELOG.md) for earlier releases.
 
 Back up Home Assistant before updating through HACS, then restart Home Assistant.
 
@@ -501,3 +501,16 @@ See **LICENSE** (Apache-2.0) and **LICENSE-upstream** (MIT) for details.
 
  ## Also check the quality_scale.yaml for other notes
 -->
+
+
+### Camera transport and kiosk recovery
+
+Stable 2026.11.09 restores endToEnd as the preferred camera transport, matching the behavior before 2026.11.06. Janus-only cameras continue to use Janus. If a camera never starts with endToEnd, open **Settings → Devices & Services → Alarm.com → Configure**, continue to **Polling & Refresh Intervals**, and select **Preferred camera transport → Janus proxy**. The preference applies to this Alarm.com entry; a camera uses the other transport if the preferred one is not advertised. Changing the option reloads the integration.
+
+After updating, restart Home Assistant and fully reload every browser/app dashboard to load the updated card. Test a single camera first, then the normal multi-camera dashboard and page reloads. Kiosk users should also verify normal continuous viewing over at least 24 hours. A connection must stay live for 30 seconds before its consecutive retry count resets. Automatic recovery stops after five consecutive retries or ten retries within ten minutes, then displays **Reconnect** for a manual retry.
+
+### If a setup verification code does not arrive
+
+For SMS or email, select the delivery method and submit to request a code. On the code form, select **Send another code (SMS/email)** and submit once if needed; no code is required to request a resend. Check the selected email mailbox and junk folder. Authenticator-app codes are generated in the app and are not sent by email or SMS. A successful request does not establish delivery by Alarm.com or the provider.
+
+If delivery still fails, report the exact installed integration version, Home Assistant version, provider, offered methods, and whether the initial request or one resend produced a sanitized error. Do not post passwords, verification codes, cookies, tokens, email addresses or account identifiers. A functioning installation does not need to be removed solely to test setup.

@@ -193,3 +193,72 @@ test("Janus rejection also discards credentials before retrying", async () => {
   assert.equal(card.pc, null);
   assert.equal(timers.size, 1);
 });
+
+test("brief connections cannot renew the retry budget indefinitely", () => {
+  const { card, timers } = loadCard();
+  card.config = { entity: "camera.test" };
+  card.renderPlaceholder = () => {};
+  let exhausted = 0;
+  card._showReconnectButton = () => { exhausted++; };
+  for (let attempt = 0; attempt < 6; attempt++) {
+    card.pc = { iceConnectionState: "connected", close() {} };
+    card._markConnected();
+    card._scheduleRetry("Stream ended");
+    if (card._retryTimer) {
+      clearTimeout(card._retryTimer);
+      timers.delete(card._retryTimer);
+      card._retryTimer = null;
+    }
+  }
+  assert.equal(card._retryCount, 5);
+  assert.equal(exhausted, 1);
+  assert.equal(card._stableTimer, null);
+});
+
+test("retry count resets only after a stable live connection", () => {
+  const { card, timers } = loadCard();
+  card._retryCount = 3;
+  card.pc = { iceConnectionState: "connected", close() {} };
+  card._markConnected();
+  assert.equal(card._retryCount, 3);
+  timers.get(card._stableTimer)();
+  assert.equal(card._retryCount, 0);
+});
+
+test("late stability callback cannot reset a replacement stream's budget", () => {
+  const { card, timers } = loadCard();
+  card._retryCount = 3;
+  card.pc = { iceConnectionState: "connected", close() {} };
+  card._markConnected();
+  const stale = timers.get(card._stableTimer);
+  card._teardownStream();
+  card._retryCount = 4;
+  stale();
+  assert.equal(card._retryCount, 4);
+});
+
+test("frequent recoveries have a rolling cap even after stable periods", () => {
+  const { card, timers } = loadCard();
+  card.renderPlaceholder = () => {};
+  let exhausted = 0;
+  card._showReconnectButton = () => { exhausted++; };
+  for (let attempt = 0; attempt < 11; attempt++) {
+    card._retryCount = 0; // Simulate each connection surviving the stability period.
+    card._scheduleRetry("Stream ended");
+    if (card._retryTimer) {
+      timers.delete(card._retryTimer);
+      card._retryTimer = null;
+    }
+  }
+  assert.equal(card._retryWindow.length, 10);
+  assert.equal(exhausted, 1);
+});
+
+test("brief dashboard reparenting cannot reset an exhausted retry budget", () => {
+  const { card } = loadCard();
+  card.querySelector = () => null;
+  card._retryCount = 5;
+  card.disconnectedCallback();
+  card.connectedCallback();
+  assert.equal(card._retryCount, 5);
+});

@@ -69,11 +69,13 @@
                 "data": {
                     "activity_poll_interval": "Activity feed poll interval",
                     "full_state_poll_interval": "Full state refresh interval",
+                    "camera_stream_transport": "Preferred camera transport",
                     "camera_token_refresh_interval": "Camera token refresh interval"
                 },
                 "data_description": {
                     "activity_poll_interval": "Seconds between activity feed polls. Uses an undocumented endpoint; raise this if you see rate limiting.",
                     "full_state_poll_interval": "Minutes between full state refreshes, a safety net for missed push events.",
+                    "camera_stream_transport": "Prefer end-to-end for the pre-2026.11.06 behavior. Select Janus if a camera never starts with end-to-end. Uses the other transport when the preferred one is not offered.",
                     "camera_token_refresh_interval": "Minutes between WebRTC token refreshes for each camera. Lower it if streams stop working before the next refresh."
                 }
             }
