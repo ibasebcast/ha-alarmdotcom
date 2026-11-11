@@ -12,9 +12,16 @@
                 "title": "[%key:common::config_flow::title::reauth%]",
                 "description": "Alarm.com needs to re-authenticate your account."
             },
+            "otp_app_submit": {
+                "title": "Authenticator App Code",
+                "description": "Open the authenticator app linked to your Alarm.com account and enter its current code.",
+                "data": {
+                    "otp": "Authenticator App Code"
+                }
+            },
             "otp_submit": {
                 "title": "Enter One-Time Password",
-                "description": "Enter your verification code. For SMS or email, select Send another code and submit if your code has not arrived.\n\n{resend_status}",
+                "description": "Enter the verification code requested by email or SMS. If it has not arrived, turn on Send another code and select Submit.\n\n{resend_status}",
                 "data": {
                     "otp": "One-Time Password",
                     "resend_code": "Send another code (SMS/email)"

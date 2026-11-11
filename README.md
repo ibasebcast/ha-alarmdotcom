@@ -55,7 +55,7 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Stable release:** [2026.11.09](release-notes/2026.11.09.md). See the [changelog](CHANGELOG.md) for earlier releases.
+**Stable release:** [2026.11.10](release-notes/2026.11.10.md). See the [changelog](CHANGELOG.md) for earlier releases.
 
 Back up Home Assistant before updating through HACS, then restart Home Assistant.
 
@@ -87,6 +87,10 @@ After restarting:
 **Settings → Devices & Services → Add Integration → Alarm.com**
 
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=alarmdotcom)
+
+### Switching from the original Alarm.com repository
+
+If HACS reports that the `alarmdotcom` directory belongs to `pyalarmdotcom/alarmdotcom`, back up Home Assistant and remove the original repository's installed files using its **Remove** or **Uninstall** action in HACS. Both listings are named Alarm.com, so check the repository URL first. Keep the existing Alarm.com entry under **Settings → Devices & Services**. Install `ibasebcast/ha-alarmdotcom` as described above before restarting Home Assistant, then verify that the existing entry loads and HACS shows the maintained repository as installed.
 
 ## Prerequisites
 Before setting up this integration you need the following
@@ -125,6 +129,8 @@ These settings can be modified later using the **Configure** button on the Alarm
 | Force Bypass   | Bypass open zones when arming                               |
 | No Entry Delay | Skip entry delay sensors                                    |
 | Silent Arming  | Suppress panel beeps when arming                            |
+
+For silent arming, continue past **General Settings** to **Arming Mode Profiles**, select **Arm Silently** under the mode you use, then continue through the final screen to save.
 
 Some Alarm.com providers may restrict combinations of these options.
 
@@ -511,6 +517,6 @@ After updating, restart Home Assistant and fully reload every browser/app dashbo
 
 ### If a setup verification code does not arrive
 
-For SMS or email, select the delivery method and submit to request a code. On the code form, select **Send another code (SMS/email)** and submit once if needed; no code is required to request a resend. Check the selected email mailbox and junk folder. Authenticator-app codes are generated in the app and are not sent by email or SMS. A successful request does not establish delivery by Alarm.com or the provider.
+For SMS or email, select the delivery method and submit to request a code. On the code form, select **Send another code (SMS/email)** and submit once if needed; no code is required to request a resend. Check the selected email mailbox and junk folder. The **Authenticator App Code** screen asks for the current code from the app linked to your Alarm.com account. If you want email or SMS, enable that method in Alarm.com and start setup again. A successful request does not establish delivery by Alarm.com or the provider.
 
 If delivery still fails, report the exact installed integration version, Home Assistant version, provider, offered methods, and whether the initial request or one resend produced a sanitized error. Do not post passwords, verification codes, cookies, tokens, email addresses or account identifiers. A functioning installation does not need to be removed solely to test setup.

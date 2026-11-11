@@ -1,3 +1,10 @@
+## 2026.11.10 (stable)
+
+- Show a dedicated authenticator-app code form with instructions for finding the code (#184).
+- Document where to configure silent arming and how to switch HACS repository ownership while keeping the Home Assistant entry (#183, #185).
+
+See [release notes](release-notes/2026.11.10.md).
+
 ## 2026.11.09 (stable)
 
 - Restore endToEnd camera preference by default and offer Janus through integration options (#177, #172).

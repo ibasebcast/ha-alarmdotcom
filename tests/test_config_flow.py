@@ -152,7 +152,7 @@ async def test_otp_flow_with_method_selection(
 
 
 async def test_otp_flow_auto_skips_method_selection_for_app_only(
-    hass: HomeAssistant, mock_bridge_class, mock_bridge
+    hass: HomeAssistant, mock_bridge_class, mock_bridge, mock_setup_entry
 ) -> None:
     """
     If authenticator-app is the ONLY enabled method, skip straight to the OTP prompt.
@@ -170,8 +170,13 @@ async def test_otp_flow_auto_skips_method_selection_for_app_only(
     )
 
     assert result["type"] == data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "otp_submit"
+    assert result["step_id"] == "otp_app_submit"
     mock_bridge.auth_controller.request_otp.assert_not_awaited()
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_OTP: "123456"}
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert mock_bridge.auth_controller.submit_otp.await_args.kwargs["method"] == pyadc.OtpType.app
 
 
 async def test_invalid_otp_code_shows_error(
@@ -192,7 +197,7 @@ async def test_invalid_otp_code_shows_error(
     )
 
     assert result["type"] == data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "otp_submit"
+    assert result["step_id"] == "otp_app_submit"
     assert result["errors"] == {"base": "invalid_otp"}
 
 
