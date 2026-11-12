@@ -1,3 +1,14 @@
+## 2026.11.13b0 (beta)
+
+Bring the #157 sign-in and panel-command test branch up to stable 2026.11.12. See [test instructions](release-notes/2026.11.13b0.md).
+
+## 2026.11.12 (stable)
+
+- Identify WebSocket token-fetch, handshake, and event-stream failures in debug logs, with elapsed time and exception type (#176).
+- Document how to read battery diagnostics when Alarm.com supplies a status or trouble flag instead of a percentage (#184).
+
+See [release notes](release-notes/2026.11.12.md).
+
 ## 2026.11.10 (stable)
 
 - Show a dedicated authenticator-app code form with instructions for finding the code (#184).
@@ -21,6 +32,22 @@ See [release notes](release-notes/2026.11.09.md). Experimental beta login and ar
 - Remove expired trouble-condition records after a successful refresh, preventing repeated missing-resource warnings and retained condition counts (#173).
 
 See [release notes](release-notes/2026.11.06.md) for validation and remaining investigations.
+
+## 2026.11.04b3 (beta)
+
+Send only enabled arming options and explain 422 command rejections for #157. See [test instructions](release-notes/2026.11.04b3.md).
+
+## 2026.11.04b2 (beta)
+
+Allow time for slow connections when the entry loads and reconnects, and log where it stalls, for #157. See [test instructions](release-notes/2026.11.04b2.md).
+
+## 2026.11.04b1 (beta)
+
+Give slow sign-in paths more time, read identity and profile one at a time, and log per-step sign-in durations for #157. See [test instructions](release-notes/2026.11.04b1.md).
+
+## 2026.11.04b0 (beta)
+
+Test Home Assistant HTTP transport, login preload retries, and safe setup diagnostics for #157. See [test instructions](release-notes/2026.11.04b0.md).
 
 ## 2026.11.04.3 (stable)
 

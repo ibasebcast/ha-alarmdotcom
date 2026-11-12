@@ -55,7 +55,9 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Stable release:** [2026.11.10](release-notes/2026.11.10.md). See the [changelog](CHANGELOG.md) for earlier releases.
+An opt-in [sign-in test build](release-notes/2026.11.13b0.md) is available for issue #157.
+
+**Stable release:** [2026.11.12](release-notes/2026.11.12.md). See the [changelog](CHANGELOG.md) for earlier releases.
 
 Back up Home Assistant before updating through HACS, then restart Home Assistant.
 
@@ -187,6 +189,11 @@ This is a standard HA action with response data. An existing MCP connection that
 | Sensor       | None                                  | ✔      | ✔           | ✔           | Updates depend on the device events reported by Alarm.com |
 | Thermostat   | Heat, Cool, Auto, Fan                 | ✔      | ✔           | ✔           | Fan-only mode runs for the maximum duration supported by Alarm.com        |
 | Camera       | Live WebRTC stream, Snapshot          | ✔      | -           |-           | Live playback uses the bundled `custom:alarm-webrtc-card`; snapshots depend on camera support                    |
+
+Alarm.com reports battery data by device. **Battery** shows a percentage when the device supplies one.
+**Battery Status** shows the classification returned by Alarm.com. A status of `None` means Alarm.com
+reported its `NONE` classification, so it does not indicate a percentage or a confirmed healthy battery.
+Where supported, check **Low Battery** and the system’s **Sensor Low Battery** or **Panel Low Battery** trouble indicators.
 
 > [!NOTE]
 > **Garage Doors (MyQ):** MyQ garage doors don't natively integrate with Home Assistant, but they do through Alarm.com, making this integration useful if that's what you have. A dedicated local solution like [RATGDO](https://paulwieland.github.io/ratgdo/) is generally preferable for local control.

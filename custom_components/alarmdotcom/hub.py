@@ -16,6 +16,7 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
@@ -44,6 +45,10 @@ REFRESH_AUTH_RECONNECT_MIN_INTERVAL_S = 10 * 60
 
 WS_HEARTBEAT_INTERVAL = 60  # seconds
 
+
+# Sign-in plus the first full device load. Some provider paths take tens of seconds per sign-in read (issue #157);
+# the old 10s bound turned a slow but working connection into an endless setup retry.
+INITIALIZE_TIMEOUT_S = 180
 
 class _AlarmBridgeWithHeartbeat(AlarmBridge):
     """
@@ -77,6 +82,7 @@ class AlarmHub:
             username=config_entry.data[CONF_USERNAME],
             password=config_entry.data[CONF_PASSWORD],
             mfa_token=config_entry.data.get(CONF_MFA_TOKEN),
+            session_factory=lambda: async_create_clientsession(hass, connector_owner=False),
         )
 
         self.close_jobs: list[CALLBACK_TYPE] = []
@@ -106,12 +112,24 @@ class AlarmHub:
 
         return True
 
+    def _connect_detail(self, started: float) -> str:
+        """Describe where a slow or failed connection stopped, without account data."""
+
+        auth = self.api.auth_controller
+        detail = f"after {time.monotonic() - started:.1f}s"
+        if timings := auth.login_step_timings():
+            detail += f"; sign-in steps: {timings}"
+        if auth.login_step == "signed in":
+            detail += "; stopped while loading devices"
+        return detail
+
     async def initialize(self) -> bool:
         """Initialize connection to Alarm.com."""
         setup_ok = False
+        started = time.monotonic()
 
         try:
-            async with asyncio.timeout(10):
+            async with asyncio.timeout(INITIALIZE_TIMEOUT_S):
                 await self.api.initialize()
             setup_ok = True
         except (
@@ -119,7 +137,9 @@ class AlarmHub:
             pyadc.UnexpectedResponse,
             pyadc.ServiceUnavailable,
         ) as err:
-            raise ConfigEntryNotReady("Could not connect to Alarm.com.") from err
+            detail = self._connect_detail(started)
+            log.warning("Alarm.com setup could not connect (%s; %s).", type(err).__name__, detail)
+            raise ConfigEntryNotReady(f"Could not connect to Alarm.com ({detail}).") from err
         except pyadc.AuthenticationException as err:
             raise ConfigEntryAuthFailed from err
         except Exception as err:
@@ -289,7 +309,7 @@ class AlarmHub:
 
             try:
                 await self.api.close()
-                async with asyncio.timeout(15):
+                async with asyncio.timeout(INITIALIZE_TIMEOUT_S):
                     await self.api.initialize()
                 await self.api.start_event_monitoring(self._ws_state_handler)
             except pyadc.AuthenticationException:

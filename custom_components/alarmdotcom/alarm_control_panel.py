@@ -213,6 +213,15 @@ async def control_fn(
         raise InvalidStateError(
             "Alarm.com did not confirm the panel command in time. Check the panel before retrying."
         ) from None
+    except (pyadc.AuthenticationFailed, pyadc.NotAuthorized) as err:
+        # A rejected command arrives as an error document; 422 is Alarm.com declining the arming request
+        # (for example, the system is not ready to arm), not a sign-in problem.
+        if "422" in str(err):
+            raise InvalidStateError(
+                f"Alarm.com declined the '{command}' command (422). Check that the system is ready to arm "
+                "(no open doors or windows, no trouble conditions) and try again."
+            ) from err
+        raise InvalidStateError(f"Alarm.com refused the '{command}' command.") from err
     except (pyadc.ServiceUnavailable, pyadc.UnexpectedResponse, pyadc.UnsupportedOperation) as err:
         raise InvalidStateError(f"Failed to execute partition command '{command}'.") from err
 
