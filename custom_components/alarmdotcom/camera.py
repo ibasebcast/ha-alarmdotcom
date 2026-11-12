@@ -17,6 +17,7 @@ from homeassistant.helpers.event import async_track_time_interval
 from yarl import URL
 
 from .const import (
+    CONF_CAMERA_STREAM_TRANSPORT,
     CONF_CAMERA_TOKEN_REFRESH_INTERVAL,
     CONF_OPTIONS_DEFAULT,
     DOMAIN,
@@ -92,7 +93,12 @@ async def async_setup_entry(
 
     async_add_entities(
         [
-            AlarmDotComCamera(camera_session, cam, entry.entry_id, refresh_interval)
+            AlarmDotComCamera(
+                camera_session, cam, entry.entry_id, refresh_interval,
+                preferred_transport=entry.options.get(
+                    CONF_CAMERA_STREAM_TRANSPORT, CONF_OPTIONS_DEFAULT[CONF_CAMERA_STREAM_TRANSPORT]
+                ),
+            )
             for cam in cameras
         ]
     )
@@ -110,6 +116,8 @@ class AlarmDotComCamera(Camera):
         info: dict,
         entry_id: str,
         token_refresh_interval: timedelta,
+        *,
+        preferred_transport: str = "endToEnd",
     ) -> None:
         """Initialize the camera."""
         super().__init__()
@@ -118,6 +126,7 @@ class AlarmDotComCamera(Camera):
         self._name = info.get("description", self._id)
         self._entry_id = entry_id
         self._token_refresh_interval = token_refresh_interval
+        self._preferred_transport = preferred_transport
 
         self._attr_unique_id = f"{entry_id}_camera_{self._id}"
         self._attr_name = self._name
@@ -175,7 +184,7 @@ class AlarmDotComCamera(Camera):
         async with self._fetch_lock:
             try:
                 login_generation = self._session.session_generation
-                config = await self._session.get_stream_info(self._id)
+                config = await self._session.get_stream_info(self._id, preferred_transport=self._preferred_transport)
 
             except aiohttp.ClientResponseError as err:
                 if err.status in (401, 403):
@@ -203,7 +212,7 @@ class AlarmDotComCamera(Camera):
                                 login_generation
                             )
 
-                        config = await self._session.get_stream_info(self._id)
+                        config = await self._session.get_stream_info(self._id, preferred_transport=self._preferred_transport)
 
                     except Exception as retry_err:
                         _LOGGER.error(

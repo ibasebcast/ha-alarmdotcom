@@ -259,7 +259,9 @@ class AlarmBridge:
         self._sensors = SensorController(self, self._device_catalogs)
         self._thermostats = ThermostatController(self, self._device_catalogs)
         self._water_sensors = WaterSensorController(self, self._device_catalogs)
-        self._water_valves = WaterValveController(self, self._device_catalogs)
+        # Some catalogs omit valve resources even though system relationships advertise them.
+        # Fetch only the discovered valve IDs directly, as for image sensors (#178).
+        self._water_valves = WaterValveController(self)
 
         self._image_sensors = ImageSensorController(self)
         self._image_sensor_images = ImageSensorImageController(self)

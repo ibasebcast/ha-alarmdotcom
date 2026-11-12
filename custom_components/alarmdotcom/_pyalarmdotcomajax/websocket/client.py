@@ -237,6 +237,8 @@ class WebSocketClient:
         while True:
             connect_attempts += 1
 
+            stage = "token fetch"
+            stage_started = time.monotonic()
             try:
                 async with asyncio.timeout(WS_TOKEN_FETCH_TIMEOUT_S):
                     await self._authenticate()
@@ -246,14 +248,16 @@ class WebSocketClient:
                 # The token's lifetime starts when it is issued, not when
                 # the WebSocket handshake completes.
                 token_issued_at = time.monotonic()
+                stage = "handshake"
+                stage_started = token_issued_at
                 planned_refresh = False
                 async with contextlib.AsyncExitStack() as connection:
                     async with asyncio.timeout(WS_CONNECT_TIMEOUT_S):
                         websocket = await connection.enter_async_context(
-                            self._bridge.ws_connect(
-                                f"{self._ws_endpoint}/?f=1&auth={self._token}"
-                            )
+                            self._bridge.ws_connect(f"{self._ws_endpoint}/?f=1&auth={self._token}")
                         )
+                    stage = "event stream"
+                    stage_started = time.monotonic()
                     self._set_state(
                         WebSocketState.CONNECTED if connect_attempts == 1 else WebSocketState.RECONNECTED,
                     )
@@ -300,19 +304,17 @@ class WebSocketClient:
                 log.debug(
                     "[EVENT READER] Failed to authenticate WebSocket connection. This is likely due to a session timeout."
                 )
-            except (
-                TimeoutError,
-                aiohttp.ClientError,
-                UnexpectedResponse,
-                aiohttp.ClientConnectionError,
-            ) as err:
+            except (TimeoutError, aiohttp.ClientError, UnexpectedResponse) as err:
                 # status = 401 (HTTP):                      WebSocket Authentication failure
                 # errno = 104 (Socket errno.ECONNRESET):    Connection reset by peer
                 log.debug(
-                    "[EVENT READER] Encountered WebSocket error. Attempting to recover.\nHTTP STATUS: %s\nSOCKET ERROR: %s %s",
+                    "[EVENT READER] WebSocket %s failed after %.2fs (%s). Attempting to recover."
+                    "\nHTTP STATUS: %s\nSOCKET ERRNO: %s",
+                    stage,
+                    time.monotonic() - stage_started,
+                    type(err).__name__,
                     getattr(err, "status", None),
                     getattr(err, "errno", None),
-                    getattr(err, "strerror", None),
                 )
             except Exception as err:
                 # for debugging purpose only
@@ -352,7 +354,8 @@ class WebSocketClient:
             if msg.type == aiohttp.WSMsgType.CLOSED:
                 log.info(
                     "[EVENT READER] WebSocket closed: Code: %s, Message: '%s'",
-                    msg.data, msg.extra,
+                    msg.data,
+                    msg.extra,
                 )
                 continue
             if msg.type == aiohttp.WSMsgType.ERROR:
@@ -384,10 +387,14 @@ class WebSocketClient:
             value = float(fields["eventvalue"]) if fields.get("eventvalue") is not None else None
         except (TypeError, ValueError):
             value = None
-        self._bridge.events.publish(DeviceActivityMessage(
-            id=resource_id, event_type=event_type, value=value,
-            extra=str(fields.get("qstringforextradata") or ""),
-        ))
+        self._bridge.events.publish(
+            DeviceActivityMessage(
+                id=resource_id,
+                event_type=event_type,
+                value=value,
+                extra=str(fields.get("qstringforextradata") or ""),
+            )
+        )
         return True
 
     async def _event_processor(self) -> NoReturn:

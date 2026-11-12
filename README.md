@@ -55,9 +55,9 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-An opt-in [sign-in test build](release-notes/2026.11.04b3.md) is prepared for issue #157.
+An opt-in [sign-in test build](release-notes/2026.11.13b0.md) is available for issue #157.
 
-**Stable release:** [2026.11.04.3](release-notes/2026.11.04.3.md). See the [changelog](CHANGELOG.md) for earlier releases.
+**Stable release:** [2026.11.12](release-notes/2026.11.12.md). See the [changelog](CHANGELOG.md) for earlier releases.
 
 Back up Home Assistant before updating through HACS, then restart Home Assistant.
 
@@ -89,6 +89,10 @@ After restarting:
 **Settings → Devices & Services → Add Integration → Alarm.com**
 
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=alarmdotcom)
+
+### Switching from the original Alarm.com repository
+
+If HACS reports that the `alarmdotcom` directory belongs to `pyalarmdotcom/alarmdotcom`, back up Home Assistant and remove the original repository's installed files using its **Remove** or **Uninstall** action in HACS. Both listings are named Alarm.com, so check the repository URL first. Keep the existing Alarm.com entry under **Settings → Devices & Services**. Install `ibasebcast/ha-alarmdotcom` as described above before restarting Home Assistant, then verify that the existing entry loads and HACS shows the maintained repository as installed.
 
 ## Prerequisites
 Before setting up this integration you need the following
@@ -127,6 +131,8 @@ These settings can be modified later using the **Configure** button on the Alarm
 | Force Bypass   | Bypass open zones when arming                               |
 | No Entry Delay | Skip entry delay sensors                                    |
 | Silent Arming  | Suppress panel beeps when arming                            |
+
+For silent arming, continue past **General Settings** to **Arming Mode Profiles**, select **Arm Silently** under the mode you use, then continue through the final screen to save.
 
 Some Alarm.com providers may restrict combinations of these options.
 
@@ -183,6 +189,11 @@ This is a standard HA action with response data. An existing MCP connection that
 | Sensor       | None                                  | ✔      | ✔           | ✔           | Updates depend on the device events reported by Alarm.com |
 | Thermostat   | Heat, Cool, Auto, Fan                 | ✔      | ✔           | ✔           | Fan-only mode runs for the maximum duration supported by Alarm.com        |
 | Camera       | Live WebRTC stream, Snapshot          | ✔      | -           |-           | Live playback uses the bundled `custom:alarm-webrtc-card`; snapshots depend on camera support                    |
+
+Alarm.com reports battery data by device. **Battery** shows a percentage when the device supplies one.
+**Battery Status** shows the classification returned by Alarm.com. A status of `None` means Alarm.com
+reported its `NONE` classification, so it does not indicate a percentage or a confirmed healthy battery.
+Where supported, check **Low Battery** and the system’s **Sensor Low Battery** or **Panel Low Battery** trouble indicators.
 
 > [!NOTE]
 > **Garage Doors (MyQ):** MyQ garage doors don't natively integrate with Home Assistant, but they do through Alarm.com, making this integration useful if that's what you have. A dedicated local solution like [RATGDO](https://paulwieland.github.io/ratgdo/) is generally preferable for local control.
@@ -503,3 +514,16 @@ See **LICENSE** (Apache-2.0) and **LICENSE-upstream** (MIT) for details.
 
  ## Also check the quality_scale.yaml for other notes
 -->
+
+
+### Camera transport and kiosk recovery
+
+Stable 2026.11.09 restores endToEnd as the preferred camera transport, matching the behavior before 2026.11.06. Janus-only cameras continue to use Janus. If a camera never starts with endToEnd, open **Settings → Devices & Services → Alarm.com → Configure**, continue to **Polling & Refresh Intervals**, and select **Preferred camera transport → Janus proxy**. The preference applies to this Alarm.com entry; a camera uses the other transport if the preferred one is not advertised. Changing the option reloads the integration.
+
+After updating, restart Home Assistant and fully reload every browser/app dashboard to load the updated card. Test a single camera first, then the normal multi-camera dashboard and page reloads. Kiosk users should also verify normal continuous viewing over at least 24 hours. A connection must stay live for 30 seconds before its consecutive retry count resets. Automatic recovery stops after five consecutive retries or ten retries within ten minutes, then displays **Reconnect** for a manual retry.
+
+### If a setup verification code does not arrive
+
+For SMS or email, select the delivery method and submit to request a code. On the code form, select **Send another code (SMS/email)** and submit once if needed; no code is required to request a resend. Check the selected email mailbox and junk folder. The **Authenticator App Code** screen asks for the current code from the app linked to your Alarm.com account. If you want email or SMS, enable that method in Alarm.com and start setup again. A successful request does not establish delivery by Alarm.com or the provider.
+
+If delivery still fails, report the exact installed integration version, Home Assistant version, provider, offered methods, and whether the initial request or one resend produced a sanitized error. Do not post passwords, verification codes, cookies, tokens, email addresses or account identifiers. A functioning installation does not need to be removed solely to test setup.

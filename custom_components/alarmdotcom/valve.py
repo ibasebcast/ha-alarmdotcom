@@ -64,7 +64,7 @@ async def async_setup_entry(
 def is_closed_fn(controller: pyadc.WaterValveController, valve_id: str) -> bool | None:
     """Return whether the valve is closed."""
     resource = controller.get(valve_id)
-    if resource is None:
+    if resource is None or resource.attributes.state == pyadc.water_valve.WaterValveState.UNKNOWN:
         return None
     return resource.attributes.state == pyadc.water_valve.WaterValveState.CLOSED
 

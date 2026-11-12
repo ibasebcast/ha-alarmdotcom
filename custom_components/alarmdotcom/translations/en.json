@@ -28,9 +28,16 @@
                     "otp_method": "Delivery Method"
                 }
             },
+            "otp_app_submit": {
+                "title": "Authenticator App Code",
+                "description": "Open the authenticator app linked to your Alarm.com account and enter its current code.",
+                "data": {
+                    "otp": "Authenticator App Code"
+                }
+            },
             "otp_submit": {
                 "title": "Verify Your Identity",
-                "description": "Enter your verification code. For SMS or email, select Send another code and submit if your code has not arrived.\n\n{resend_status}",
+                "description": "Enter the verification code requested by email or SMS. If it has not arrived, turn on Send another code and select Submit.\n\n{resend_status}",
                 "data": {
                     "otp": "Security Code",
                     "resend_code": "Send another code (SMS/email)"
@@ -73,11 +80,13 @@
                 "data": {
                     "activity_poll_interval": "Activity feed poll interval",
                     "full_state_poll_interval": "Full state refresh interval",
+                    "camera_stream_transport": "Preferred camera transport",
                     "camera_token_refresh_interval": "Camera token refresh interval"
                 },
                 "data_description": {
                     "activity_poll_interval": "Seconds between activity feed polls. Uses an undocumented endpoint; raise this if you see rate limiting.",
                     "full_state_poll_interval": "Minutes between full state refreshes, a safety net for missed push events.",
+                    "camera_stream_transport": "Prefer end-to-end for the pre-2026.11.06 behavior. Select Janus if a camera never starts with end-to-end. Uses the other transport when the preferred one is not offered.",
                     "camera_token_refresh_interval": "Minutes between WebRTC token refreshes for each camera. Lower it if streams stop working before the next refresh."
                 }
             }

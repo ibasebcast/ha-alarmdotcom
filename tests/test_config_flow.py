@@ -196,7 +196,7 @@ async def test_otp_flow_with_method_selection(
 
 
 async def test_otp_flow_auto_skips_method_selection_for_app_only(
-    hass: HomeAssistant, mock_bridge_class, mock_bridge
+    hass: HomeAssistant, mock_bridge_class, mock_bridge, mock_setup_entry
 ) -> None:
     """
     If authenticator-app is the ONLY enabled method, skip straight to the OTP prompt.
@@ -214,8 +214,13 @@ async def test_otp_flow_auto_skips_method_selection_for_app_only(
     )
 
     assert result["type"] == data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "otp_submit"
+    assert result["step_id"] == "otp_app_submit"
     mock_bridge.auth_controller.request_otp.assert_not_awaited()
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_OTP: "123456"}
+    )
+    assert result["type"] == data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert mock_bridge.auth_controller.submit_otp.await_args.kwargs["method"] == pyadc.OtpType.app
 
 
 async def test_invalid_otp_code_shows_error(
@@ -236,7 +241,7 @@ async def test_invalid_otp_code_shows_error(
     )
 
     assert result["type"] == data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "otp_submit"
+    assert result["step_id"] == "otp_app_submit"
     assert result["errors"] == {"base": "invalid_otp"}
 
 
@@ -382,3 +387,23 @@ async def test_app_otp_has_no_resend_control(hass, mock_bridge_class, mock_bridg
     result = await hass.config_entries.flow.async_configure(result["flow_id"], VALID_CREDS)
     assert "resend_code" not in result["data_schema"].schema
     mock_bridge.auth_controller.request_otp.assert_not_awaited()
+
+
+async def test_camera_transport_option_is_offered_and_persisted(hass: HomeAssistant) -> None:
+    """The options UI restores endToEnd by default and offers Janus without code edits."""
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="12345", data=VALID_CREDS)
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_REMOVE_ARM_CODE: False},
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_ARM_HOME: [], CONF_ARM_AWAY: [], CONF_ARM_NIGHT: []},
+    )
+    schema = result["data_schema"]
+    defaults = schema({"activity_poll_interval": 15, "full_state_poll_interval": 5})
+    assert defaults["camera_stream_transport"] == "endToEnd"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**defaults, "camera_stream_transport": "janus"},
+    )
+    assert result["data"]["camera_stream_transport"] == "janus"

@@ -1,3 +1,38 @@
+## 2026.11.13b0 (beta)
+
+Bring the #157 sign-in and panel-command test branch up to stable 2026.11.12. See [test instructions](release-notes/2026.11.13b0.md).
+
+## 2026.11.12 (stable)
+
+- Identify WebSocket token-fetch, handshake, and event-stream failures in debug logs, with elapsed time and exception type (#176).
+- Document how to read battery diagnostics when Alarm.com supplies a status or trouble flag instead of a percentage (#184).
+
+See [release notes](release-notes/2026.11.12.md).
+
+## 2026.11.10 (stable)
+
+- Show a dedicated authenticator-app code form with instructions for finding the code (#184).
+- Document where to configure silent arming and how to switch HACS repository ownership while keeping the Home Assistant entry (#183, #185).
+
+See [release notes](release-notes/2026.11.10.md).
+
+## 2026.11.09 (stable)
+
+- Restore endToEnd camera preference by default and offer Janus through integration options (#177, #172).
+- Preserve retry counts through brief stream connections and card reparenting; add a rolling recovery cap for kiosk use (#177).
+- Fetch advertised water valves directly when catalog resources are absent; preserve unknown valve state (#178).
+- Audit stable OTP delivery requests and resend behavior with focused tests and add setup troubleshooting guidance.
+
+See [release notes](release-notes/2026.11.09.md). Experimental beta login and arming changes remain excluded.
+
+## 2026.11.06 (stable)
+
+- Prefer advertised Janus camera streams when both transports are available (#172, #106).
+- Synchronize camera anti-forgery headers with the shared session cookie before API requests, avoiding a stale-key source of unnecessary authentication failures (#156).
+- Remove expired trouble-condition records after a successful refresh, preventing repeated missing-resource warnings and retained condition counts (#173).
+
+See [release notes](release-notes/2026.11.06.md) for validation and remaining investigations.
+
 ## 2026.11.04b3 (beta)
 
 Send only enabled arming options and explain 422 command rejections for #157. See [test instructions](release-notes/2026.11.04b3.md).
