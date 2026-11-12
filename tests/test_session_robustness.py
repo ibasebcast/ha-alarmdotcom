@@ -232,10 +232,15 @@ async def test_the_websocket_keeps_reconnecting_past_25_failures(monkeypatch: py
         await reader
 
 
-async def test_a_stalled_token_fetch_takes_the_reconnect_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A planned replacement whose token fetch hangs must end in a reconnect (and its refresh), not hide the gap."""
+@pytest.mark.parametrize("stage", ["token fetch", "handshake"])
+async def test_a_stalled_rotation_takes_the_reconnect_path(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, stage: str
+) -> None:
+    """Report which stage stalled and reconnect after a failed planned rotation."""
     monkeypatch.setattr(ws_client, "WS_TOKEN_LIFETIME_S", 0.01)
     monkeypatch.setattr(ws_client, "WS_TOKEN_FETCH_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(ws_client, "WS_CONNECT_TIMEOUT_S", 0.05)
+    caplog.set_level("DEBUG", logger=ws_client.__name__)
     monkeypatch.setattr(ws_client.random, "random", lambda: 0.0)
 
     bridge = MagicMock()
@@ -244,15 +249,17 @@ async def test_a_stalled_token_fetch_takes_the_reconnect_path(monkeypatch: pytes
     async def fake_get(*_args: Any, **_kwargs: Any) -> Any:
         nonlocal token_calls
         token_calls += 1
-        if token_calls == 2:
+        if token_calls == 2 and stage == "token fetch":
             await asyncio.sleep(3600)  # www.alarm.com stalls during the planned replacement
         response = MagicMock()
-        response.value = "tok"
+        response.value = "test-websocket-token"
         response.metadata = {"endpoint": "wss://webskt.example"}
         return response
 
     @contextlib.asynccontextmanager
     async def fake_ws_connect(_url: str, **_kwargs: Any) -> Any:
+        if token_calls == 2 and stage == "handshake":
+            await asyncio.sleep(3600)
         yield MagicMock(close_code=None)
 
     bridge.get = fake_get
@@ -276,7 +283,11 @@ async def test_a_stalled_token_fetch_takes_the_reconnect_path(monkeypatch: pytes
     await asyncio.gather(*pending, return_exceptions=True)
 
     assert WebSocketState.DISCONNECTED in emitted
-    assert token_calls >= 3  # gave up on the stalled fetch and connected again
+    assert token_calls >= 3  # gave up on the stalled attempt and connected again
+    assert f"WebSocket {stage} failed after" in caplog.text
+    assert "(TimeoutError)" in caplog.text
+    assert "test-websocket-token" not in caplog.text
+    assert "webskt.example" not in caplog.text
 
 
 async def test_the_periodic_refresh_reports_auth_errors_to_the_hub(hass: HomeAssistant) -> None:
