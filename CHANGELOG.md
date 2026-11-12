@@ -1,3 +1,10 @@
+## 2026.11.12 (stable)
+
+- Identify WebSocket token-fetch, handshake, and event-stream failures in debug logs, with elapsed time and exception type (#176).
+- Document how to read battery diagnostics when Alarm.com supplies a status or trouble flag instead of a percentage (#184).
+
+See [release notes](release-notes/2026.11.12.md).
+
 ## 2026.11.10 (stable)
 
 - Show a dedicated authenticator-app code form with instructions for finding the code (#184).
