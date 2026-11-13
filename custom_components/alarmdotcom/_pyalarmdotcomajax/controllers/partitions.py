@@ -10,7 +10,7 @@ from typing import Annotated, Any
 import typer
 from _pyalarmdotcomajax.adc.util import Param_Id, cli_action
 from _pyalarmdotcomajax.controllers.base import BaseController, device_controller
-from _pyalarmdotcomajax.exceptions import UnsupportedOperation
+from _pyalarmdotcomajax.exceptions import CommandRejected, UnsupportedOperation
 from _pyalarmdotcomajax.models.base import ResourceType
 from _pyalarmdotcomajax.models.partition import (
     ExtendedArmingOptionItems,
@@ -258,7 +258,17 @@ class PartitionController(BaseController[Partition]):
         if not (command := STATE_COMMAND_MAP.get(state)):
             raise UnsupportedOperation(f"State {state} not implemented.")
 
-        await self._send_command(id, command.value, msg_body)
+        try:
+            await self._send_command(id, command.value, msg_body)
+        except CommandRejected:
+            # The original library meant to retry without forceBypass when Alarm.com declines a forced arm (422 is
+            # returned when there is nothing to bypass), but its raise_for_status=True fired before that code ran.
+            # Retry once, without the option, and only for that case.
+            if msg_body.get(ARMOPT_BYPASS_SENSORS) is not True:
+                raise
+            log.debug("Alarm.com declined %s with force bypass; retrying once without it.", command.value)
+            msg_body.pop(ARMOPT_BYPASS_SENSORS)
+            await self._send_command(id, command.value, msg_body)
 
     @cli_action()
     async def change_sensor_bypass(

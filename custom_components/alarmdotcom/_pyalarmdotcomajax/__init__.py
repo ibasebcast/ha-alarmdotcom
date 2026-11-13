@@ -64,6 +64,7 @@ from _pyalarmdotcomajax.exceptions import (
     AlarmdotcomException,
     AuthenticationException,
     AuthenticationFailed,
+    CommandRejected,
     MustConfigureMfa,
     NotAuthorized,
     NotInitialized,
@@ -123,6 +124,7 @@ if TYPE_CHECKING:
 __all__: tuple[str, ...] = (  # noqa: RUF022
     # exceptions
     "AlarmdotcomException",
+    "CommandRejected",
     "UnsupportedOperation",
     "UnknownDevice",
     "AuthenticationFailed",
@@ -169,6 +171,26 @@ T = TypeVar("T", bound=JsonApiBaseElement)
 
 log = logging.getLogger(__name__)
 
+# Identity lookup gets one overall budget across its attempts (issue #157): Alarm.com sometimes answers it after
+# tens of seconds, and the original library waits with no limit. The first attempt keeps some budget for a retry.
+IDENTITY_LOOKUP_BUDGET_S = 90
+IDENTITY_FIRST_ATTEMPT_S = 60
+# A retry with less time left than this cannot realistically get an answer.
+IDENTITY_MIN_RETRY_S = 5
+
+
+
+def _command_rejection_reason(errors: list[Any]) -> str | None:
+    """Classify a command rejection from its error text without keeping the text."""
+
+    text = " ".join(f"{getattr(e, 'title', '') or ''} {getattr(e, 'detail', '') or ''}" for e in errors).lower()
+    if any(phrase in text for phrase in ("uncleared issues", "acknowledge", "clear the issues", "clear system issues")):
+        return "uncleared_issues"
+    if any(phrase in text for phrase in ("open zone", "zone is open", "door is open", "window is open", "sensor is open")):
+        return "open_zone"
+    return None
+
+
 # pyalarmdotcomajax 0.5.13 (pinned by upstream v3.0.15) joins a base URL that
 # already ends in a slash with a path that starts with one.
 _UPSTREAM_IDENTITY_URL = f"{URL_BASE}/web/api/identities/"
@@ -178,7 +200,8 @@ _UPSTREAM_IDENTITY_URL = f"{URL_BASE}/web/api/identities/"
 _LOGIN_IN_PROGRESS: contextvars.ContextVar[bool] = contextvars.ContextVar("adc_login_in_progress", default=False)
 
 # A login that has not finished in this long is abandoned, so a stalled Alarm.com cannot hold _login_lock forever.
-LOGIN_REPAIR_TIMEOUT_S = 60
+# Must outlast a full sign-in, including the identity lookup budget (issue #157).
+LOGIN_REPAIR_TIMEOUT_S = 240
 
 # After a failed session repair, no further login is attempted until this backoff passes; it doubles on each failure.
 # A wrong password, a changed password or a locked account would otherwise be retried by every waiting request and
@@ -1150,6 +1173,9 @@ class AlarmBridge:
                 if method.lower() == "put" and raw_resp.status == 204:
                     return success_response_class.from_dict({"data": None})
 
+                device_command = method.lower() == "post" and "/devices/" in url
+                declined = device_command and raw_resp.status == 422
+
                 # Load the response as JSON:API object.
 
                 response: FailureDocument | JsonApiBaseElement | MetaDocument | None = (
@@ -1161,12 +1187,14 @@ class AlarmBridge:
                     response = success_response_class.from_json(response_text)
                 except json.JSONDecodeError:
                     # Triggered when the response is not valid JSON.
+                    if declined:
+                        raise CommandRejected([422]) from None
                     raise UnexpectedResponse("Response was not valid JSON.") from None
                 except (ValueError, MissingField):
                     # Triggered when discriminator resolution fails or if field is missing in response.
                     pass
 
-                if isinstance(response, success_response_class):
+                if isinstance(response, success_response_class) and not declined:
                     if light_discovery_system_id is not None and log.isEnabledFor(logging.DEBUG):
                         try:
                             summary = summarize_light_discovery(
@@ -1182,6 +1210,8 @@ class AlarmBridge:
                 try:
                     response = FailureDocument.from_json(await raw_resp.text())
                 except (ValueError, MissingField):
+                    if declined:
+                        raise CommandRejected([422]) from None
                     log.warning("Failed to parse response as FailureDocument.")
                     raise UnexpectedResponse(
                         "Response did not match requested schema definition."
@@ -1197,10 +1227,14 @@ class AlarmBridge:
                 ):
                     # Retrieve errors from errors dict object.
                     error_codes = [
-                        int(error.code)
+                        int(code)
                         for error in response.errors
-                        if error.code is not None
+                        if (code := str(error.code)).isascii() and code.isdecimal() and len(code) == 3
                     ]
+                    if 422 not in error_codes and (
+                        declined or (device_command and any(error.status == "422" for error in response.errors))
+                    ):
+                        error_codes.append(422)
 
                     # 406: Not Authorized For Ember, 423: Processing Error
                     if any(x in error_codes for x in [406, 423]):
@@ -1228,6 +1262,11 @@ class AlarmBridge:
                             f"Two factor authentication required.\nMethod: {method}\nStatus Codes: "
                             f"{error_codes}"
                         )
+
+                    # 422 on a device command: Alarm.com declined it (e.g. not ready to arm). Keep only a coarse,
+                    # safe category of the reason; titles and details can name zones, devices or the account.
+                    if 422 in error_codes and device_command:
+                        raise CommandRejected(error_codes, _command_rejection_reason(response.errors))
 
                     # 422: Wrong Two Factor Authentication Code
                     if 422 in error_codes:
@@ -1379,8 +1418,16 @@ class AlarmBridge:
                     "use_mfa_cookie": False,
                 }
             started = time.monotonic() if identity_lookup else 0.0
+            if identity_lookup:
+                if retries == 0:
+                    identity_deadline = started + IDENTITY_LOOKUP_BUDGET_S
+                    attempt_timeout: float | None = IDENTITY_FIRST_ATTEMPT_S
+                else:
+                    attempt_timeout = identity_deadline - started
+            else:
+                attempt_timeout = LOGIN_READ_TIMEOUT_S if login_read else None
             try:
-                async with asyncio.timeout(LOGIN_READ_TIMEOUT_S if login_read else None):
+                async with asyncio.timeout(attempt_timeout):
                     return await self.request(
                         method="get",
                         url=url,
@@ -1412,7 +1459,9 @@ class AlarmBridge:
                     )
                     if not can_retry:
                         raise
-                if retries == retry_limit:
+                if retries == retry_limit or (
+                    identity_lookup and identity_deadline - time.monotonic() < IDENTITY_MIN_RETRY_S
+                ):
                     raise ServiceUnavailable from e
                 retries += 1
                 if identity_lookup:

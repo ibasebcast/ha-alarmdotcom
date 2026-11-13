@@ -93,6 +93,27 @@ def code_format_fn(hub: AlarmHub) -> CodeFormat | None:
     return CodeFormat.NUMBER if re.fullmatch(r"\d+", str(arm_code)) else CodeFormat.TEXT
 
 
+def _rejection_message(command: str, reason: str | None, controller: PartitionController, partition_id: str) -> str:
+    """Explain a declined panel command without repeating Alarm.com's text, which can name zones or the account."""
+
+    partition = controller.get(partition_id)
+    needs_clear = bool(command != DISARM and partition and partition.attributes.needs_clear_issues_prompt)
+    if reason == "uncleared_issues" or (reason is None and needs_clear):
+        return (
+            f"Alarm.com declined the '{command}' command because the system has issues that must be acknowledged "
+            "before arming. Open the Alarm.com app or website, review and clear them, then try again."
+        )
+    if reason == "open_zone":
+        return (
+            f"Alarm.com declined the '{command}' command because the system is not ready to arm. Close any open "
+            "doors or windows and check the panel status before trying again."
+        )
+    return (
+        f"Alarm.com declined the '{command}' command (422) without a recognized reason. Check whether the same "
+        "mode arms from the Alarm.com website right now, then try again."
+    )
+
+
 @callback
 def extra_state_attributes(hub: AlarmHub, partition_id: str) -> Mapping[str, Any]:
     """Collect extra state attributes."""
@@ -213,6 +234,8 @@ async def control_fn(
         raise InvalidStateError(
             "Alarm.com did not confirm the panel command in time. Check the panel before retrying."
         ) from None
+    except pyadc.CommandRejected as err:
+        raise InvalidStateError(_rejection_message(command, err.reason, controller, partition_id)) from err
     except (pyadc.AuthenticationFailed, pyadc.NotAuthorized) as err:
         # A rejected command arrives as an error document; 422 is Alarm.com declining the arming request
         # (for example, the system is not ready to arm), not a sign-in problem.

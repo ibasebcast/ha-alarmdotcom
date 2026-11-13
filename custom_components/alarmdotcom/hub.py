@@ -48,7 +48,7 @@ WS_HEARTBEAT_INTERVAL = 60  # seconds
 
 # Sign-in plus the first full device load. Some provider paths take tens of seconds per sign-in read (issue #157);
 # the old 10s bound turned a slow but working connection into an endless setup retry.
-INITIALIZE_TIMEOUT_S = 180
+INITIALIZE_TIMEOUT_S = 300
 
 class _AlarmBridgeWithHeartbeat(AlarmBridge):
     """

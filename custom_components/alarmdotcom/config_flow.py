@@ -45,7 +45,7 @@ from .const import (
 from .schema import vol
 
 LOGGER = logging.getLogger(__name__)
-SETUP_STAGE_TIMEOUT_S = 150
+SETUP_STAGE_TIMEOUT_S = 240
 LegacyArmingOptions = Literal["home", "away", "true", "false"]
 
 

@@ -122,3 +122,17 @@ class NotInitialized(MiscException):
 
 class UnexpectedResponse(MiscException):
     """Successfully received server response, but format is not as expected."""
+
+
+class CommandRejected(UnexpectedResponse):
+    """
+    Alarm.com received a device command and declined it (HTTP/JSON:API 422).
+
+    reason is a coarse category derived from the server's error text, never the text itself, because that text
+    can name zones, devices or the account. One of "open_zone", "uncleared_issues" or None.
+    """
+
+    def __init__(self, error_codes: list[int], reason: str | None = None) -> None:
+        self.error_codes = error_codes
+        self.reason = reason
+        super().__init__(f"Command declined by Alarm.com. Status Codes: {error_codes}; reason: {reason or 'unknown'}")

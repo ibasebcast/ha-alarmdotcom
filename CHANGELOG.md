@@ -1,3 +1,7 @@
+## 2026.11.13b2 (beta)
+
+Explain declined panel commands, retry a declined forced arm without Force Bypass, and give the identity lookup a 90-second overall budget for #157. See [test instructions](release-notes/2026.11.13b2.md).
+
 ## 2026.11.13b1 (beta)
 
 Match the original Alarm.com sign-in requests for #157. See [test instructions](release-notes/2026.11.13b1.md).
