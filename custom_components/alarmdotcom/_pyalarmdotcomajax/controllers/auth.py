@@ -258,8 +258,8 @@ class AuthenticationController:
                 # Load login page once and grab hidden fields and cookies
                 async with self._bridge.create_request(
                     method="get",
-                    accept_types=const.ResponseTypes.HTML,
-                    use_ajax_key=False,
+                    use_default_headers=False,
+                    use_mfa_cookie=False,
                     url=f"{const.URL_BASE}login",
                 ) as resp:
                     resp.raise_for_status()
@@ -299,8 +299,7 @@ class AuthenticationController:
                 # login and grab ajax key
                 async with self._bridge.create_request(
                     method="post",
-                    accept_types=const.ResponseTypes.FORM,
-                    use_ajax_key=True,
+                    use_default_headers=False,
                     url=f"{const.URL_BASE}web/Default.aspx",
                     data={
                         "ctl00$ContentPlaceHolder1$loginform$txtUserName": self._username,

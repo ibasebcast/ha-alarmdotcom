@@ -1,3 +1,7 @@
+## 2026.11.13b1 (beta)
+
+Match the original Alarm.com sign-in requests for #157. See [test instructions](release-notes/2026.11.13b1.md).
+
 ## 2026.11.13b0 (beta)
 
 Bring the #157 sign-in and panel-command test branch up to stable 2026.11.12. See [test instructions](release-notes/2026.11.13b0.md).

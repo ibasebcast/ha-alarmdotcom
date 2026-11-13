@@ -55,7 +55,7 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-An opt-in [sign-in test build](release-notes/2026.11.13b0.md) is available for issue #157.
+An opt-in [sign-in test build](release-notes/2026.11.13b1.md) is available for issue #157.
 
 **Stable release:** [2026.11.12](release-notes/2026.11.12.md). See the [changelog](CHANGELOG.md) for earlier releases.
 

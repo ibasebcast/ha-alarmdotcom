@@ -20,6 +20,7 @@ import asyncio
 import contextlib
 import json
 from collections.abc import Callable
+from http.cookies import SimpleCookie
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -344,7 +345,7 @@ def test_identity_accepts_missing_session_preferences(payload: dict) -> None:
     assert identity.application_session_properties.inactivity_warning_timeout_ms is None
 
 
-async def test_identity_timeout_tries_slash_then_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_identity_timeout_tries_upstream_then_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
     """A stalled identity request must leave time to try the alternate URL."""
     bridge = AlarmBridge()
     request = AsyncMock(side_effect=[TimeoutError(), MagicMock()])
@@ -356,9 +357,63 @@ async def test_identity_timeout_tries_slash_then_fallback(monkeypatch: pytest.Mo
         _LOGIN_IN_PROGRESS.reset(token)
 
     assert [call.kwargs["url"] for call in request.await_args_list] == [
+        "https://www.alarm.com//web/api/identities/",
         "https://www.alarm.com/web/api/identities/",
-        "https://www.alarm.com/web/api/identities",
     ]
+
+
+async def test_sign_in_uses_original_request_headers_and_cookie_scope() -> None:
+    """Exercise the HTTP wrapper with the original login sequence and a trusted-device cookie."""
+    mfa_cookie = "test-mfa-cookie"
+    bridge = AlarmBridge("test-user", "test-password", mfa_token=mfa_cookie)
+    fields = (
+        auth_mod.VIEWSTATE_FIELD,
+        auth_mod.VIEWSTATEGENERATOR_FIELD,
+        auth_mod.EVENTVALIDATION_FIELD,
+        auth_mod.PREVIOUSPAGE_FIELD,
+    )
+    html = "".join(f'<input id="{field}" value="test-value">' for field in fields)
+    session = MagicMock()
+    session.cookie_jar = []
+
+    @contextlib.asynccontextmanager
+    async def respond(method: str, url: str, **_kwargs: Any) -> Any:
+        body = html if url.endswith("/login") else '{"data":[]}'
+        response = FakeResp(body)
+        response.request_info = MagicMock()
+        response.request_info.method = method
+        response.url = url
+        response.cookies = SimpleCookie()
+        if method == "post":
+            response.cookies["afg"] = "test-afg"
+        yield response
+
+    session.request.side_effect = respond
+    bridge._websession = session
+    token = _LOGIN_IN_PROGRESS.set(True)
+    try:
+        login_info = await bridge.auth_controller._login_preload()
+        await bridge.auth_controller._login_submit_credentials(login_info)
+        await bridge.get("identities/", None)
+    finally:
+        _LOGIN_IN_PROGRESS.reset(token)
+
+    preload, credentials, identity = session.request.call_args_list
+    assert preload.args == ("get", "https://www.alarm.com/login")
+    assert preload.kwargs == {}
+    assert credentials.args == ("post", "https://www.alarm.com/web/Default.aspx")
+    assert "headers" not in credentials.kwargs
+    assert credentials.kwargs["cookies"] == {"twoFactorAuthenticationId": mfa_cookie}
+    assert credentials.kwargs["data"]["txtPassword"] == "test-password"
+    assert identity.args == ("get", "https://www.alarm.com//web/api/identities/")
+    assert identity.kwargs == {
+        "headers": {
+            "Accept": "application/vnd.api+json",
+            "User-Agent": "pyalarmdotcomajax/0.5.13",
+            "Referrer": "https://www.alarm.com/web/system/home",
+            "ajaxrequestuniquekey": "test-afg",
+        },
+    }
 
 
 async def test_sign_in_read_does_not_retry_auth_rejection(monkeypatch: pytest.MonkeyPatch) -> None:

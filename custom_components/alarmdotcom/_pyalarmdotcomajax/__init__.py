@@ -169,6 +169,10 @@ T = TypeVar("T", bound=JsonApiBaseElement)
 
 log = logging.getLogger(__name__)
 
+# pyalarmdotcomajax 0.5.13 (pinned by upstream v3.0.15) joins a base URL that
+# already ends in a slash with a path that starts with one.
+_UPSTREAM_IDENTITY_URL = f"{URL_BASE}/web/api/identities/"
+
 # Set while a login is running. Requests made by the login itself must not try to repair the session: the repair
 # would log in again from inside the login, and under _login_lock it waits on the lock it already holds.
 _LOGIN_IN_PROGRESS: contextvars.ContextVar[bool] = contextvars.ContextVar("adc_login_in_progress", default=False)
@@ -976,6 +980,8 @@ class AlarmBridge:
         accept_types: ResponseTypes = ResponseTypes.JSONAPI,
         *,
         use_ajax_key: bool = True,
+        use_default_headers: bool = True,
+        use_mfa_cookie: bool = True,
         **kwargs: Any,
     ) -> AsyncIterator[aiohttp.ClientResponse]:
         """
@@ -988,14 +994,15 @@ class AlarmBridge:
             log.debug("Creating new websession.")
             self._websession = (self._session_factory or aiohttp.ClientSession)()
 
-        if self._auth_controller.mfa_cookie:
+        if use_mfa_cookie and self._auth_controller.mfa_cookie:
             kwargs.setdefault("cookies", {}).update(
                 {MFA_COOKIE_KEY: self._auth_controller.mfa_cookie}
             )
 
-        kwargs = self.build_request_headers(
-            accept_types=accept_types, use_ajax_key=use_ajax_key, **kwargs
-        )
+        if use_default_headers:
+            kwargs = self.build_request_headers(
+                accept_types=accept_types, use_ajax_key=use_ajax_key, **kwargs
+            )
 
         async with self._websession.request(method, url, **kwargs) as resp:
             # Update anti-forgery cookie.
@@ -1134,7 +1141,7 @@ class AlarmBridge:
                 if _LOGIN_IN_PROGRESS.get() and method.lower() == "get" and (
                     raw_resp.status >= 500
                     or raw_resp.status == 408
-                    or (raw_resp.status == 404 and url == f"{API_URL_BASE}identities/")
+                    or (raw_resp.status == 404 and url == _UPSTREAM_IDENTITY_URL)
                 ):
                     raw_resp.raise_for_status()
 
@@ -1350,10 +1357,28 @@ class AlarmBridge:
         url = self._generate_request_url(path, id)
         login_read = _LOGIN_IN_PROGRESS.get()
         identity_lookup = login_read and path == "identities/" and id is None
+        if identity_lookup:
+            url = _UPSTREAM_IDENTITY_URL
         retry_limit = 1 if login_read else REQUEST_RETRY_LIMIT
 
         retries = 0
         while True:
+            request_options = kwargs
+            if identity_lookup and retries == 0:
+                headers = {
+                    "Accept": "application/vnd.api+json",
+                    "User-Agent": "pyalarmdotcomajax/0.5.13",
+                    "Referrer": "https://www.alarm.com/web/system/home",
+                }
+                if self.ajax_key:
+                    headers["ajaxrequestuniquekey"] = self.ajax_key
+                request_options = {
+                    **kwargs,
+                    "headers": headers,
+                    "use_default_headers": False,
+                    "use_mfa_cookie": False,
+                }
+            started = time.monotonic() if identity_lookup else 0.0
             try:
                 async with asyncio.timeout(LOGIN_READ_TIMEOUT_S if login_read else None):
                     return await self.request(
@@ -1369,10 +1394,18 @@ class AlarmBridge:
                             if isinstance(id, str)
                             else AdcSuccessDocumentMulti
                         ),
-                        **kwargs,
+                        **request_options,
                     )
 
             except (TimeoutError, aiohttp.ClientResponseError, aiohttp.ClientConnectionError) as e:
+                if identity_lookup:
+                    log.debug(
+                        "Alarm.com identity lookup attempt %s failed after %.2fs (%s, HTTP status %s).",
+                        retries + 1,
+                        time.monotonic() - started,
+                        type(e).__name__,
+                        getattr(e, "status", None),
+                    )
                 if login_read and isinstance(e, aiohttp.ClientResponseError):
                     can_retry = (
                         e.status >= 500 or e.status == 408 or (e.status == 404 and identity_lookup)
@@ -1383,7 +1416,7 @@ class AlarmBridge:
                     raise ServiceUnavailable from e
                 retries += 1
                 if identity_lookup:
-                    url = self._generate_request_url("identities", None)
+                    url = self._generate_request_url(path, id)
                 if login_read:
                     log.debug("Retrying Alarm.com sign-in read (%s).", type(e).__name__)
 
