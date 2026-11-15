@@ -1,3 +1,11 @@
+## 2026.11.14 (stable)
+
+- Log the action that stopped the WebSocket client to help diagnose unexpected disconnects (#176).
+- Recheck discovered water valves when the WebSocket first connects so an updated reading can reach Home Assistant before the next scheduled poll (#189).
+- Document how to diagnose gray live video using the bundled WebRTC card (#190).
+
+See [release notes](release-notes/2026.11.14.md).
+
 ## 2026.11.12 (stable)
 
 - Identify WebSocket token-fetch, handshake, and event-stream failures in debug logs, with elapsed time and exception type (#176).
