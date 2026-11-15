@@ -201,6 +201,8 @@ class WebSocketClient:
     def stop(self, state: WebSocketState = WebSocketState.DISCONNECTED) -> None:
         """Stop listening for events."""
 
+        if self._background_tasks:
+            log.debug("Stopping Alarm.com WebSocket client (state: %s).", state.value)
         self._set_state(state)
 
         for task in self._background_tasks:

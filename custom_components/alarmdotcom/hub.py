@@ -130,6 +130,7 @@ class AlarmHub:
             raise ConfigEntryNotReady("Unexpected error while connecting to Alarm.com.") from err
         finally:
             if not setup_ok:
+                log.debug("Closing Alarm.com session because entry setup did not complete.")
                 await self.api.close()
 
         await self.api.start_event_monitoring(self._ws_state_handler)
@@ -288,6 +289,7 @@ class AlarmHub:
             await asyncio.sleep(delay)
 
             try:
+                log.debug("Closing Alarm.com session before reconnect attempt %d.", self._reconnect_attempts)
                 await self.api.close()
                 async with asyncio.timeout(15):
                     await self.api.initialize()
@@ -337,6 +339,7 @@ class AlarmHub:
         while self.close_jobs:
             self.close_jobs.pop()()
 
+        log.debug("Closing Alarm.com session because Home Assistant is unloading the entry.")
         await self.api.close()
 
         unload_success: bool = await self.hass.config_entries.async_unload_platforms(
