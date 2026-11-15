@@ -10,6 +10,7 @@ from _pyalarmdotcomajax import AlarmBridge
 from _pyalarmdotcomajax.models.base import ResourceType
 from _pyalarmdotcomajax.models.jsonapi import Resource
 from _pyalarmdotcomajax.models.water_valve import WaterValveState
+from _pyalarmdotcomajax.websocket.client import ConnectionEvent, WebSocketState
 
 from custom_components.alarmdotcom.valve import is_closed_fn
 
@@ -58,12 +59,38 @@ async def test_advertised_valve_loads_without_catalog_included_data():
         assert bridge.get.await_count == 2
 
 
+async def test_first_websocket_connection_rechecks_stale_valve_state():
+    """The direct endpoint can correct the startup reading without a valve event."""
+    bridge = bridge_with_advertised_valves([VALVE_ID])
+    valve = bridge.water_valves
+    await valve.initialize(target_device_ids=[VALVE_ID])
+    assert is_closed_fn(valve, VALVE_ID) is True
+
+    fresh_resource = Resource.from_dict({
+        "id": VALVE_ID,
+        "type": "devices/water-valve",
+        "attributes": {
+            **bridge.get.return_value.data.attributes,
+            "state": 1,
+            "desiredState": 1,
+            "deviceModelId": 10541,
+        },
+    })
+    bridge.get.return_value = SimpleNamespace(data=fresh_resource, included=[])
+    await valve._base_handle_event(ConnectionEvent(current_state=WebSocketState.CONNECTED))
+
+    assert bridge.get.await_count == 2
+    bridge.get.assert_awaited_with(ResourceType.WATER_VALVE, VALVE_ID)
+    assert is_closed_fn(valve, VALVE_ID) is False
+
+
 async def test_account_without_valves_never_requests_valve_endpoint():
     """Preserve the no-device guard for accounts that do not offer this feature."""
     bridge = bridge_with_advertised_valves([])
     with patch.object(AlarmBridge, "resource_controllers", new_callable=PropertyMock,
                       return_value=[bridge.water_valves]):
         await bridge.fetch_full_state()
+        await bridge.water_valves._base_handle_event(ConnectionEvent(current_state=WebSocketState.CONNECTED))
         await bridge.refresh_all_resources()
     bridge.get.assert_not_awaited()
     assert bridge.water_valves.items == []
