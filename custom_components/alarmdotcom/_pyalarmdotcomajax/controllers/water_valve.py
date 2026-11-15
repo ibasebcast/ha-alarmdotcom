@@ -9,7 +9,7 @@ from _pyalarmdotcomajax.controllers.base import BaseController, device_controlle
 from _pyalarmdotcomajax.exceptions import UnsupportedOperation
 from _pyalarmdotcomajax.models.base import ResourceType
 from _pyalarmdotcomajax.models.water_valve import WaterValve, WaterValveState
-from _pyalarmdotcomajax.websocket.client import SupportedResourceEvents
+from _pyalarmdotcomajax.websocket.client import SupportedResourceEvents, WebSocketState
 from _pyalarmdotcomajax.websocket.messages import ResourceEventType
 
 log = logging.getLogger(__name__)
@@ -32,6 +32,8 @@ STATE_COMMAND_MAP = {
 class WaterValveController(BaseController[WaterValve]):
     """Controller for water valves."""
 
+    # Water valves are fetched directly and are outside the first connection's catalog reconciliation.
+    _refresh_connection_states = frozenset({WebSocketState.CONNECTED, WebSocketState.RECONNECTED})
     _event_state_map = MappingProxyType(
         {
             ResourceEventType.Opened: WaterValveState.OPEN,

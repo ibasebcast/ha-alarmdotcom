@@ -112,6 +112,7 @@ class BaseController(ABC, Generic[AdcResourceT]):
     # to the 'events' list. To receive property changes (like temperature changes), add ResourcePropertyChangeType
     # values to the 'property_changes' list. A controller must have this set to receive any real-time updates.
     _supported_resource_events: ClassVar[SupportedResourceEvents | None] = None
+    _refresh_connection_states: ClassVar[frozenset[WebSocketState]] = frozenset({WebSocketState.RECONNECTED})
     # Maps websocket events to states.
     _event_state_map: ClassVar[MappingProxyType[ResourceEventType, Enum] | None] = None
     # Indicates whether this controller is a device controller.
@@ -429,8 +430,8 @@ class BaseController(ABC, Generic[AdcResourceT]):
     async def _base_handle_event(self, message: EventBrokerMessage) -> None:
         """Universal event handling for WebSockets messages."""
 
-        # Refresh endpoint on websocket reconnect.
-        if isinstance(message, ConnectionEvent) and message.current_state == WebSocketState.RECONNECTED:
+        # Refresh this controller on its configured WebSocket connection events.
+        if isinstance(message, ConnectionEvent) and message.current_state in self._refresh_connection_states:
             try:
                 return await self._refresh()
             except NotAuthorized:
@@ -438,7 +439,7 @@ class BaseController(ABC, Generic[AdcResourceT]):
                 # have that feature. Swallow the error here so one unsupported controller
                 # doesn't crash the reconnect refresh for all other controllers.
                 log.debug(
-                    "[%s] Skipping reconnect refresh — endpoint not authorized for this account (423).",
+                    "[%s] Skipping connection refresh — endpoint not authorized for this account (423).",
                     self.resource_type.name,
                 )
 
