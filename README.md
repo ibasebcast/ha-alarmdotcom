@@ -241,7 +241,15 @@ When the card loads it requests WebRTC credentials through an authenticated Home
 
 Still-image snapshots are requested when supported by the camera and Alarm.com endpoint. Snapshot availability varies by device and account.
 
-A camera listed in the Alarm.com account may not yet be physically installed or online. In that case, an `Empty stream info returned` warning can occur because no usable stream is available. The warning is throttled per camera. It does not by itself indicate an integration setup failure. If an installed camera streams in the Alarm.com app but not Home Assistant, report that separately.
+### If live video is gray or the camera shows Inactive
+
+The built-in Home Assistant camera view can show a still image when snapshots are available. For live video, use the bundled `custom:alarm-webrtc-card` shown above.
+
+1. Open **Live Video** on the Alarm.com website and try the same camera.
+2. Open the bundled card in Home Assistant. If the card shows **Reconnect**, try it once to request fresh stream credentials.
+3. If the camera plays on the website but the bundled card still fails, report the camera model, the integration version, and the exact message shown by the card. Leave out account and device IDs, signed URLs, and tokens.
+
+A camera can still appear in the device list and report motion events when live video is unavailable. An `Empty stream info returned` warning means Alarm.com did not supply usable stream information for that request. The warning is throttled per camera.
 
 ---
 
