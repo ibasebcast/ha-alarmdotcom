@@ -26,7 +26,7 @@ jobs:
           repo_name = "ha-alarmdotcom"
           discussion_number = 4
           target_database_id = 19644413
-          message = "### Update (November 16, 2026): You can now test the original integration's beta\n\n@tarekelmohamad, good news! Since this discussion started, I've joined the original `pyalarmdotcom` organization as an owner and brought the maintained integration code back into the **original** repository.\n\nWe have now published **[Alarm.com v2026.11.16b1](https://github.com/pyalarmdotcom/alarmdotcom/releases/tag/v2026.11.16b1)** as an **opt-in beta** of `pyalarmdotcom/alarmdotcom`.\n\n**You no longer need to uninstall the original integration, switch repository ownership to `ibasebcast/ha-alarmdotcom`, or use the Marketplace repair workaround just to try the new upstream code.** Instead, check the existing original Alarm.com listing in Marketplace/HACS for its beta or prerelease version option and choose `v2026.11.16b1` if available.\n\n**Important:** Please make a full Home Assistant backup first, keep your existing Alarm.com configuration entry, and **do not click \"Delete and Uninstall\"** as part of this test. This is a beta, and preserving existing entities, configuration, and automations during a v3-to-v4 upgrade is exactly what we need volunteers to verify. If the beta isn't offered through your installation UI, please tell us what it shows rather than forcing a removal.\n\nWe'd really appreciate your results in the original project's **[beta feedback issue #567](https://github.com/pyalarmdotcom/alarmdotcom/issues/567)**, especially whether your existing configuration and entity IDs remain intact.\n\nFor people who already switched successfully to the maintained `ibasebcast/ha-alarmdotcom` version: **no need to switch back**. That distribution will continue to be supported during the transition.\n\nThanks for helping test this, and sorry for the earlier migration headache!"
+          message = "### Update (November 16, 2026): You can now test the original integration's beta\n\n@tarekelmohamad @rgnet5, good news! Since this discussion started, I've joined the original `pyalarmdotcom` organization as an owner and brought the maintained integration code back into the **original** repository.\n\nWe have now published **[Alarm.com v2026.11.16b1](https://github.com/pyalarmdotcom/alarmdotcom/releases/tag/v2026.11.16b1)** as an **opt-in beta** of `pyalarmdotcom/alarmdotcom`.\n\n**You no longer need to uninstall the original integration, switch repository ownership to `ibasebcast/ha-alarmdotcom`, or use the Marketplace repair workaround just to try the new upstream code.** Instead, check the existing original Alarm.com listing in Marketplace/HACS for its beta or prerelease version option and choose `v2026.11.16b1` if available.\n\n**Important:** Please make a full Home Assistant backup first, keep your existing Alarm.com configuration entry, and **do not click \"Delete and Uninstall\"** as part of this test. This is a beta, and preserving existing entities, configuration, and automations during a v3-to-v4 upgrade is exactly what we need volunteers to verify. If the beta isn't offered through your installation UI, please tell us what it shows rather than forcing a removal.\n\nWe'd really appreciate your results in the original project's **[beta feedback issue #567](https://github.com/pyalarmdotcom/alarmdotcom/issues/567)**, especially whether your existing configuration and entity IDs remain intact.\n\nFor people who already switched successfully to the maintained `ibasebcast/ha-alarmdotcom` version: **no need to switch back**. That distribution will continue to be supported during the transition.\n\nThanks for helping test this, and sorry for the earlier migration headache!"
           marker = "Update (November 16, 2026): You can now test the original integration's beta"
 
           def graphql(query, variables, numeric=()):
@@ -83,10 +83,17 @@ jobs:
               print("Update already exists, no duplicate comment.")
               raise SystemExit(0)
           if len(matches) != 1:
-              raise SystemExit(f"Target comment ID {target_database_id} not found uniquely; refusing to post")
-          target = matches[0]
-          if target["author"]["login"] != "tarekelmohamad" or "Marketplace" not in target["body"]:
-              raise SystemExit("Target comment did not match the reported migration problem")
+              raise SystemExit(f"Linked comment ID {target_database_id} not found uniquely; refusing to post")
+          print("Linked comment author:", matches[0]["author"]["login"])
+          candidates = [
+              node for node in root["nodes"]
+              if node["author"] and node["author"]["login"] == "tarekelmohamad"
+              and "Catch-22" in node["body"] and "Marketplace" in node["body"]
+          ]
+          if len(candidates) != 1:
+              raise SystemExit("Original migration question not found uniquely; refusing to post")
+          target = candidates[0]
+          print("Replying to migration question, comment:", target["databaseId"])
 
           mutation = """mutation($discussionId:ID!,$replyToId:ID!,$body:String!) {
             addDiscussionComment(input:{
