@@ -44,6 +44,25 @@ def test_camera_classification(event, extra, expected):
     assert detected_objects(event, extra) == expected
 
 
+def test_camera_analytics_debug_excludes_private_event_fields(caplog):
+    """Report allowlisted classifications without raw input or unrelated events."""
+    with caplog.at_level("DEBUG", logger=camera_detection.__name__):
+        camera_detection.log_camera_detection(DeviceActivityMessage(
+            id="123-45", event_type=71,
+            extra="cnff=Human%2CVehicle%2Cunknown-private-value&token=private-token",
+        ))
+        camera_detection.log_camera_detection(DeviceActivityMessage(
+            id="123-45", event_type=210, extra="category=99999",
+        ))
+        camera_detection.log_camera_detection(DeviceActivityMessage(
+            id="123-45", event_type=163, extra="token=scene-secret",
+        ))
+    assert caplog.messages == [
+        "Camera analytics event type=71 classifications=person, vehicle",
+        "Camera analytics event type=210 classifications=none",
+    ]
+
+
 def test_activity_parser_preserves_device_scope_without_raw_fields():
     """Monitoring frames can lack timestamps, correlation fields, and state-event metadata."""
     bridge = SimpleNamespace(events=EventBroker())

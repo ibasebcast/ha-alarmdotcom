@@ -8,6 +8,7 @@ analytics rule must not look like a person arriving.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs
 
@@ -29,6 +30,7 @@ CATEGORY_NAMES = {
 }
 CATEGORY_IDS = {0: "person", 104: "person", 105: "person", 1: "vehicle", 102: "vehicle", 103: "vehicle", 101: "animal", 4: "package"}
 DETECTION_CLEAR_SECONDS = 10
+_LOGGER = logging.getLogger(__name__)
 
 
 def detected_objects(event_type: int, extra: str) -> set[str]:
@@ -47,6 +49,23 @@ def detected_objects(event_type: int, extra: str) -> set[str]:
             if category in CATEGORY_IDS:
                 result.add(CATEGORY_IDS[category])
     return result
+
+
+@callback
+def log_camera_detection(message: Any) -> None:
+    """Log only the event type and allowlisted object classes."""
+    if (
+        not _LOGGER.isEnabledFor(logging.DEBUG)
+        or not isinstance(message, DeviceActivityMessage)
+        or message.event_type not in (71, 210)
+    ):
+        return
+    classifications = detected_objects(message.event_type, message.extra)
+    _LOGGER.debug(
+        "Camera analytics event type=%s classifications=%s",
+        message.event_type,
+        ", ".join(sorted(classifications)) or "none",
+    )
 
 
 class CameraDetectionSensor(BinarySensorEntity):

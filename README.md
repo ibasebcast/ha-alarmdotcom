@@ -55,7 +55,7 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 ## Installation
 
-**Stable release:** [2026.11.14](release-notes/2026.11.14.md). See the [changelog](CHANGELOG.md) for earlier releases.
+**Stable release:** [2026.11.15](release-notes/2026.11.15.md). See the [changelog](CHANGELOG.md) for earlier releases.
 
 Back up Home Assistant before updating through Marketplace or HACS. Restart Home Assistant after the update.
 
@@ -273,6 +273,8 @@ The built-in Home Assistant camera view can show a still image when snapshots ar
 1. Open **Live Video** on the Alarm.com website and try the same camera.
 2. Open the bundled card in Home Assistant. If the card shows **Reconnect**, try it once to request fresh stream credentials.
 3. If the camera plays on the website but the bundled card still fails, report the camera model, the integration version, and the exact message shown by the card. Leave out account and device IDs, signed URLs, and tokens.
+
+For SkyBell doorbells such as the ADC-VDB105, check live video in the Alarm.com mobile app. [Alarm.com documents SkyBell live video as mobile-app only](https://answers.alarm.com/Customer/Website_and_App/Video/Live_Video/View_live_video).
 
 A camera can still appear in the device list and report motion events when live video is unavailable. An `Empty stream info returned` warning means Alarm.com did not supply usable stream information for that request. The warning is throttled per camera.
 
