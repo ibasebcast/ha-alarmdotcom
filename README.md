@@ -57,7 +57,7 @@ Because this integration communicates with Alarm.com cloud services, functionali
 
 **Stable release:** [2026.11.14](release-notes/2026.11.14.md). See the [changelog](CHANGELOG.md) for earlier releases.
 
-Back up Home Assistant before updating through HACS, then restart Home Assistant.
+Back up Home Assistant before updating through Marketplace or HACS. Restart Home Assistant after the update.
 
 **HACS status:** [The default-catalog submission](https://github.com/hacs/default/pull/12316) is under maintainer review. Use the custom-repository steps below.
 
@@ -88,7 +88,7 @@ https://github.com/ibasebcast/ha-alarmdotcom
 8. Install **Alarm.com**
 9. Restart Home Assistant
 
-After installing through Marketplace or HACS and restarting:
+For a new installation, add the integration after restarting. If you already have an Alarm.com entry, use the migration steps below.
 
 **Settings → Devices & Services → Add Integration → Alarm.com**
 
@@ -96,9 +96,18 @@ After installing through Marketplace or HACS and restarting:
 
 ### Switching from the original Alarm.com repository
 
-**Marketplace (Home Assistant 2026.11 and later).** If Marketplace says the folder belongs to `pyalarmdotcom/alarmdotcom`, choose **Cancel** if it offers **Delete and uninstall**. Keep the existing Alarm.com integration entry. Home Assistant OS users can try the experimental [Marketplace Repository Repair app](https://github.com/ibasebcast/marketplace-repository-repair#repair-from-the-home-assistant-browser) after making a full backup.
+#### Home Assistant OS with Marketplace
+
+If Marketplace says the `alarmdotcom` folder belongs to `pyalarmdotcom/alarmdotcom`, choose **Cancel** on **Delete and uninstall**. Keep the existing Alarm.com entry under **Settings → Devices & Services**. This procedure was verified on a live Home Assistant OS system by switching to the original repository and back to the maintained version.
 
 [![Add the repair app repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fibasebcast%2Fmarketplace-repository-repair) [![Open Marketplace Repository Repair](https://my.home-assistant.io/badges/supervisor_app.svg)](https://my.home-assistant.io/redirect/supervisor_app/?app=9daa5e6c_marketplace_repair)
+
+1. Make a full Home Assistant backup. [Open the maintained Alarm.com listing in Marketplace](https://my.home-assistant.io/redirect/marketplace_repository/?owner=ibasebcast&repository=ha-alarmdotcom&category=integration) and add it if prompted.
+2. Use the buttons above to add the repair app repository and open **Marketplace Repository Repair**. Install or update it to **0.1.2 or later**, then choose **Start → Open Web UI**.
+3. Select **Preview switch to maintained Alarm.com**. Confirm the source is `pyalarmdotcom/alarmdotcom` and the destination is `ibasebcast/ha-alarmdotcom`. Confirm you have a full backup, then select **Repair and restart Home Assistant**. The app backs up the Marketplace metadata and clears the old repository's claim.
+4. Once Home Assistant is back, open the maintained listing in Marketplace and choose **Install** or **Update**, as indicated by the repair app. Restart if prompted, then verify your existing Alarm.com devices, entities, and automations.
+
+For Home Assistant Container, see the [manual repair instructions](https://github.com/ibasebcast/marketplace-repository-repair#manual-repair-on-container-or-from-a-host-shell).
 
 **HACS (before Home Assistant 2026.11).** If HACS reports that the `alarmdotcom` directory belongs to `pyalarmdotcom/alarmdotcom`, back up Home Assistant and remove the original repository's installed files using its **Remove** or **Uninstall** action in HACS. Both listings are named Alarm.com, so check the repository URL first. Keep the existing Alarm.com entry under **Settings → Devices & Services**. Install `ibasebcast/ha-alarmdotcom` as described above before restarting Home Assistant, then verify that the existing entry loads and HACS shows the maintained repository as installed.
 
@@ -126,6 +135,12 @@ When adding the integration you will be prompted for:
 | Username          | Yes      | Alarm.com account username                              |
 | Password          | Yes      | Alarm.com account password                              |
 | One-Time Password | Maybe    | Required if your account uses two-factor authentication |
+
+### If a setup verification code does not arrive
+
+For SMS or email, select the delivery method and submit to request a code. On the code form, select **Send another code (SMS/email)** and submit once if needed. Leave the code blank when requesting a resend. Check the selected email mailbox and junk folder. The **Authenticator App Code** screen asks for the current code from the app linked to your Alarm.com account. If you want email or SMS, enable that method in Alarm.com and start setup again. A successful request does not establish delivery by Alarm.com or the provider.
+
+If delivery still fails, report the exact installed integration version, Home Assistant version, provider, offered methods, and whether the initial request or one resend produced a sanitized error. Do not post passwords, verification codes, cookies, tokens, email addresses or account identifiers. A functioning installation does not need to be removed solely to test setup.
 
 ---
 
@@ -260,6 +275,12 @@ The built-in Home Assistant camera view can show a still image when snapshots ar
 3. If the camera plays on the website but the bundled card still fails, report the camera model, the integration version, and the exact message shown by the card. Leave out account and device IDs, signed URLs, and tokens.
 
 A camera can still appear in the device list and report motion events when live video is unavailable. An `Empty stream info returned` warning means Alarm.com did not supply usable stream information for that request. The warning is throttled per camera.
+
+### Camera transport and kiosk recovery
+
+The default camera transport is `endToEnd`. Janus-only cameras continue to use Janus. If a camera never starts with endToEnd, open **Settings → Devices & Services → Alarm.com → Configure**, continue to **Polling & Refresh Intervals**, and select **Preferred camera transport → Janus proxy**. The preference applies to this Alarm.com entry; a camera uses the other transport if the preferred one is not advertised. Changing the option reloads the integration.
+
+After updating, restart Home Assistant and fully reload every browser/app dashboard to load the updated card. Test a single camera first, then the normal multi-camera dashboard and page reloads. Kiosk users should also verify normal continuous viewing over at least 24 hours. A connection that stays live for 30 seconds resets its consecutive retry count. Automatic recovery stops after five consecutive retries or ten retries within ten minutes, then displays **Reconnect** for a manual retry.
 
 ---
 
@@ -472,74 +493,3 @@ This fork exists to provide:
 This project's original contributions are licensed under Apache-2.0. The vendored upstream pyalarmdotcom/alarmdotcom and pyalarmdotcom/pyalarmdotcomajax code retains its MIT license and Copyright (c) 2020 Justin Wong.
 
 See **LICENSE** (Apache-2.0) and **LICENSE-upstream** (MIT) for details.
-
-<!--
-  DEVELOPER NOTE: What needs to happen before submitting this as a HA core integration.
-
-  ## What to exclude from the initial PR
-
-  HA's submission guidelines for new integrations require a focused first PR:
-
-  - Limit to a single platform (see rollout order below)
-  - Remove all custom service actions: bypass_sensor, unbypass_sensor,
-    set_auto_off, cancel_auto_off
-  - Remove diagnostics.py
-  - Remove reauthentication and reconfiguration flows
-  - Remove dynamic-devices and stale-devices logic
-    (cleanup_orphaned_entities_and_devices in util.py)
-
-  Once the initial PR is accepted, add features and additional platforms back
-  one PR at a time.
-
-  ## Camera platform blocker
-
-  The camera platform cannot ship in a core integration PR in its current form.
-  It requires a custom Lovelace card (www/alarm-webrtc-card.js) that cannot be
-  bundled with a core integration, HA core only ships frontend components that
-  are merged into the separate HA frontend repository.
-
-  Options before camera can go into a core PR:
-
-  (a) Exclude camera.py from the initial PR entirely and resubmit as a
-      follow-up after the base integration is accepted. Simplest path.
-
-  (b) Still-image-only redesign: return snapshots only from the camera entity,
-      which works with HA's built-in Picture Entity card. No custom card needed,
-      but streaming would be lost.
-
-  (c) Implement async_handle_async_webrtc_offer() so the stream works with
-      HA's built-in WebRTC camera card that ships with HA core. This is the
-      correct long-term path and would make camera fully first-class. If this
-      is done before the core PR, camera priority moves to 3rd or 4th.
-
-  ## Recommended platform rollout order
-
-  Add one platform per PR after the initial alarm_control_panel PR is accepted.
-
-  1.  alarm_control_panel  - core product; the alarm is the whole point
-  2.  binary_sensor        - doors, windows, motion; immediate automation value
-  3.  lock                 - security-adjacent, high demand
-  4.  cover                - garage doors and gates (indirect MyQ path)
-  5.  sensor               - battery summaries and trouble-condition reporting
-  6.  button               - panel debug and test actions
-  7.  light                - Alarm.com-connected lights
-  8.  climate              - thermostats; similar reasoning to lights
-  9.  valve                - less common Alarm.com device type
-  10. camera               - important for security but blocked on custom card
-                             (see above; moves to 3rd–4th if card issue resolved)
-
- ## Also check the quality_scale.yaml for other notes
--->
-
-
-### Camera transport and kiosk recovery
-
-Stable 2026.11.09 restores endToEnd as the preferred camera transport, matching the behavior before 2026.11.06. Janus-only cameras continue to use Janus. If a camera never starts with endToEnd, open **Settings → Devices & Services → Alarm.com → Configure**, continue to **Polling & Refresh Intervals**, and select **Preferred camera transport → Janus proxy**. The preference applies to this Alarm.com entry; a camera uses the other transport if the preferred one is not advertised. Changing the option reloads the integration.
-
-After updating, restart Home Assistant and fully reload every browser/app dashboard to load the updated card. Test a single camera first, then the normal multi-camera dashboard and page reloads. Kiosk users should also verify normal continuous viewing over at least 24 hours. A connection must stay live for 30 seconds before its consecutive retry count resets. Automatic recovery stops after five consecutive retries or ten retries within ten minutes, then displays **Reconnect** for a manual retry.
-
-### If a setup verification code does not arrive
-
-For SMS or email, select the delivery method and submit to request a code. On the code form, select **Send another code (SMS/email)** and submit once if needed; no code is required to request a resend. Check the selected email mailbox and junk folder. The **Authenticator App Code** screen asks for the current code from the app linked to your Alarm.com account. If you want email or SMS, enable that method in Alarm.com and start setup again. A successful request does not establish delivery by Alarm.com or the provider.
-
-If delivery still fails, report the exact installed integration version, Home Assistant version, provider, offered methods, and whether the initial request or one resend produced a sanitized error. Do not post passwords, verification codes, cookies, tokens, email addresses or account identifiers. A functioning installation does not need to be removed solely to test setup.
