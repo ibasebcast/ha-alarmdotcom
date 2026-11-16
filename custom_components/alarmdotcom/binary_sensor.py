@@ -22,7 +22,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.typing import DiscoveryInfoType
 
 from .binary_sensor_words import LANG_DOOR, LANG_WINDOW
-from .camera_detection import CameraDetectionSensor
+from .camera_detection import CameraDetectionSensor, log_camera_detection
 from .const import DOMAIN
 from .entity import (
     AdcControllerT,
@@ -95,6 +95,10 @@ async def async_setup_entry(
         for resource_id in sorted(camera_ids)
         for classification in ("person", "vehicle", "animal", "package")
     )
+    if camera_ids:
+        config_entry.async_on_unload(hub.api.events.subscribe(
+            pyadc.EventBrokerTopic.DEVICE_ACTIVITY, log_camera_detection, ids=sorted(camera_ids),
+        ))
     async_add_entities(entities)
 
     current_entity_ids = {entity.entity_id for entity in entities}

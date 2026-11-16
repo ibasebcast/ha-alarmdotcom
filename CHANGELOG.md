@@ -1,3 +1,10 @@
+## 2026.11.15 (stable)
+
+- Add opt-in debug logging for camera analytics event types and recognized object classes (#195).
+- Document how to check live video for SkyBell doorbells such as the ADC-VDB105 (#190).
+
+See [release notes](release-notes/2026.11.15.md).
+
 ## 2026.11.14 (stable)
 
 - Log the action that stopped the WebSocket client to help diagnose unexpected disconnects (#176).
