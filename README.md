@@ -61,7 +61,13 @@ Back up Home Assistant before updating through HACS, then restart Home Assistant
 
 **HACS status:** [The default-catalog submission](https://github.com/hacs/default/pull/12316) is under maintainer review. Use the custom-repository steps below.
 
-### Install Using HACS (Recommended)
+### Install using Marketplace (Home Assistant 2026.11 and later)
+
+[![Open the maintained Alarm.com listing in Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=ibasebcast&repository=ha-alarmdotcom&category=integration)
+
+Add the maintained repository if prompted, then choose **Install** and restart Home Assistant. If the original Alarm.com repository already owns the integration folder, see [Switching from the original Alarm.com repository](#switching-from-the-original-alarmcom-repository).
+
+### Install using HACS (before Home Assistant 2026.11)
 
 [![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=ibasebcast&repository=ha-alarmdotcom&category=integration)
 
@@ -82,7 +88,7 @@ https://github.com/ibasebcast/ha-alarmdotcom
 8. Install **Alarm.com**
 9. Restart Home Assistant
 
-After restarting:
+After installing through Marketplace or HACS and restarting:
 
 **Settings → Devices & Services → Add Integration → Alarm.com**
 
@@ -90,7 +96,11 @@ After restarting:
 
 ### Switching from the original Alarm.com repository
 
-If HACS reports that the `alarmdotcom` directory belongs to `pyalarmdotcom/alarmdotcom`, back up Home Assistant and remove the original repository's installed files using its **Remove** or **Uninstall** action in HACS. Both listings are named Alarm.com, so check the repository URL first. Keep the existing Alarm.com entry under **Settings → Devices & Services**. Install `ibasebcast/ha-alarmdotcom` as described above before restarting Home Assistant, then verify that the existing entry loads and HACS shows the maintained repository as installed.
+**Marketplace (Home Assistant 2026.11 and later).** If Marketplace says the folder belongs to `pyalarmdotcom/alarmdotcom`, choose **Cancel** if it offers **Delete and uninstall**. Keep the existing Alarm.com integration entry. Home Assistant OS users can try the experimental [Marketplace Repository Repair app](https://github.com/ibasebcast/marketplace-repository-repair#repair-from-the-home-assistant-browser) after making a full backup.
+
+[![Add the repair app repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2Fibasebcast%2Fmarketplace-repository-repair) [![Open Marketplace Repository Repair](https://my.home-assistant.io/badges/supervisor_app.svg)](https://my.home-assistant.io/redirect/supervisor_app/?app=9daa5e6c_marketplace_repair)
+
+**HACS (before Home Assistant 2026.11).** If HACS reports that the `alarmdotcom` directory belongs to `pyalarmdotcom/alarmdotcom`, back up Home Assistant and remove the original repository's installed files using its **Remove** or **Uninstall** action in HACS. Both listings are named Alarm.com, so check the repository URL first. Keep the existing Alarm.com entry under **Settings → Devices & Services**. Install `ibasebcast/ha-alarmdotcom` as described above before restarting Home Assistant, then verify that the existing entry loads and HACS shows the maintained repository as installed.
 
 ## Prerequisites
 Before setting up this integration you need the following
