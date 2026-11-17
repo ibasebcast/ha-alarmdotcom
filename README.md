@@ -1,5 +1,9 @@
 # Maintained Fork
 
+> **Maintenance update, November 17, 2026:** The original repository is actively maintained again and offers [stable 2026.11.17](https://github.com/pyalarmdotcom/alarmdotcom/releases/tag/v2026.11.17). Existing users of this distribution can stay here. Users already installed from the original repository can update there without switching repositories or using the repair tool.
+>
+> Back up Home Assistant before upgrading or switching distributions, and keep the existing Alarm.com integration entry. The original repository's 2026.11.17 release uses configuration-entry schema 5; older releases of this distribution use schema 4. Returning from schema 5 requires a version that supports it or restoring the full pre-upgrade backup. Replacing installed files alone does not undo a configuration migration.
+
 This repository is an actively maintained fork of the original **Alarm.com for Home Assistant** integration.
 
 The goal of this fork is to maintain compatibility with modern Home Assistant releases while continuing development of the Alarm.com integration as the Home Assistant platform evolves.
@@ -95,6 +99,8 @@ For a new installation, add the integration after restarting. If you already hav
 [![Open your Home Assistant instance and start setting up a new integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=alarmdotcom)
 
 ### Switching from the original Alarm.com repository
+
+Switching is optional. The procedure below was verified on earlier builds and does not establish schema 5 rollback compatibility or a live v3 upgrade result. Check the destination version's supported schema before proceeding. Do not choose **Delete and uninstall** to resolve a repository ownership conflict.
 
 #### Home Assistant OS with Marketplace
 
@@ -491,6 +497,8 @@ This fork exists to provide:
 ---
 
 # License
+
+Thanks to [elahd](https://github.com/elahd), [uvjustin](https://github.com/uvjustin), and the original contributors for the integration's foundation. We also credit [kjjohnsen](https://github.com/kjjohnsen) for the earlier [Alarm.com WebRTC camera integration and card](https://github.com/kjjohnsen/HomeAssistantADCCameraIntegration). Its card was first committed on [February 14, 2026](https://github.com/kjjohnsen/HomeAssistantADCCameraIntegration/commit/ceea6e9880310a1e41fd0700f2ea507fc1c0997e), before [this project's initial card commit on March 20, 2026](https://github.com/ibasebcast/ha-alarmdotcom/commit/a1bba5484d4b65e6857b3cf0e09e05dce7406948). The early implementations share the card's foundation; the current card includes substantial later integration, security, transport, and recovery work. Both distributed card sources retain the original copyright and MIT license notice for the shared portions.
 
 This project's original contributions are licensed under Apache-2.0. The vendored upstream pyalarmdotcom/alarmdotcom and pyalarmdotcom/pyalarmdotcomajax code retains its MIT license and Copyright (c) 2020 Justin Wong.
 

@@ -1,3 +1,11 @@
+## Unreleased
+
+- Credit kjjohnsen for the earlier WebRTC camera card and preserve the MIT notice in both distributed sources.
+- Clarify resumed maintenance in the original repository, optional migration, and schema 5 rollback requirements.
+- Document completed branch cleanup and retained active work.
+
+See [next-release notes](release-notes/unreleased.md).
+
 ## 2026.11.15 (stable)
 
 - Add opt-in debug logging for camera analytics event types and recognized object classes (#195).
