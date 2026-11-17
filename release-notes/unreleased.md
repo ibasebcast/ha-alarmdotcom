@@ -20,6 +20,8 @@ It is staged for the next release; published releases and tags are unchanged.
 
 ## Maintenance cleanup
 
+- Remove the unused nested `.github/.github/` copies and duplicate legacy bug template; retain the current bug-report form.
+- Repair the device-support template front matter while retaining its questions.
 - Document the branch audit and preserve active investigations, dependency PRs, and legacy source history.
 - See the [cleanup record](../docs/maintenance/branch-cleanup-2026-11-17.md) for removed branch heads, merged PRs, and retained work.
 - Prepare matching migration and attribution guidance on the maintained distribution's credit branch. Existing users can stay on their current distribution; schema 5 entries require compatible code or a full backup restore when rolling back.
