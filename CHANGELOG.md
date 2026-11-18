@@ -1,3 +1,9 @@
+## 2026.11.18 (stable)
+
+- Align the config flow with migration schema version 5 so existing entries load after switching repositories (#199).
+
+See [release notes](release-notes/2026.11.18.md).
+
 ## 2026.11.15 (stable)
 
 - Add opt-in debug logging for camera analytics event types and recognized object classes (#195).
